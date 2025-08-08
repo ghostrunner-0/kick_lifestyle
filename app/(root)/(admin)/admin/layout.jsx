@@ -7,6 +7,7 @@ import AppSidebar from "@/components/application/admin/AppSidebar";
 import TopBar from "@/components/application/admin/TopBar";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import ThemeProvider from "@/components/application/admin/ThemeProvider";
+import Loading from "@/components/application/admin/Loading";
 
 const Layout = ({ children }) => {
   const { data: session, status } = useSession();
@@ -18,8 +19,7 @@ const Layout = ({ children }) => {
   }, [status]);
 
   if (status === "loading") {
-    // Optionally show a loading state while checking session
-    return <div>Loading...</div>;
+    return <Loading/>
   }
 
   if (!session) {

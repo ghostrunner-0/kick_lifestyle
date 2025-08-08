@@ -15,3 +15,8 @@ export const ADMIN_Product_ALL = "/admin/product";
 export const ADMIN_Product_ADD = "/admin/product/add";
 export const ADMIN_Product_EDIT = (id) =>
   id ? `/admin/product/edit/${id}` : "";
+
+export const ADMIN_PRODUCT_VARIANT_ALL = "/admin/product-variant";
+export const ADMIN_PRODUCT_VARIANT_ADD = "/admin/product-variant/add";
+export const ADMIN_PRODUCT_VARIANT_EDIT = (id) =>
+  id ? `/admin/product-variant/edit/${id}` : "";
