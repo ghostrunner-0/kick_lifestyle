@@ -13,7 +13,7 @@ export async function GET(req) {
     // Get all non-deleted products, newest first
     const products = await Product.find({ deletedAt: null })
       .select(
-        "name slug shortDesc mrp specialPrice showInWebsite heroImage productMedia descImages category createdAt updatedAt"
+        "name slug shortDesc mrp specialPrice warrantyMonths showInWebsite heroImage productMedia descImages category createdAt updatedAt"
       )
       .populate({ path: "category", select: "name slug" })
       .sort({ createdAt: -1 })
@@ -28,6 +28,7 @@ export async function GET(req) {
       shortDesc: p.shortDesc ?? "",
       mrp: p.mrp ?? null,
       specialPrice: p.specialPrice ?? null,
+      warrantyMonths: p.warrantyMonths ?? 0,                // ✅ added
       showInWebsite: typeof p.showInWebsite === "boolean" ? p.showInWebsite : true,
       heroImagePath: p.heroImage?.path ?? null,
       heroImageAlt: p.heroImage?.alt ?? "",

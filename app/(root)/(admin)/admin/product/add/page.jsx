@@ -23,7 +23,7 @@ import MediaSelector from "@/components/application/admin/MediaSelector";
 import ButtonLoading from "@/components/application/ButtonLoading";
 import { showToast } from "@/lib/ShowToast";
 
-// shadcn/ui select
+// shadcn/ui select & switch
 import {
   Select,
   SelectContent,
@@ -31,8 +31,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
-// shadcn/ui switch
 import { Switch } from "@/components/ui/switch";
 
 const BreadCrumbData = [
@@ -41,7 +39,7 @@ const BreadCrumbData = [
   { href: "", label: "Add" },
 ];
 
-// NOTE: zSchema must have `showInWebsite` as a boolean.
+// ⬇️ Make sure zSchema has warrantyMonths: z.coerce.number().min(0).optional()
 const formSchema = zSchema.pick({
   name: true,
   slug: true,
@@ -49,11 +47,12 @@ const formSchema = zSchema.pick({
   category: true,
   mrp: true,
   specialPrice: true,
-  productMedia: true, // array of image objects
-  descImages: true,   // array of image objects
-  heroImage: true,    // image object
+  warrantyMonths: true,   // ⬅️ added
+  productMedia: true,     // array of image objects
+  descImages: true,       // array of image objects
+  heroImage: true,        // image object
   additionalInfo: true,
-  showInWebsite: true, // <-- new
+  showInWebsite: true,
 });
 
 export default function AddProduct() {
@@ -69,9 +68,10 @@ export default function AddProduct() {
       category: "",
       mrp: "",
       specialPrice: "",
-      productMedia: [],     // [{_id, alt, path}]
-      descImages: [],       // [{_id, alt, path}]
-      heroImage: undefined, // {_id, alt, path}
+      warrantyMonths: "",     // ⬅️ default as string; we coerce later
+      productMedia: [],       // [{_id, alt, path}]
+      descImages: [],         // [{_id, alt, path}]
+      heroImage: undefined,   // {_id, alt, path}
       additionalInfo: [{ label: "", value: "" }],
       showInWebsite: true,
     },
@@ -83,7 +83,6 @@ export default function AddProduct() {
     name: "additionalInfo",
   });
 
-  // Fetch categories (adjust endpoint if needed)
   useEffect(() => {
     (async () => {
       try {
@@ -96,7 +95,6 @@ export default function AddProduct() {
     })();
   }, []);
 
-  // Auto-generate slug from name
   useEffect(() => {
     const sub = form.watch((value, { name }) => {
       if (name === "name") {
@@ -113,19 +111,19 @@ export default function AddProduct() {
     try {
       setLoading(true);
 
-      // Coerce number fields (inputs return strings)
+      // Coerce number fields (inputs are strings)
       const payload = {
         ...values,
         mrp: values.mrp === "" ? undefined : Number(values.mrp),
-        specialPrice:
-          values.specialPrice === "" ? undefined : Number(values.specialPrice),
+        specialPrice: values.specialPrice === "" ? undefined : Number(values.specialPrice),
+        warrantyMonths: values.warrantyMonths === "" ? 0 : Number(values.warrantyMonths), // ⬅️ coerce, default 0
       };
 
       const { data: res } = await axios.post("/api/product/create", payload);
       if (!res?.success) throw new Error(res?.message || "Failed to create product");
 
       showToast("success", "Product created!");
-      form.reset({ showInWebsite: true });
+      form.reset({ showInWebsite: true, warrantyMonths: "" });
     } catch (err) {
       showToast("error", err?.message || "Something went wrong");
     } finally {
@@ -145,12 +143,11 @@ export default function AddProduct() {
         <CardContent className="pb-5">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)}>
-              {/* Top bar: visibility toggle */}
+              {/* Top bar: visibility */}
               <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-sm text-muted-foreground">
-                  Configure core details and media below.
+                  Configure core details, pricing, warranty and media below.
                 </div>
-
                 <FormField
                   control={form.control}
                   name="showInWebsite"
@@ -180,7 +177,6 @@ export default function AddProduct() {
                     </FormItem>
                   )}
                 />
-
                 <FormField
                   control={form.control}
                   name="slug"
@@ -213,9 +209,9 @@ export default function AddProduct() {
                 />
               </div>
 
-              {/* Category + Pricing */}
-              <div className="mb-5 grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Category (shadcn/ui Select) */}
+              {/* Category + Pricing + Warranty */}
+              <div className="mb-5 grid grid-cols-1 md:grid-cols-4 gap-4">
+                {/* Category */}
                 <FormField
                   control={form.control}
                   name="category"
@@ -241,6 +237,7 @@ export default function AddProduct() {
                   )}
                 />
 
+                {/* MRP */}
                 <FormField
                   control={form.control}
                   name="mrp"
@@ -255,6 +252,7 @@ export default function AddProduct() {
                   )}
                 />
 
+                {/* Special Price */}
                 <FormField
                   control={form.control}
                   name="specialPrice"
@@ -268,9 +266,24 @@ export default function AddProduct() {
                     </FormItem>
                   )}
                 />
+
+                {/* Warranty Months */}
+                <FormField
+                  control={form.control}
+                  name="warrantyMonths"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Warranty (months)</FormLabel>
+                      <FormControl>
+                        <Input type="number" min="0" step="1" placeholder="e.g., 12" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
 
-              {/* Hero Image (single) */}
+              {/* Hero Image */}
               <div className="mb-5">
                 <FormField
                   control={form.control}
@@ -282,12 +295,12 @@ export default function AddProduct() {
                         multiple={false}
                         triggerLabel={field.value ? "Change Hero Image" : "Select Hero Image"}
                         onSelect={(selected) => {
-                          if (!selected) {
-                            field.onChange(undefined);
-                            return;
-                          }
-                          const img = { _id: selected._id, alt: selected.alt || "", path: selected.path };
-                          field.onChange(img);
+                          if (!selected) return field.onChange(undefined);
+                          field.onChange({
+                            _id: selected._id,
+                            alt: selected.alt || "",
+                            path: selected.path,
+                          });
                         }}
                       />
                       <FormMessage />
@@ -296,7 +309,7 @@ export default function AddProduct() {
                 />
               </div>
 
-              {/* Product Media (multiple) */}
+              {/* Product Media */}
               <div className="mb-5">
                 <FormField
                   control={form.control}
@@ -309,16 +322,14 @@ export default function AddProduct() {
                         selectedMedia={field.value}
                         triggerLabel={field.value?.length ? "Change Gallery" : "Select Gallery"}
                         onSelect={(selected) => {
-                          if (!selected || !Array.isArray(selected)) {
-                            field.onChange([]);
-                            return;
-                          }
-                          const imgs = selected.map((f) => ({
-                            _id: f._id,
-                            alt: f.alt || "",
-                            path: f.path,
-                          }));
-                          field.onChange(imgs);
+                          if (!selected || !Array.isArray(selected)) return field.onChange([]);
+                          field.onChange(
+                            selected.map((f) => ({
+                              _id: f._id,
+                              alt: f.alt || "",
+                              path: f.path,
+                            }))
+                          );
                         }}
                       />
                       <FormMessage />
@@ -327,7 +338,7 @@ export default function AddProduct() {
                 />
               </div>
 
-              {/* Description Images (multiple) */}
+              {/* Description Images */}
               <div className="mb-5">
                 <FormField
                   control={form.control}
@@ -339,19 +350,19 @@ export default function AddProduct() {
                         multiple
                         selectedMedia={field.value}
                         triggerLabel={
-                          field.value?.length ? "Change Description Images" : "Select Description Images"
+                          field.value?.length
+                            ? "Change Description Images"
+                            : "Select Description Images"
                         }
                         onSelect={(selected) => {
-                          if (!selected || !Array.isArray(selected)) {
-                            field.onChange([]);
-                            return;
-                          }
-                          const imgs = selected.map((f) => ({
-                            _id: f._id,
-                            alt: f.alt || "",
-                            path: f.path,
-                          }));
-                          field.onChange(imgs);
+                          if (!selected || !Array.isArray(selected)) return field.onChange([]);
+                          field.onChange(
+                            selected.map((f) => ({
+                              _id: f._id,
+                              alt: f.alt || "",
+                              path: f.path,
+                            }))
+                          );
                         }}
                       />
                       <FormMessage />
@@ -360,7 +371,7 @@ export default function AddProduct() {
                 />
               </div>
 
-              {/* Additional Info (table-like) */}
+              {/* Additional Info */}
               <div className="mb-6">
                 <FormLabel>Additional Info</FormLabel>
                 <div className="mt-2 space-y-3">

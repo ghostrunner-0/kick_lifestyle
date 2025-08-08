@@ -13,7 +13,7 @@ export async function PUT(req) {
 
     const payload = await req.json();
 
-    // Validate only the fields we allow to update
+    // ✅ Include warrantyMonths in validation
     const formSchema = zSchema.pick({
       _id: true,
       name: true,
@@ -27,6 +27,7 @@ export async function PUT(req) {
       heroImage: true,    // {_id, alt, path}
       additionalInfo: true,
       showInWebsite: true,
+      warrantyMonths: true, // <-- NEW
     });
 
     const parsed = formSchema.safeParse(payload);
@@ -47,6 +48,7 @@ export async function PUT(req) {
       heroImage,
       additionalInfo,
       showInWebsite,
+      warrantyMonths, // <-- NEW
     } = parsed.data;
 
     // Ensure product exists (and not soft-deleted)
@@ -55,18 +57,16 @@ export async function PUT(req) {
       return response(false, 404, "Product not found");
     }
 
-    // Optional: prevent duplicate slug with another product
+    // Prevent duplicate slug with another product
     const slugClash = await Product.findOne({
       _id: { $ne: _id },
       slug,
       deletedAt: null,
     }).lean();
-
     if (slugClash) {
       return response(false, 409, "Another product with this slug already exists");
     }
 
-    // Normalize image objects (defensive)
     const normalizeImage = (img) => ({
       _id: String(img._id),
       alt: img.alt ?? "",
@@ -76,7 +76,7 @@ export async function PUT(req) {
     product.name = name.trim();
     product.slug = slug.trim();
     product.shortDesc = shortDesc?.trim() || "";
-    product.category = category; // Mongoose will cast ObjectId
+    product.category = category; // cast to ObjectId by Mongoose
     product.mrp = mrp;
     product.specialPrice = specialPrice ?? undefined;
     product.heroImage = normalizeImage(heroImage);
@@ -86,7 +86,13 @@ export async function PUT(req) {
       label: row.label.trim(),
       value: row.value.trim(),
     }));
-    product.showInWebsite = typeof showInWebsite === "boolean" ? showInWebsite : product.showInWebsite;
+    product.showInWebsite =
+      typeof showInWebsite === "boolean" ? showInWebsite : product.showInWebsite;
+
+    // ✅ Save warranty in months (number). If your zod coerce is set, this is already a number.
+    //    Keep undefined if you want it optional; or default to 0 if you prefer.
+    product.warrantyMonths =
+      typeof warrantyMonths === "number" ? warrantyMonths : product.warrantyMonths;
 
     await product.save();
 

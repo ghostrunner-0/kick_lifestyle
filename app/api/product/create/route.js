@@ -21,11 +21,12 @@ export async function POST(req) {
       category: true,
       mrp: true,
       specialPrice: true,
-      productMedia: true, // array of {_id, alt, path}
-      descImages: true,   // array of {_id, alt, path}
-      heroImage: true,    // {_id, alt, path}
+      warrantyMonths: true,   // ✅ include warrantyMonths
+      productMedia: true,     // array of {_id, alt, path}
+      descImages: true,       // array of {_id, alt, path}
+      heroImage: true,        // {_id, alt, path}
       additionalInfo: true,
-      showInWebsite: true, // ✅ include visibility flag
+      showInWebsite: true,    // visibility flag
     });
 
     const parsed = formSchema.safeParse(payload);
@@ -35,20 +36,29 @@ export async function POST(req) {
 
     const data = parsed.data;
 
-    // Normalize image arrays (ensure shape + default alt)
+    // helper: normalize image object
     const normalizeImage = (img) => ({
       _id: String(img._id),
       alt: img.alt ?? "",
       path: String(img.path),
     });
 
+    // Coerce numbers safely (zod likely already coerced, this is belt & suspenders)
+    const mrpNum = Number(data.mrp);
+    const spNum = data.specialPrice == null ? undefined : Number(data.specialPrice);
+    const warrantyNum =
+      data.warrantyMonths == null || data.warrantyMonths === ""
+        ? 0
+        : Math.max(0, Number(data.warrantyMonths));
+
     const productDoc = {
       name: data.name.trim(),
       slug: data.slug.trim(),
       shortDesc: data.shortDesc?.trim() || "",
       category: data.category, // string ObjectId; Mongoose will cast
-      mrp: data.mrp,
-      specialPrice: data.specialPrice ?? undefined,
+      mrp: mrpNum,
+      specialPrice: spNum,
+      warrantyMonths: warrantyNum, // ✅ saved to DB
       heroImage: normalizeImage(data.heroImage),
       productMedia: (data.productMedia || []).map(normalizeImage),
       descImages: (data.descImages || []).map(normalizeImage),
@@ -56,12 +66,16 @@ export async function POST(req) {
         label: row.label.trim(),
         value: row.value.trim(),
       })),
-      // ✅ default to true if omitted by client (extra safety)
-      showInWebsite: typeof data.showInWebsite === "boolean" ? data.showInWebsite : true,
+      showInWebsite:
+        typeof data.showInWebsite === "boolean" ? data.showInWebsite : true,
     };
 
     // Duplicate slug protection (ignore soft-deleted)
-    const existing = await Product.findOne({ slug: productDoc.slug, deletedAt: null }).lean();
+    const existing = await Product.findOne({
+      slug: productDoc.slug,
+      deletedAt: null,
+    }).lean();
+
     if (existing) {
       return response(false, 409, "A product with this slug already exists");
     }

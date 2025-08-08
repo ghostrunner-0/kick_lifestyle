@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 const imageSchema = new mongoose.Schema(
   {
-    _id: { type: String, required: true },
+    _id: { type: String, required: true }, // media id as string
     alt: { type: String, default: "" },
     path: { type: String, required: true },
   },
@@ -30,7 +30,7 @@ const ProductSchema = new mongoose.Schema(
     },
     shortDesc: { type: String, trim: true, maxlength: 300 },
 
-    // ✅ match the actual model name exactly ("Category")
+    // ✅ Ensure ref matches actual Category model name
     category: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Category",
@@ -40,6 +40,9 @@ const ProductSchema = new mongoose.Schema(
 
     mrp: { type: Number, required: true },
     specialPrice: { type: Number },
+
+    // ✅ Warranty in months
+    warrantyMonths: { type: Number, default: 0, min: 0 }, // 0 means no warranty
 
     showInWebsite: { type: Boolean, default: true, index: true },
 
@@ -85,7 +88,6 @@ const ProductSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// No extra schema.index({ category: 1 }) needed since field has index:true
 const Product =
   mongoose.models.Product ||
   mongoose.model("Product", ProductSchema, "Products");

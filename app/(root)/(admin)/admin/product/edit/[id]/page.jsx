@@ -41,7 +41,7 @@ const BreadCrumbData = [
   { href: "", label: "Edit" },
 ];
 
-// Validate the fields we edit
+// ✅ Include warrantyMonths in validation
 const formSchema = zSchema.pick({
   _id: true,
   name: true,
@@ -50,9 +50,10 @@ const formSchema = zSchema.pick({
   category: true,
   mrp: true,
   specialPrice: true,
-  productMedia: true, // array of {_id, alt, path}
-  descImages: true, // array of {_id, alt, path}
-  heroImage: true, // {_id, alt, path}
+  warrantyMonths: true,   // <-- added
+  productMedia: true,
+  descImages: true,
+  heroImage: true,
   additionalInfo: true,
   showInWebsite: true,
 });
@@ -62,21 +63,19 @@ const EditProduct = () => {
   const [loading, setLoading] = useState(false);
 
   // Fetch product
-
   const {
     data: productRes,
     isLoading: isLoadingProduct,
     isError: isErrorProduct,
   } = useFetch("product", id ? `/api/product/get/${id}` : null);
 
-  // Fetch categories (using the same useFetch pattern)
+  // Fetch categories
   const {
     data: categoriesRes,
     isLoading: isLoadingCats,
     isError: isErrorCats,
   } = useFetch("categories", "/api/category/");
 
-  // Normalize categories shape (res might be {success, data} or array)
   const categories = Array.isArray(categoriesRes?.data)
     ? categoriesRes.data
     : Array.isArray(categoriesRes)
@@ -93,21 +92,22 @@ const EditProduct = () => {
       category: "",
       mrp: "",
       specialPrice: "",
-      productMedia: [], // [{_id, alt, path}]
-      descImages: [], // [{_id, alt, path}]
+      warrantyMonths: "",         // <-- added
+      productMedia: [],
+      descImages: [],
       heroImage: undefined,
       additionalInfo: [{ label: "", value: "" }],
       showInWebsite: true,
     },
   });
 
-  const { control } = form;
+  const { control, setValue, getValues, reset, watch } = form;
   const { fields, append, remove } = useFieldArray({
     control,
     name: "additionalInfo",
   });
 
-  // Prefill form when product data arrives
+  // Prefill when product arrives
   useEffect(() => {
     if (productRes?.success && productRes.data) {
       const p = productRes.data;
@@ -126,14 +126,20 @@ const EditProduct = () => {
             }))
           : [];
 
-      form.reset({
+      const catId =
+        (p.category && (p.category._id || p.category))
+          ? String(p.category._id || p.category)
+          : "";
+
+      reset({
         _id: p._id,
         name: p.name || "",
         slug: p.slug || "",
         shortDesc: p.shortDesc || "",
-        category: p.category?._id || p.category || "",
+        category: catId,
         mrp: p.mrp ?? "",
         specialPrice: p.specialPrice ?? "",
+        warrantyMonths: p.warrantyMonths ?? "",   // <-- added
         heroImage: toImgObj(p.heroImage),
         productMedia: toImgArray(p.productMedia),
         descImages: toImgArray(p.descImages),
@@ -148,20 +154,28 @@ const EditProduct = () => {
           typeof p.showInWebsite === "boolean" ? p.showInWebsite : true,
       });
     }
-  }, [productRes]);
+  }, [productRes, reset]);
 
-  // Slug auto-sync from name
+  // Auto-select first category if empty
   useEffect(() => {
-    const sub = form.watch((value, { name }) => {
+    const current = getValues("category");
+    if (!current && categories.length > 0) {
+      setValue("category", String(categories[0]._id), { shouldValidate: true });
+    }
+  }, [categories, getValues, setValue]);
+
+  // Slug auto from name
+  useEffect(() => {
+    const sub = watch((value, { name }) => {
       if (name === "name") {
         const s = value.name?.trim()
           ? slugify(value.name, { lower: true, strict: true })
           : "";
-        form.setValue("slug", s);
+        setValue("slug", s);
       }
     });
     return () => sub.unsubscribe();
-  }, [form]);
+  }, [watch, setValue]);
 
   const handleSubmit = async (values) => {
     try {
@@ -169,9 +183,12 @@ const EditProduct = () => {
 
       const payload = {
         ...values,
+        category: String(values.category),
         mrp: values.mrp === "" ? undefined : Number(values.mrp),
         specialPrice:
           values.specialPrice === "" ? undefined : Number(values.specialPrice),
+        warrantyMonths:
+          values.warrantyMonths === "" ? undefined : Number(values.warrantyMonths), // <-- added
       };
 
       const { data: res } = await axios.put("/api/product/update", payload);
@@ -270,8 +287,8 @@ const EditProduct = () => {
                 />
               </div>
 
-              {/* Category + Pricing */}
-              <div className="mb-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Category + Pricing (+ Warranty) */}
+              <div className="mb-5 grid grid-cols-1 md:grid-cols-4 gap-4">
                 <FormField
                   control={form.control}
                   name="category"
@@ -281,7 +298,7 @@ const EditProduct = () => {
                       <FormControl>
                         <Select
                           value={field.value || ""}
-                          onValueChange={field.onChange}
+                          onValueChange={(val) => field.onChange(String(val))}
                         >
                           <SelectTrigger className="w-full">
                             <SelectValue
@@ -292,7 +309,7 @@ const EditProduct = () => {
                           </SelectTrigger>
                           <SelectContent>
                             {categories.map((c) => (
-                              <SelectItem key={c._id} value={c._id}>
+                              <SelectItem key={c._id} value={String(c._id)}>
                                 {c.name}
                               </SelectItem>
                             ))}
@@ -341,6 +358,27 @@ const EditProduct = () => {
                     </FormItem>
                   )}
                 />
+
+                {/* ✅ Warranty Months */}
+                <FormField
+                  control={form.control}
+                  name="warrantyMonths"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Warranty (months)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="1"
+                          min="0"
+                          placeholder="e.g., 12"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
 
               {/* Hero Image */}
@@ -355,9 +393,7 @@ const EditProduct = () => {
                         multiple={false}
                         selectedMedia={field.value}
                         triggerLabel={
-                          field.value
-                            ? "Change Hero Image"
-                            : "Select Hero Image"
+                          field.value ? "Change Hero Image" : "Select Hero Image"
                         }
                         onSelect={(selected) => {
                           if (!selected) return field.onChange(undefined);
@@ -517,7 +553,6 @@ const EditProduct = () => {
             </form>
           </Form>
 
-          {/* Optional: simple load/error states */}
           {(isLoadingProduct || isLoadingCats) && (
             <p className="text-sm text-muted-foreground mt-2">Loading data…</p>
           )}
