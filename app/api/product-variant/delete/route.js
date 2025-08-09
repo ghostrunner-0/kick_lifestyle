@@ -1,9 +1,7 @@
-// /app/api/product-variant/delete/route.js
 import { isAuthenticated } from "@/lib/Authentication";
 import { connectDB } from "@/lib/DB";
 import { catchError, response } from "@/lib/helperFunctions";
 import ProductVariant from "@/models/ProductVariant.model";
-import mongoose from "mongoose";
 
 export async function DELETE(req) {
   try {
@@ -16,12 +14,6 @@ export async function DELETE(req) {
 
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       return response(false, 400, "Invalid IDs provided");
-    }
-
-    // Optional: validate ObjectIds to avoid casting errors
-    const invalidIds = ids.filter((id) => !mongoose.isValidObjectId(id));
-    if (invalidIds.length) {
-      return response(false, 400, `Invalid variant IDs: ${invalidIds.join(", ")}`);
     }
 
     let result;

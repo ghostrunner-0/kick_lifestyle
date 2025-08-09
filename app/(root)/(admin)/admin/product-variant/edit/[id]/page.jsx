@@ -2,12 +2,11 @@
 
 import axios from "axios";
 import { useEffect, useState } from "react";
-import { useForm, useFieldArray } from "react-hook-form";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useParams } from "next/navigation";
-import slugify from "slugify";
 
-import { zSchema } from "@/lib/zodSchema";
 import BreadCrumb from "@/components/application/admin/BreadCrumb";
 import { ADMIN_DASHBOARD, ADMIN_Product_ALL } from "@/routes/AdminRoutes";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -23,9 +22,8 @@ import { Input } from "@/components/ui/input";
 import ButtonLoading from "@/components/application/ButtonLoading";
 import MediaSelector from "@/components/application/admin/MediaSelector";
 import { showToast } from "@/lib/ShowToast";
-import useFetch from "@/hooks/useFetch";
 
-// shadcn/ui select & switch
+// shadcn/ui select
 import {
   Select,
   SelectContent,
@@ -33,168 +31,133 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
+
+// ---------- Local zod schema (variant edit) ----------
+const imageObject = z.object({
+  _id: z.string().min(1, "_id is required"),
+  alt: z.string().optional(),
+  path: z.string().min(1, "Image path is required"),
+});
+
+const variantSchema = z
+  .object({
+    product: z.string().min(1, "Product is required"),
+    variantName: z.string().trim().min(1, "Variant name is required"),
+    mrp: z.coerce.number().positive("MRP must be > 0"),
+    specialPrice: z.coerce.number().positive().optional(),
+    sku: z.string().trim().min(1, "SKU is required"),
+    productGallery: z
+      .array(imageObject)
+      .min(1, "At least one gallery image is required"),
+    swatchImage: imageObject.optional(),
+  })
+  .refine((v) => v.specialPrice == null || v.specialPrice <= v.mrp, {
+    path: ["specialPrice"],
+    message: "Special price must be less than or equal to MRP",
+  });
+// ----------------------------------------------------
 
 const BreadCrumbData = [
   { href: ADMIN_DASHBOARD, label: "Home" },
   { href: ADMIN_Product_ALL, label: "Products" },
-  { href: "", label: "Edit" },
+  { href: "", label: "Edit Variant" },
 ];
 
-// ✅ Include warrantyMonths in validation
-const formSchema = zSchema.pick({
-  _id: true,
-  name: true,
-  slug: true,
-  shortDesc: true,
-  category: true,
-  mrp: true,
-  specialPrice: true,
-  warrantyMonths: true,   // <-- added
-  productMedia: true,
-  descImages: true,
-  heroImage: true,
-  additionalInfo: true,
-  showInWebsite: true,
-});
-
-const EditProduct = () => {
+export default function EditProductVariant() {
   const { id } = useParams();
   const [loading, setLoading] = useState(false);
-
-  // Fetch product
-  const {
-    data: productRes,
-    isLoading: isLoadingProduct,
-    isError: isErrorProduct,
-  } = useFetch("product", id ? `/api/product/get/${id}` : null);
-
-  // Fetch categories
-  const {
-    data: categoriesRes,
-    isLoading: isLoadingCats,
-    isError: isErrorCats,
-  } = useFetch("categories", "/api/category/");
-
-  const categories = Array.isArray(categoriesRes?.data)
-    ? categoriesRes.data
-    : Array.isArray(categoriesRes)
-    ? categoriesRes
-    : [];
+  const [loadingFetch, setLoadingFetch] = useState(true);
+  const [products, setProducts] = useState([]);
 
   const form = useForm({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(variantSchema),
     defaultValues: {
-      _id: id,
-      name: "",
-      slug: "",
-      shortDesc: "",
-      category: "",
+      product: "",
+      variantName: "",
       mrp: "",
       specialPrice: "",
-      warrantyMonths: "",         // <-- added
-      productMedia: [],
-      descImages: [],
-      heroImage: undefined,
-      additionalInfo: [{ label: "", value: "" }],
-      showInWebsite: true,
+      sku: "",
+      productGallery: [],
+      swatchImage: undefined,
     },
   });
 
-  const { control, setValue, getValues, reset, watch } = form;
-  const { fields, append, remove } = useFieldArray({
-    control,
-    name: "additionalInfo",
-  });
-
-  // Prefill when product arrives
+  // Fetch products + existing variant
   useEffect(() => {
-    if (productRes?.success && productRes.data) {
-      const p = productRes.data;
-
-      const toImgObj = (x) =>
-        x
-          ? { _id: String(x._id), alt: x.alt || "", path: String(x.path) }
-          : undefined;
-
-      const toImgArray = (arr) =>
-        Array.isArray(arr)
-          ? arr.map((f) => ({
-              _id: String(f._id),
-              alt: f.alt || "",
-              path: String(f.path),
-            }))
+    (async () => {
+      try {
+        // Load product list
+        const { data } = await axios.get(
+          "/api/product?start=0&size=1000&deleType=SD"
+        );
+        const list = Array.isArray(data?.data)
+          ? data.data
+          : Array.isArray(data)
+          ? data
           : [];
-
-      const catId =
-        (p.category && (p.category._id || p.category))
-          ? String(p.category._id || p.category)
-          : "";
-
-      reset({
-        _id: p._id,
-        name: p.name || "",
-        slug: p.slug || "",
-        shortDesc: p.shortDesc || "",
-        category: catId,
-        mrp: p.mrp ?? "",
-        specialPrice: p.specialPrice ?? "",
-        warrantyMonths: p.warrantyMonths ?? "",   // <-- added
-        heroImage: toImgObj(p.heroImage),
-        productMedia: toImgArray(p.productMedia),
-        descImages: toImgArray(p.descImages),
-        additionalInfo:
-          Array.isArray(p.additionalInfo) && p.additionalInfo.length
-            ? p.additionalInfo.map((r) => ({
-                label: r.label || "",
-                value: r.value || "",
-              }))
-            : [{ label: "", value: "" }],
-        showInWebsite:
-          typeof p.showInWebsite === "boolean" ? p.showInWebsite : true,
-      });
-    }
-  }, [productRes, reset]);
-
-  // Auto-select first category if empty
-  useEffect(() => {
-    const current = getValues("category");
-    if (!current && categories.length > 0) {
-      setValue("category", String(categories[0]._id), { shouldValidate: true });
-    }
-  }, [categories, getValues, setValue]);
-
-  // Slug auto from name
-  useEffect(() => {
-    const sub = watch((value, { name }) => {
-      if (name === "name") {
-        const s = value.name?.trim()
-          ? slugify(value.name, { lower: true, strict: true })
-          : "";
-        setValue("slug", s);
+        setProducts(list.map((p) => ({ _id: p._id, name: p.name })));
+      } catch {
+        showToast("error", "Failed to load products");
       }
-    });
-    return () => sub.unsubscribe();
-  }, [watch, setValue]);
 
-  const handleSubmit = async (values) => {
+      try {
+        // Load variant details
+        if (!id) return;
+        const { data: res } = await axios.get(`/api/product-variant/get/${id}`);
+        if (!res?.success)
+          throw new Error(res?.message || "Failed to fetch variant");
+
+        const v = res.data;
+
+        const toImg = (x) =>
+          x ? { _id: String(x._id), alt: x.alt || "", path: String(x.path) } : undefined;
+
+        const toImgArr = (arr) =>
+          Array.isArray(arr)
+            ? arr.map((f) => ({
+                _id: String(f._id),
+                alt: f.alt || "",
+                path: String(f.path),
+              }))
+            : [];
+
+        form.reset({
+          product: String(v.product?._id || v.product),
+          variantName: v.variantName || "",
+          mrp: v.mrp ?? "",
+          specialPrice: v.specialPrice ?? "",
+          sku: v.sku || "",
+          productGallery: toImgArr(v.productGallery),
+          swatchImage: toImg(v.swatchImage),
+        });
+      } catch (err) {
+        showToast("error", err?.message || "Failed to load variant");
+      } finally {
+        setLoadingFetch(false);
+      }
+    })();
+  }, [id, form]);
+
+  const onSubmit = async (values) => {
     try {
       setLoading(true);
 
       const payload = {
+        _id: id,
         ...values,
-        category: String(values.category),
-        mrp: values.mrp === "" ? undefined : Number(values.mrp),
+        mrp: Number(values.mrp),
         specialPrice:
           values.specialPrice === "" ? undefined : Number(values.specialPrice),
-        warrantyMonths:
-          values.warrantyMonths === "" ? undefined : Number(values.warrantyMonths), // <-- added
       };
 
-      const { data: res } = await axios.put("/api/product/update", payload);
-      if (!res?.success) throw new Error(res?.message || "Update failed");
+      const { data: res } = await axios.put(
+        "/api/product-variant/update",
+        payload
+      );
+      if (!res?.success)
+        throw new Error(res?.message || "Failed to update variant");
 
-      showToast("success", "Product updated successfully!");
+      showToast("success", "Variant updated!");
     } catch (err) {
       showToast("error", err?.message || "Something went wrong");
     } finally {
@@ -205,366 +168,206 @@ const EditProduct = () => {
   return (
     <div>
       <BreadCrumb BreadCrumbData={BreadCrumbData} />
+
       <Card className="py-0 rounded shadow-sm">
         <CardHeader className="py-0 px-3 border-b [.border-b]:pb-2">
-          <h4 className="text-xl font-semibold mt-3">Edit Product</h4>
+          <h4 className="text-xl font-semibold mt-3">Edit Product Variant</h4>
         </CardHeader>
+
         <CardContent className="pb-5">
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(handleSubmit)}>
-              {/* Top bar: visibility */}
-              <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div className="text-sm text-muted-foreground">
-                  Update product details, pricing, media and visibility.
+          {loadingFetch ? (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          ) : (
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)}>
+                {/* Product + Variant Name */}
+                <div className="mb-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="product"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Product</FormLabel>
+                        <FormControl>
+                          <Select
+                            value={field.value || ""}
+                            onValueChange={field.onChange}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Select product" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {products.map((p) => (
+                                <SelectItem key={p._id} value={p._id}>
+                                  {p.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="variantName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Variant Name</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="e.g., Black / Blue / Green"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
 
-                <FormField
-                  control={form.control}
-                  name="showInWebsite"
-                  render={({ field }) => (
-                    <FormItem className="flex items-center gap-3">
-                      <FormLabel className="m-0">Show on website</FormLabel>
-                      <FormControl>
-                        <Switch
-                          checked={!!field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+                {/* Pricing + SKU */}
+                <div className="mb-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="mrp"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>MRP</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="0.00"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-              {/* Name + Slug */}
-              <div className="mb-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Product Name" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                  <FormField
+                    control={form.control}
+                    name="specialPrice"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Special Price</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="Optional"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-                <FormField
-                  control={form.control}
-                  name="slug"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Slug</FormLabel>
-                      <FormControl>
-                        <Input placeholder="product-slug" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+                  <FormField
+                    control={form.control}
+                    name="sku"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>SKU</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="SKU (unique)"
+                            value={field.value}
+                            onChange={(e) =>
+                              field.onChange(e.target.value.toUpperCase())
+                            }
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
 
-              {/* Short Desc */}
-              <div className="mb-5">
-                <FormField
-                  control={form.control}
-                  name="shortDesc"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Short Description</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="Brief summary (max 300 chars)"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              {/* Category + Pricing (+ Warranty) */}
-              <div className="mb-5 grid grid-cols-1 md:grid-cols-4 gap-4">
-                <FormField
-                  control={form.control}
-                  name="category"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Category</FormLabel>
-                      <FormControl>
-                        <Select
-                          value={field.value || ""}
-                          onValueChange={(val) => field.onChange(String(val))}
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue
-                              placeholder={
-                                isLoadingCats ? "Loading..." : "Select category"
-                              }
-                            />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {categories.map((c) => (
-                              <SelectItem key={c._id} value={String(c._id)}>
-                                {c.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="mrp"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>MRP</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          placeholder="0.00"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="specialPrice"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Special Price</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          placeholder="Optional"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                {/* ✅ Warranty Months */}
-                <FormField
-                  control={form.control}
-                  name="warrantyMonths"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Warranty (months)</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          step="1"
-                          min="0"
-                          placeholder="e.g., 12"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              {/* Hero Image */}
-              <div className="mb-5">
-                <FormField
-                  control={form.control}
-                  name="heroImage"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Hero Image</FormLabel>
-                      <MediaSelector
-                        multiple={false}
-                        selectedMedia={field.value}
-                        triggerLabel={
-                          field.value ? "Change Hero Image" : "Select Hero Image"
-                        }
-                        onSelect={(selected) => {
-                          if (!selected) return field.onChange(undefined);
-                          field.onChange({
-                            _id: selected._id,
-                            alt: selected.alt || "",
-                            path: selected.path,
-                          });
-                        }}
-                      />
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              {/* Product Media */}
-              <div className="mb-5">
-                <FormField
-                  control={form.control}
-                  name="productMedia"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Product Media (Gallery)</FormLabel>
-                      <MediaSelector
-                        multiple
-                        selectedMedia={field.value}
-                        triggerLabel={
-                          field.value?.length
-                            ? "Change Gallery"
-                            : "Select Gallery"
-                        }
-                        onSelect={(selected) => {
-                          if (!selected || !Array.isArray(selected))
-                            return field.onChange([]);
-                          field.onChange(
-                            selected.map((f) => ({
+                {/* Product Gallery */}
+                <div className="mb-5">
+                  <FormField
+                    control={form.control}
+                    name="productGallery"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Product Gallery</FormLabel>
+                        <MediaSelector
+                          multiple
+                          selectedMedia={field.value}
+                          triggerLabel={
+                            field.value?.length
+                              ? "Change Gallery"
+                              : "Select Gallery"
+                          }
+                          onSelect={(selected) => {
+                            if (!selected || !Array.isArray(selected)) {
+                              field.onChange([]);
+                              return;
+                            }
+                            const imgs = selected.map((f) => ({
                               _id: f._id,
                               alt: f.alt || "",
                               path: f.path,
-                            }))
-                          );
-                        }}
-                      />
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              {/* Description Images */}
-              <div className="mb-5">
-                <FormField
-                  control={form.control}
-                  name="descImages"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Description Images</FormLabel>
-                      <MediaSelector
-                        multiple
-                        selectedMedia={field.value}
-                        triggerLabel={
-                          field.value?.length
-                            ? "Change Description Images"
-                            : "Select Description Images"
-                        }
-                        onSelect={(selected) => {
-                          if (!selected || !Array.isArray(selected))
-                            return field.onChange([]);
-                          field.onChange(
-                            selected.map((f) => ({
-                              _id: f._id,
-                              alt: f.alt || "",
-                              path: f.path,
-                            }))
-                          );
-                        }}
-                      />
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              {/* Additional Info */}
-              <div className="mb-6">
-                <FormLabel>Additional Info</FormLabel>
-                <div className="mt-2 space-y-3">
-                  {fields.map((row, idx) => (
-                    <div
-                      key={row.id}
-                      className="grid grid-cols-12 gap-3 items-end"
-                    >
-                      <div className="col-span-5">
-                        <FormField
-                          control={form.control}
-                          name={`additionalInfo.${idx}.label`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormControl>
-                                <Input
-                                  placeholder="Label (e.g., Color)"
-                                  {...field}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
+                            }));
+                            field.onChange(imgs);
+                          }}
                         />
-                      </div>
-                      <div className="col-span-5">
-                        <FormField
-                          control={form.control}
-                          name={`additionalInfo.${idx}.value`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormControl>
-                                <Input
-                                  placeholder="Value (e.g., Black)"
-                                  {...field}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-                      <div className="col-span-2 flex gap-2">
-                        <ButtonLoading
-                          type="button"
-                          text="+"
-                          loading={false}
-                          onClick={() => append({ label: "", value: "" })}
-                        />
-                        <ButtonLoading
-                          type="button"
-                          text="−"
-                          loading={false}
-                          onClick={() => remove(idx)}
-                          disabled={fields.length === 1}
-                        />
-                      </div>
-                    </div>
-                  ))}
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
-              </div>
 
-              {/* Submit */}
-              <div className="mb-5">
+                {/* Swatch Image */}
+                <div className="mb-8">
+                  <FormField
+                    control={form.control}
+                    name="swatchImage"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Swatch Image (optional)</FormLabel>
+                        <MediaSelector
+                          multiple={false}
+                          selectedMedia={field.value}
+                          triggerLabel={
+                            field.value ? "Change Swatch" : "Select Swatch"
+                          }
+                          onSelect={(selected) => {
+                            if (!selected) {
+                              field.onChange(undefined);
+                              return;
+                            }
+                            field.onChange({
+                              _id: selected._id,
+                              alt: selected.alt || "",
+                              path: selected.path,
+                            });
+                          }}
+                        />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {/* Submit */}
                 <ButtonLoading
                   type="submit"
-                  text="Update Product"
+                  text="Update Variant"
                   loading={loading}
                   className="w-full"
                 />
-              </div>
-            </form>
-          </Form>
-
-          {(isLoadingProduct || isLoadingCats) && (
-            <p className="text-sm text-muted-foreground mt-2">Loading data…</p>
-          )}
-          {(isErrorProduct || isErrorCats) && (
-            <p className="text-sm text-red-500 mt-2">
-              Failed to fetch required data.
-            </p>
+              </form>
+            </Form>
           )}
         </CardContent>
       </Card>
     </div>
   );
-};
-
-export default EditProduct;
+}

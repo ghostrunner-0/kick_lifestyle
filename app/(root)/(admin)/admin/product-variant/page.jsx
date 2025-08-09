@@ -6,7 +6,11 @@ import DeleteAction from "@/components/application/admin/DeleteAction";
 import EditAction from "@/components/application/admin/EditAction";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { DT_CATEGORY_COLUMN, DT_PRODUCT_COLUMN, DT_PRODUCT_VARIANT_COLUMN } from "@/lib/Column";
+import {
+  DT_CATEGORY_COLUMN,
+  DT_PRODUCT_COLUMN,
+  DT_PRODUCT_VARIANT_COLUMN,
+} from "@/lib/Column";
 import { columnConfig } from "@/lib/helperFunctions";
 import {
   ADMIN_CATEGORY_ADD,
@@ -17,6 +21,7 @@ import {
   ADMIN_Product_EDIT,
   ADMIN_PRODUCT_VARIANT_ADD,
   ADMIN_PRODUCT_VARIANT_ALL,
+  ADMIN_PRODUCT_VARIANT_EDIT,
   ADMIN_TRASH_ROUTE,
 } from "@/routes/AdminRoutes";
 import { FilePlus } from "lucide-react";
@@ -37,7 +42,7 @@ const AllProductVariant = () => {
   // Fix: Proper action function initialization
   const action = useCallback((row, deleteType, handleDelete) => {
     const actionMenu = []; // Initialize as an empty array
-    actionMenu.push(<EditAction href={ADMIN_Product_EDIT(row.original._id)} />);
+    actionMenu.push(<EditAction href={ADMIN_PRODUCT_VARIANT_EDIT(row.original._id)} />);
     actionMenu.push(
       <DeleteAction
         handleDelete={handleDelete}

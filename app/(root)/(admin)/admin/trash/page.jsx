@@ -45,7 +45,7 @@ const TRASH_CONFIG = {
     columns: DT_PRODUCT_VARIANT_COLUMN,
     fetchUrl: "/api/product-variant",
     exportUrl: "/api/product-variant/export",
-    deleteUrl: "/api/product-variant  /delete",
+    deleteUrl: "/api/product-variant/delete",
   },
 };
 
