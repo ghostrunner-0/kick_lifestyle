@@ -19,11 +19,19 @@ const Layout = ({ children }) => {
   }, [status]);
 
   if (status === "loading") {
-    return <Loading/>
+    return <Loading />;
   }
 
+  const isAdmin = session?.user?.role === "admin" || session?.user?.isAdmin;
+
   if (!session) {
-    // Prevent rendering of admin UI while redirecting
+    return null; // while redirecting to sign in
+  }
+
+  if (!isAdmin) {
+    if (typeof window !== "undefined") {
+      window.location.href = "/";
+    }
     return null;
   }
 

@@ -5,7 +5,7 @@ import DatatableWrapper from "@/components/application/admin/DatatableWrapper";
 import DeleteAction from "@/components/application/admin/DeleteAction";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { DT_CATEGORY_COLUMN, DT_PRODUCT_COLUMN, DT_PRODUCT_VARIANT_COLUMN } from "@/lib/Column";
+import { DT_CATEGORY_COLUMN, DT_COUPON_COLUMN, DT_PRODUCT_COLUMN, DT_PRODUCT_VARIANT_COLUMN } from "@/lib/Column";
 import { columnConfig } from "@/lib/helperFunctions";
 import {
   ADMIN_CATEGORY_ADD,
@@ -46,6 +46,13 @@ const TRASH_CONFIG = {
     fetchUrl: "/api/product-variant",
     exportUrl: "/api/product-variant/export",
     deleteUrl: "/api/product-variant/delete",
+  },
+  coupon: {
+    title: "Coupon Trash",
+    columns: DT_COUPON_COLUMN,
+    fetchUrl: "/api/coupons",
+    exportUrl: "/api/coupons/export",
+    deleteUrl: "/api/coupons/delete",
   },
 };
 

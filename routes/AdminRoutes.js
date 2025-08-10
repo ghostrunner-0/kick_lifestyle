@@ -20,3 +20,9 @@ export const ADMIN_PRODUCT_VARIANT_ALL = "/admin/product-variant";
 export const ADMIN_PRODUCT_VARIANT_ADD = "/admin/product-variant/add";
 export const ADMIN_PRODUCT_VARIANT_EDIT = (id) =>
   id ? `/admin/product-variant/edit/${id}` : "";
+
+export const ADMIN_COUPONS_ALL = "/admin/coupon";
+export const ADMIN_COUPONS_ADD = "/admin/coupon/add";
+export const ADMIN_COUPONS_EDIT = (id) =>
+  id ? `/admin/coupon/edit/${id}` : "";
+export const ADMIN_USERS_ALL = "/admin/customers";
