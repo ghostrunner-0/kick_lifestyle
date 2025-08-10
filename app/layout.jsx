@@ -1,8 +1,8 @@
 import "./globals.css";
 import { Poppins } from "next/font/google";
 import SessionProviderWrapper from "./providers/SessionProviderWrapper";
-import { ToastContainer } from "react-toastify";
 import GlobalProvider from "@/components/application/GlobalProvider";
+import { Toaster } from "react-hot-toast";
 
 const PoppinsFont = Poppins({
   weight: ["400", "500", "600", "700", "800"],
@@ -21,7 +21,17 @@ export default function RootLayout({ children }) {
       <body className={`${PoppinsFont.className} antialiased`}>
         <SessionProviderWrapper>
           <GlobalProvider>
-            <ToastContainer />
+            <Toaster
+              position="bottom-right"
+              toastOptions={{
+                duration: 5000,
+                style: {
+                  borderRadius: "8px",
+                  padding: "12px 16px",
+                  fontSize: "14px",
+                },
+              }}
+            />
             {children}
           </GlobalProvider>
         </SessionProviderWrapper>

@@ -1,20 +1,24 @@
 import { writeFile } from "fs/promises";
 import path from "path";
 import { v4 as uuidv4 } from "uuid";
+
+import { connectDB } from "@/lib/DB";
 import Media from "@/models/Media.model";
 import Tag from "@/models/Tag.model";
-import { connectDB } from "@/lib/DB";
 
-// Disable body parser for formData
 export const config = {
   api: {
-    bodyParser: false,
+    bodyParser: false, // important for formData()
   },
 };
 
 export async function POST(req) {
   try {
     await connectDB();
+
+    // You can add your isAuthenticated check here if needed
+    // const user = await isAuthenticated(req);
+    // if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
     const formData = await req.formData();
     const files = formData.getAll("files");
@@ -28,13 +32,12 @@ export async function POST(req) {
       return Response.json({ error: "Tag is required" }, { status: 400 });
     }
 
-    // tags can be a single ID or comma-separated string
     const tagIds = tagIdsRaw
       .split(",")
       .map((id) => id.trim())
       .filter(Boolean);
 
-    // Optional: validate if all tags exist
+    // Optional: verify tags exist
     const existingTags = await Tag.find({ _id: { $in: tagIds } });
     if (existingTags.length !== tagIds.length) {
       return Response.json({ error: "Some tags not found." }, { status: 400 });
@@ -48,16 +51,27 @@ export async function POST(req) {
       const buffer = Buffer.from(await file.arrayBuffer());
       const ext = path.extname(file.name);
       const fileName = `${uuidv4()}${ext}`;
-      const uploadPath = path.join(process.cwd(), "public/uploads", fileName);
+
+      // Save in /shared folder in your project root
+      const uploadDir = path.join(process.cwd(), "shared");
+
+      // Make sure shared folder exists, else create it (optional)
+      try {
+        await writeFile(path.join(uploadDir, ".keep"), ""); // try touching a file to check folder
+      } catch {
+        await import("fs").then(fs => fs.promises.mkdir(uploadDir, { recursive: true }));
+      }
+
+      const uploadPath = path.join(uploadDir, fileName);
 
       await writeFile(uploadPath, buffer);
 
       const media = new Media({
         filename: file.name,
-        path: `/uploads/${fileName}`,
+        path: `/shared/${fileName}`, // Path for your Next.js config rewrite
         mimeType: file.type,
         size: file.size,
-        alt: file.name, // optional alt
+        alt: file.name,
         tags: tagIds,
       });
 
@@ -71,4 +85,3 @@ export async function POST(req) {
     return Response.json({ error: "Upload failed" }, { status: 500 });
   }
 }
-  
