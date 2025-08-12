@@ -6,14 +6,16 @@ import { zSchema } from "@/lib/zodSchema";
 import UserModel from "@/models/User.model";
 import { SignJWT } from "jose";
 
-export async function POST(req) { 
+export async function POST(req) {
   try {
     await connectDB();
 
+    // Extend validation schema to include phone
     const validationSchema = zSchema.pick({
       name: true,
       email: true,
       password: true,
+      phone: true,   // added phone here
     });
 
     const payload = await req.json();
@@ -28,7 +30,7 @@ export async function POST(req) {
       );
     }
 
-    const { name, email, password } = validatedData.data;
+    const { name, email, password, phone } = validatedData.data;
 
     const existingUser = await UserModel.exists({ email });
     if (existingUser) {
@@ -39,6 +41,7 @@ export async function POST(req) {
       name,
       email,
       password,
+      phone,  // save phone in DB
     });
 
     await newUser.save();

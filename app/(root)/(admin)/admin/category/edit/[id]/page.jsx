@@ -6,6 +6,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { zSchema } from "@/lib/zodSchema";
 import { useParams } from "next/navigation";
+import { Switch } from "@/components/ui/switch";
+import { z } from "zod";
 
 import BreadCrumb from "@/components/application/admin/BreadCrumb";
 import { ADMIN_CATEGORY_ALL, ADMIN_DASHBOARD } from "@/routes/AdminRoutes";
@@ -31,12 +33,17 @@ const BreadCrumbData = [
   { href: "", label: "Edit" },
 ];
 
-const formSchema = zSchema.pick({
-  _id: true,
-  name: true,
-  slug: true,
-  image: true,
-});
+// Extend schema to include showInWebsite boolean with default true
+const formSchema = zSchema
+  .pick({
+    _id: true,
+    name: true,
+    slug: true,
+    image: true,
+  })
+  .extend({
+    showInWebsite: z.boolean().optional().default(false),
+  });
 
 const EditCategory = () => {
   const { id } = useParams();
@@ -55,18 +62,21 @@ const EditCategory = () => {
       name: "",
       slug: "",
       image: undefined,
+      showInWebsite: false,
     },
   });
 
   // Pre-fill form when categoryData is available
   useEffect(() => {
     if (categoryData?.success) {
-      const { _id, name, slug, image } = categoryData.data;
+      const { _id, name, slug, image, showOnWebsite } = categoryData.data;
       form.reset({
         _id,
         name,
         slug,
         image: image || undefined,
+        // Explicitly check for boolean or fallback to false
+        showInWebsite: typeof showOnWebsite === "boolean" ? showOnWebsite : false,
       });
     }
   }, [categoryData]);
@@ -85,13 +95,19 @@ const EditCategory = () => {
     return () => subscription.unsubscribe();
   }, [form]);
 
+  // Optional: Debug current showInWebsite value on change
+  useEffect(() => {
+    const subscription = form.watch((value) => {
+      // Uncomment to debug
+      // console.log("showInWebsite changed:", value.showInWebsite);
+    });
+    return () => subscription.unsubscribe();
+  }, [form]);
+
   const handleCategoryFormSubmit = async (values) => {
     try {
       setLoading(true);
-      const { data: response } = await axios.put(
-        "/api/category/update",
-        values
-      );
+      const { data: response } = await axios.put("/api/category/update", values);
 
       if (!response.success) {
         throw new Error(response.message);
@@ -152,6 +168,25 @@ const EditCategory = () => {
                         />
                       </FormControl>
                       <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              {/* Show on website switch */}
+              <div className="mb-5">
+                <FormField
+                  control={form.control}
+                  name="showInWebsite"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center gap-3">
+                      <FormLabel className="m-0">Show on website</FormLabel>
+                      <FormControl>
+                        <Switch
+                          checked={field.value === true}
+                          onCheckedChange={(checked) => field.onChange(checked)}
+                        />
+                      </FormControl>
                     </FormItem>
                   )}
                 />

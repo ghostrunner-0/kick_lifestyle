@@ -82,7 +82,7 @@ const ProductSchema = new mongoose.Schema(
       required: true,
       default: [],
     },
-
+    modelNumber: { type: String, required: true, trim: true },
     deletedAt: { type: Date, default: null, index: true },
   },
   { timestamps: true }

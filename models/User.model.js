@@ -39,6 +39,7 @@ const userSchema = new mongoose.Schema(
     phone: {
       type: String,
       trim: true,
+      default: null,
     },
     address: {
       type: String,
@@ -94,4 +95,5 @@ userSchema.methods.comparePassword = async function (enteredPassword) {
 };
 
 // 🧾 Export the model
-export default mongoose.models.User || mongoose.model("User", userSchema, "users");
+export default mongoose.models.User ||
+  mongoose.model("User", userSchema, "users");

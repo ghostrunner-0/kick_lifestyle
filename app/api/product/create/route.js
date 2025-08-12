@@ -2,6 +2,7 @@ import { connectDB } from "@/lib/DB";
 import { catchError, response } from "@/lib/helperFunctions";
 import { isAuthenticated } from "@/lib/Authentication";
 import { zSchema } from "@/lib/zodSchema";
+import { z } from "zod";
 import Product from "@/models/Product.model";
 
 export async function POST(req) {
@@ -13,21 +14,25 @@ export async function POST(req) {
 
     const payload = await req.json();
 
-    // Validate exactly what the AddProduct form sends
-    const formSchema = zSchema.pick({
-      name: true,
-      slug: true,
-      shortDesc: true,
-      category: true,
-      mrp: true,
-      specialPrice: true,
-      warrantyMonths: true,   // ✅ include warrantyMonths
-      productMedia: true,     // array of {_id, alt, path}
-      descImages: true,       // array of {_id, alt, path}
-      heroImage: true,        // {_id, alt, path}
-      additionalInfo: true,
-      showInWebsite: true,    // visibility flag
-    });
+    // Validate exactly what the AddProduct form sends + modelNumber
+    const formSchema = zSchema
+      .pick({
+        name: true,
+        slug: true,
+        shortDesc: true,
+        category: true,
+        mrp: true,
+        specialPrice: true,
+        warrantyMonths: true,
+        productMedia: true,
+        descImages: true,
+        heroImage: true,
+        additionalInfo: true,
+        showInWebsite: true,
+      })
+      .extend({
+        modelNumber: z.string().trim().min(1, "Model number is required"),
+      });
 
     const parsed = formSchema.safeParse(payload);
     if (!parsed.success) {
@@ -36,14 +41,12 @@ export async function POST(req) {
 
     const data = parsed.data;
 
-    // helper: normalize image object
     const normalizeImage = (img) => ({
       _id: String(img._id),
       alt: img.alt ?? "",
       path: String(img.path),
     });
 
-    // Coerce numbers safely (zod likely already coerced, this is belt & suspenders)
     const mrpNum = Number(data.mrp);
     const spNum = data.specialPrice == null ? undefined : Number(data.specialPrice);
     const warrantyNum =
@@ -54,11 +57,12 @@ export async function POST(req) {
     const productDoc = {
       name: data.name.trim(),
       slug: data.slug.trim(),
+      modelNumber: data.modelNumber.trim(), // ✅ added
       shortDesc: data.shortDesc?.trim() || "",
       category: data.category, // string ObjectId; Mongoose will cast
       mrp: mrpNum,
       specialPrice: spNum,
-      warrantyMonths: warrantyNum, // ✅ saved to DB
+      warrantyMonths: warrantyNum,
       heroImage: normalizeImage(data.heroImage),
       productMedia: (data.productMedia || []).map(normalizeImage),
       descImages: (data.descImages || []).map(normalizeImage),
@@ -66,18 +70,19 @@ export async function POST(req) {
         label: row.label.trim(),
         value: row.value.trim(),
       })),
-      showInWebsite:
-        typeof data.showInWebsite === "boolean" ? data.showInWebsite : true,
+      showInWebsite: typeof data.showInWebsite === "boolean" ? data.showInWebsite : true,
     };
 
-    // Duplicate slug protection (ignore soft-deleted)
+    // Duplicate protection (ignore soft-deleted)
     const existing = await Product.findOne({
-      slug: productDoc.slug,
+      $or: [{ slug: productDoc.slug }, { modelNumber: productDoc.modelNumber }],
       deletedAt: null,
     }).lean();
 
     if (existing) {
-      return response(false, 409, "A product with this slug already exists");
+      const clash =
+        existing.slug === productDoc.slug ? "slug" : "model number";
+      return response(false, 409, `A product with this ${clash} already exists`);
     }
 
     const created = await Product.create(productDoc);

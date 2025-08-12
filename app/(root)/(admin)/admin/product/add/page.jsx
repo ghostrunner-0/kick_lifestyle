@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import slugify from "slugify";
+import { z } from "zod";
 
 import { zSchema } from "@/lib/zodSchema";
 import BreadCrumb from "@/components/application/admin/BreadCrumb";
@@ -23,7 +24,6 @@ import MediaSelector from "@/components/application/admin/MediaSelector";
 import ButtonLoading from "@/components/application/ButtonLoading";
 import { showToast } from "@/lib/ShowToast";
 
-// shadcn/ui select & switch
 import {
   Select,
   SelectContent,
@@ -39,21 +39,25 @@ const BreadCrumbData = [
   { href: "", label: "Add" },
 ];
 
-// ⬇️ Make sure zSchema has warrantyMonths: z.coerce.number().min(0).optional()
-const formSchema = zSchema.pick({
-  name: true,
-  slug: true,
-  shortDesc: true,
-  category: true,
-  mrp: true,
-  specialPrice: true,
-  warrantyMonths: true,   // ⬅️ added
-  productMedia: true,     // array of image objects
-  descImages: true,       // array of image objects
-  heroImage: true,        // image object
-  additionalInfo: true,
-  showInWebsite: true,
-});
+// Build form schema from your base zSchema, then EXTEND with modelNumber
+const formSchema = zSchema
+  .pick({
+    name: true,
+    slug: true,
+    shortDesc: true,
+    category: true,
+    mrp: true,
+    specialPrice: true,
+    warrantyMonths: true,
+    productMedia: true,
+    descImages: true,
+    heroImage: true,
+    additionalInfo: true,
+    showInWebsite: true,
+  })
+  .extend({
+    modelNumber: z.string().trim().min(1, "Model number is required"),
+  });
 
 export default function AddProduct() {
   const [loading, setLoading] = useState(false);
@@ -64,14 +68,15 @@ export default function AddProduct() {
     defaultValues: {
       name: "",
       slug: "",
+      modelNumber: "", // ✅ added
       shortDesc: "",
       category: "",
       mrp: "",
       specialPrice: "",
-      warrantyMonths: "",     // ⬅️ default as string; we coerce later
-      productMedia: [],       // [{_id, alt, path}]
-      descImages: [],         // [{_id, alt, path}]
-      heroImage: undefined,   // {_id, alt, path}
+      warrantyMonths: "",
+      productMedia: [],
+      descImages: [],
+      heroImage: undefined,
       additionalInfo: [{ label: "", value: "" }],
       showInWebsite: true,
     },
@@ -111,19 +116,35 @@ export default function AddProduct() {
     try {
       setLoading(true);
 
-      // Coerce number fields (inputs are strings)
       const payload = {
         ...values,
+        modelNumber: values.modelNumber.trim(), // ✅ ensure clean string
         mrp: values.mrp === "" ? undefined : Number(values.mrp),
-        specialPrice: values.specialPrice === "" ? undefined : Number(values.specialPrice),
-        warrantyMonths: values.warrantyMonths === "" ? 0 : Number(values.warrantyMonths), // ⬅️ coerce, default 0
+        specialPrice:
+          values.specialPrice === "" ? undefined : Number(values.specialPrice),
+        warrantyMonths:
+          values.warrantyMonths === "" ? 0 : Number(values.warrantyMonths),
       };
 
       const { data: res } = await axios.post("/api/product/create", payload);
       if (!res?.success) throw new Error(res?.message || "Failed to create product");
 
       showToast("success", "Product created!");
-      form.reset({ showInWebsite: true, warrantyMonths: "" });
+      form.reset({
+        name: "",
+        slug: "",
+        modelNumber: "",
+        shortDesc: "",
+        category: "",
+        mrp: "",
+        specialPrice: "",
+        warrantyMonths: "",
+        productMedia: [],
+        descImages: [],
+        heroImage: undefined,
+        additionalInfo: [{ label: "", value: "" }],
+        showInWebsite: true,
+      });
     } catch (err) {
       showToast("error", err?.message || "Something went wrong");
     } finally {
@@ -146,7 +167,7 @@ export default function AddProduct() {
               {/* Top bar: visibility */}
               <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-sm text-muted-foreground">
-                  Configure core details, pricing, warranty and media below.
+                  Configure core details, model number, pricing, warranty and media below.
                 </div>
                 <FormField
                   control={form.control}
@@ -162,8 +183,8 @@ export default function AddProduct() {
                 />
               </div>
 
-              {/* Name + Slug */}
-              <div className="mb-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Name + Slug + Model Number */}
+              <div className="mb-5 grid grid-cols-1 md:grid-cols-3 gap-4">
                 <FormField
                   control={form.control}
                   name="name"
@@ -190,6 +211,19 @@ export default function AddProduct() {
                     </FormItem>
                   )}
                 />
+                <FormField
+                  control={form.control}
+                  name="modelNumber"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Model Number</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., PBX-1234" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
 
               {/* Short Desc */}
@@ -211,7 +245,6 @@ export default function AddProduct() {
 
               {/* Category + Pricing + Warranty */}
               <div className="mb-5 grid grid-cols-1 md:grid-cols-4 gap-4">
-                {/* Category */}
                 <FormField
                   control={form.control}
                   name="category"
@@ -237,7 +270,6 @@ export default function AddProduct() {
                   )}
                 />
 
-                {/* MRP */}
                 <FormField
                   control={form.control}
                   name="mrp"
@@ -252,7 +284,6 @@ export default function AddProduct() {
                   )}
                 />
 
-                {/* Special Price */}
                 <FormField
                   control={form.control}
                   name="specialPrice"
@@ -267,7 +298,6 @@ export default function AddProduct() {
                   )}
                 />
 
-                {/* Warranty Months */}
                 <FormField
                   control={form.control}
                   name="warrantyMonths"

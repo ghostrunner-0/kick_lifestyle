@@ -58,6 +58,7 @@ export async function GET(req) {
           _id: 1,
           name: 1,
           slug: 1,
+          showOnWebsite: 1,
           createdAt: 1,
           updatedAt: 1,
         },

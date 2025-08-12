@@ -32,6 +32,7 @@ const RegisterPage = () => {
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isConPasswordVisible, setIsConPasswordVisible] = useState(false);
 
+  // Updated schema with phone number
   const formSchema = zSchema
     .pick({
       email: true,
@@ -39,6 +40,11 @@ const RegisterPage = () => {
       name: true,
     })
     .extend({
+      phone: z
+        .string()
+        .min(10, "Phone number must be at least 10 digits")
+        .max(15, "Phone number must be no more than 15 digits")
+        .regex(/^[0-9]+$/, "Phone number must contain only digits"),
       confirmPassword: z.string(),
     })
     .refine((data) => data.password === data.confirmPassword, {
@@ -51,6 +57,7 @@ const RegisterPage = () => {
     defaultValues: {
       name: "",
       email: "",
+      phone: "",
       password: "",
       confirmPassword: "",
     },
@@ -97,6 +104,7 @@ const RegisterPage = () => {
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleRegisterSubmit)}>
+            {/* Name */}
             <div className="mb-5">
               <FormField
                 control={form.control}
@@ -117,6 +125,7 @@ const RegisterPage = () => {
               />
             </div>
 
+            {/* Email */}
             <div className="mb-5">
               <FormField
                 control={form.control}
@@ -137,6 +146,28 @@ const RegisterPage = () => {
               />
             </div>
 
+            {/* Phone */}
+            <div className="mb-5">
+              <FormField
+                control={form.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Phone Number</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="tel"
+                        placeholder="1234567890"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* Password */}
             <div className="mb-5">
               <FormField
                 control={form.control}
@@ -165,6 +196,7 @@ const RegisterPage = () => {
               />
             </div>
 
+            {/* Confirm Password */}
             <div className="mb-5">
               <FormField
                 control={form.control}
@@ -195,6 +227,7 @@ const RegisterPage = () => {
               />
             </div>
 
+            {/* Submit */}
             <div className="mb-5">
               <ButtonLoading
                 type="submit"
@@ -204,6 +237,7 @@ const RegisterPage = () => {
               />
             </div>
 
+            {/* Google Sign In */}
             <div className="mb-5">
               <Button
                 variant="outline"
@@ -216,6 +250,7 @@ const RegisterPage = () => {
               </Button>
             </div>
 
+            {/* Login Link */}
             <div className="text-center text-xs">
               <p className="mb-2">
                 Already have an account?{" "}

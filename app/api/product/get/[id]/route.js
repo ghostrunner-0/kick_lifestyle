@@ -19,7 +19,7 @@ export async function GET(req, { params }) {
 
     const product = await Product.findById(id)
       .select(
-        "name slug shortDesc category mrp specialPrice warrantyMonths showInWebsite heroImage productMedia descImages additionalInfo createdAt updatedAt deletedAt"
+        "name slug shortDesc category modelNumber mrp specialPrice warrantyMonths showInWebsite heroImage productMedia descImages additionalInfo createdAt updatedAt deletedAt"
       )
       .populate({
         path: "category",

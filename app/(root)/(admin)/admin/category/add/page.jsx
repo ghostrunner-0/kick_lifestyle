@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { zSchema } from "@/lib/zodSchema";
+import { Switch } from "@/components/ui/switch";
 
 import BreadCrumb from "@/components/application/admin/BreadCrumb";
 import { ADMIN_CATEGORY_ALL, ADMIN_DASHBOARD } from "@/routes/AdminRoutes";
@@ -30,12 +31,16 @@ const BreadCrumbData = [
   { href: "", label: "Add" },
 ];
 
-// Updated schema to include alt and relax path to nonempty string (not strict URL)
-const formSchema = zSchema.pick({
-  name: true,
-  slug: true,
-  image: true,
-});
+// Extend schema to include showInWebsite boolean with default true
+const formSchema = zSchema
+  .pick({
+    name: true,
+    slug: true,
+    image: true,
+  })
+  .extend({
+    showInWebsite: z.boolean().optional().default(true),
+  });
 
 const AddCategory = () => {
   const [loading, setLoading] = useState(false);
@@ -45,7 +50,8 @@ const AddCategory = () => {
     defaultValues: {
       name: "",
       slug: "",
-      image: undefined, // or remove this key entirely
+      image: undefined,
+      showInWebsite: true,
     },
   });
 
@@ -62,27 +68,27 @@ const AddCategory = () => {
     return () => subscription.unsubscribe();
   }, [form]);
 
-const handleCategoryFormSubmit = async (values) => {
-  try {
-    setLoading(true);
-    console.log("Submitting:", values);
+  const handleCategoryFormSubmit = async (values) => {
+    try {
+      setLoading(true);
+console.log(values)
+      const { data: response } = await axios.post("/api/category/create", values);
 
-    // Send POST request to your API route
-    const { data: response } = await axios.post("/api/category/create", values);
+      if (!response.success) throw new Error(response.message);
 
-    if (!response.success) {
-      throw new Error(response.message); // <-- Error with capital E
+      showToast("success", "Category added successfully!");
+      form.reset({
+        name: "",
+        slug: "",
+        image: undefined,
+        showInWebsite: true,
+      });
+    } catch (error) {
+      showToast("error", error.message || "Something went wrong");
+    } finally {
+      setLoading(false);
     }
-
-    showToast("success", "Category added successfully!");
-    form.reset();
-  } catch (error) {
-    showToast("error", error.message || "Something went wrong");
-  } finally {
-    setLoading(false);
-  }
-};
-
+  };
 
   return (
     <div>
@@ -103,11 +109,7 @@ const handleCategoryFormSubmit = async (values) => {
                     <FormItem>
                       <FormLabel>Name</FormLabel>
                       <FormControl>
-                        <Input
-                          type="text"
-                          placeholder="Category Name"
-                          {...field}
-                        />
+                        <Input type="text" placeholder="Category Name" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -124,13 +126,25 @@ const handleCategoryFormSubmit = async (values) => {
                     <FormItem>
                       <FormLabel>Slug</FormLabel>
                       <FormControl>
-                        <Input
-                          type="text"
-                          placeholder="category-slug"
-                          {...field}
-                        />
+                        <Input type="text" placeholder="category-slug" {...field} />
                       </FormControl>
                       <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              {/* Show on website switch */}
+              <div className="mb-5">
+                <FormField
+                  control={form.control}
+                  name="showInWebsite"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center gap-3">
+                      <FormLabel className="m-0">Show on website</FormLabel>
+                      <FormControl>
+                        <Switch checked={!!field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
                     </FormItem>
                   )}
                 />
@@ -148,7 +162,6 @@ const handleCategoryFormSubmit = async (values) => {
                       <MediaSelector
                         multiple={false}
                         onSelect={(selected) => {
-                          // Sanitize selected object to only _id, alt, path
                           const sanitize = (file) => ({
                             _id: file._id,
                             alt: file.alt || "",
@@ -163,9 +176,7 @@ const handleCategoryFormSubmit = async (values) => {
                             field.onChange(undefined);
                           }
                         }}
-                        triggerLabel={
-                          field.value ? "Change Image" : "Select Image"
-                        }
+                        triggerLabel={field.value ? "Change Image" : "Select Image"}
                       />
 
                       <FormMessage />

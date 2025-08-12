@@ -30,6 +30,10 @@ const categorySchema = new mongoose.Schema(
       type: imageSchema,
       required: true,
     },
+    showOnWebsite: {
+      type: Boolean,
+      default: true, // default to visible
+    },
     deletedAt: {
       type: Date,
       default: null,

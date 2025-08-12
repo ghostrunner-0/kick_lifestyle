@@ -26,3 +26,4 @@ export const ADMIN_COUPONS_ADD = "/admin/coupon/add";
 export const ADMIN_COUPONS_EDIT = (id) =>
   id ? `/admin/coupon/edit/${id}` : "";
 export const ADMIN_USERS_ALL = "/admin/customers";
+export const ADMIN_REVIEWS_ALL = "/admin/reviews";

@@ -3,7 +3,7 @@ import { catchError, response } from "@/lib/helperFunctions";
 import { isAuthenticated } from "@/lib/Authentication";
 import { zSchema } from "@/lib/zodSchema";
 import Product from "@/models/Product.model";
-
+import { z } from "zod";
 export async function PUT(req) {
   try {
     const admin = await isAuthenticated("admin");
@@ -13,26 +13,35 @@ export async function PUT(req) {
 
     const payload = await req.json();
 
-    // ✅ Include warrantyMonths in validation
-    const formSchema = zSchema.pick({
-      _id: true,
-      name: true,
-      slug: true,
-      shortDesc: true,
-      category: true,
-      mrp: true,
-      specialPrice: true,
-      productMedia: true, // array of {_id, alt, path}
-      descImages: true,   // array of {_id, alt, path}
-      heroImage: true,    // {_id, alt, path}
-      additionalInfo: true,
-      showInWebsite: true,
-      warrantyMonths: true, // <-- NEW
-    });
+    const formSchema = zSchema
+      .pick({
+        _id: true,
+        name: true,
+        slug: true,
+        shortDesc: true,
+        category: true,
+        mrp: true,
+        specialPrice: true,
+        productMedia: true,
+        descImages: true,
+        heroImage: true,
+        additionalInfo: true,
+        showInWebsite: true,
+        warrantyMonths: true,
+      })
+      .extend({
+        modelNumber: z.string().min(1, "Model number is required"),
+        warrantyMonths: z.number().min(0, "Warranty cannot be negative"),
+      });
 
     const parsed = formSchema.safeParse(payload);
     if (!parsed.success) {
-      return response(false, 400, "Invalid or missing fields", parsed.error.format());
+      return response(
+        false,
+        400,
+        "Invalid or missing fields",
+        parsed.error.format()
+      );
     }
 
     const {
@@ -48,23 +57,42 @@ export async function PUT(req) {
       heroImage,
       additionalInfo,
       showInWebsite,
-      warrantyMonths, // <-- NEW
+      warrantyMonths,
+      modelNumber,
     } = parsed.data;
 
-    // Ensure product exists (and not soft-deleted)
+    // ✅ Check if product exists
     const product = await Product.findOne({ _id, deletedAt: null });
     if (!product) {
       return response(false, 404, "Product not found");
     }
 
-    // Prevent duplicate slug with another product
+    // ✅ Check duplicate slug
     const slugClash = await Product.findOne({
       _id: { $ne: _id },
       slug,
       deletedAt: null,
     }).lean();
     if (slugClash) {
-      return response(false, 409, "Another product with this slug already exists");
+      return response(
+        false,
+        409,
+        "Another product with this slug already exists"
+      );
+    }
+
+    // ✅ Check duplicate model number
+    const modelClash = await Product.findOne({
+      _id: { $ne: _id },
+      modelNumber: modelNumber.trim(),
+      deletedAt: null,
+    }).lean();
+    if (modelClash) {
+      return response(
+        false,
+        409,
+        "Another product with this model number already exists"
+      );
     }
 
     const normalizeImage = (img) => ({
@@ -73,10 +101,11 @@ export async function PUT(req) {
       path: String(img.path),
     });
 
+    // ✅ Update fields
     product.name = name.trim();
     product.slug = slug.trim();
     product.shortDesc = shortDesc?.trim() || "";
-    product.category = category; // cast to ObjectId by Mongoose
+    product.category = category;
     product.mrp = mrp;
     product.specialPrice = specialPrice ?? undefined;
     product.heroImage = normalizeImage(heroImage);
@@ -87,12 +116,14 @@ export async function PUT(req) {
       value: row.value.trim(),
     }));
     product.showInWebsite =
-      typeof showInWebsite === "boolean" ? showInWebsite : product.showInWebsite;
-
-    // ✅ Save warranty in months (number). If your zod coerce is set, this is already a number.
-    //    Keep undefined if you want it optional; or default to 0 if you prefer.
+      typeof showInWebsite === "boolean"
+        ? showInWebsite
+        : product.showInWebsite;
     product.warrantyMonths =
-      typeof warrantyMonths === "number" ? warrantyMonths : product.warrantyMonths;
+      typeof warrantyMonths === "number"
+        ? warrantyMonths
+        : product.warrantyMonths;
+    product.modelNumber = modelNumber.trim();
 
     await product.save();
 

@@ -3,6 +3,7 @@ import { catchError, response } from "@/lib/helperFunctions";
 import { isAuthenticated } from "@/lib/Authentication";
 import { zSchema } from "@/lib/zodSchema";
 import Category from "@/models/Category.model";
+import {z} from 'zod'
 
 export async function PUT(req) {
   try {
@@ -13,12 +14,17 @@ export async function PUT(req) {
 
     const payload = await req.json();
 
-    const formSchema = zSchema.pick({
-      _id: true,
-      name: true,
-      slug: true,
-      image: true,
-    });
+    // Extend validation schema to include showInWebsite boolean (optional)
+    const formSchema = zSchema
+      .pick({
+        _id: true,
+        name: true,
+        slug: true,
+        image: true,
+      })
+      .extend({
+        showInWebsite: z.boolean().optional(),
+      });
 
     const validate = formSchema.safeParse(payload);
     if (!validate.success) {
@@ -30,7 +36,7 @@ export async function PUT(req) {
       );
     }
 
-    const { _id, name, slug, image } = validate.data;
+    const { _id, name, slug, image, showInWebsite } = validate.data;
 
     const category = await Category.findOne({ _id, deletedAt: null });
     if (!category) {
@@ -40,6 +46,10 @@ export async function PUT(req) {
     category.name = name;
     category.slug = slug;
     category.image = image;
+
+      category.showOnWebsite = showInWebsite;
+
+console.log('showInWebsite (after parse):', showInWebsite, typeof showInWebsite);
 
     await category.save();
 

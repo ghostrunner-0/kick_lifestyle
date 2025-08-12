@@ -6,18 +6,14 @@ import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useParams } from "next/navigation";
 import slugify from "slugify";
+import { z } from "zod";
 
 import { zSchema } from "@/lib/zodSchema";
 import BreadCrumb from "@/components/application/admin/BreadCrumb";
 import { ADMIN_DASHBOARD, ADMIN_Product_ALL } from "@/routes/AdminRoutes";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
+  Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import ButtonLoading from "@/components/application/ButtonLoading";
@@ -25,13 +21,8 @@ import MediaSelector from "@/components/application/admin/MediaSelector";
 import { showToast } from "@/lib/ShowToast";
 import useFetch from "@/hooks/useFetch";
 
-// shadcn/ui select & switch
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 
@@ -41,40 +32,36 @@ const BreadCrumbData = [
   { href: "", label: "Edit" },
 ];
 
-// ✅ Include warrantyMonths in validation
-const formSchema = zSchema.pick({
-  _id: true,
-  name: true,
-  slug: true,
-  shortDesc: true,
-  category: true,
-  mrp: true,
-  specialPrice: true,
-  warrantyMonths: true,   // <-- added
-  productMedia: true,
-  descImages: true,
-  heroImage: true,
-  additionalInfo: true,
-  showInWebsite: true,
-});
+// ✅ Include warrantyMonths, then EXTEND with modelNumber
+const formSchema = zSchema
+  .pick({
+    _id: true,
+    name: true,
+    slug: true,
+    shortDesc: true,
+    category: true,
+    mrp: true,
+    specialPrice: true,
+    warrantyMonths: true,
+    productMedia: true,
+    descImages: true,
+    heroImage: true,
+    additionalInfo: true,
+    showInWebsite: true,
+  })
+  .extend({
+    modelNumber: z.string().trim().min(1, "Model number is required"),
+  });
 
 const EditProduct = () => {
   const { id } = useParams();
   const [loading, setLoading] = useState(false);
 
-  // Fetch product
-  const {
-    data: productRes,
-    isLoading: isLoadingProduct,
-    isError: isErrorProduct,
-  } = useFetch("product", id ? `/api/product/get/${id}` : null);
+  const { data: productRes, isLoading: isLoadingProduct, isError: isErrorProduct } =
+    useFetch("product", id ? `/api/product/get/${id}` : null);
 
-  // Fetch categories
-  const {
-    data: categoriesRes,
-    isLoading: isLoadingCats,
-    isError: isErrorCats,
-  } = useFetch("categories", "/api/category/");
+  const { data: categoriesRes, isLoading: isLoadingCats, isError: isErrorCats } =
+    useFetch("categories", "/api/category/");
 
   const categories = Array.isArray(categoriesRes?.data)
     ? categoriesRes.data
@@ -88,11 +75,12 @@ const EditProduct = () => {
       _id: id,
       name: "",
       slug: "",
+      modelNumber: "",         // ✅ added
       shortDesc: "",
       category: "",
       mrp: "",
       specialPrice: "",
-      warrantyMonths: "",         // <-- added
+      warrantyMonths: "",
       productMedia: [],
       descImages: [],
       heroImage: undefined,
@@ -102,56 +90,39 @@ const EditProduct = () => {
   });
 
   const { control, setValue, getValues, reset, watch } = form;
-  const { fields, append, remove } = useFieldArray({
-    control,
-    name: "additionalInfo",
-  });
+  const { fields, append, remove } = useFieldArray({ control, name: "additionalInfo" });
 
   // Prefill when product arrives
   useEffect(() => {
     if (productRes?.success && productRes.data) {
       const p = productRes.data;
 
-      const toImgObj = (x) =>
-        x
-          ? { _id: String(x._id), alt: x.alt || "", path: String(x.path) }
-          : undefined;
-
+      const toImgObj = (x) => (x ? { _id: String(x._id), alt: x.alt || "", path: String(x.path) } : undefined);
       const toImgArray = (arr) =>
         Array.isArray(arr)
-          ? arr.map((f) => ({
-              _id: String(f._id),
-              alt: f.alt || "",
-              path: String(f.path),
-            }))
+          ? arr.map((f) => ({ _id: String(f._id), alt: f.alt || "", path: String(f.path) }))
           : [];
 
-      const catId =
-        (p.category && (p.category._id || p.category))
-          ? String(p.category._id || p.category)
-          : "";
+      const catId = (p.category && (p.category._id || p.category)) ? String(p.category._id || p.category) : "";
 
       reset({
         _id: p._id,
         name: p.name || "",
         slug: p.slug || "",
+        modelNumber: p.modelNumber || "",       // ✅ added
         shortDesc: p.shortDesc || "",
         category: catId,
         mrp: p.mrp ?? "",
         specialPrice: p.specialPrice ?? "",
-        warrantyMonths: p.warrantyMonths ?? "",   // <-- added
+        warrantyMonths: p.warrantyMonths ?? "",
         heroImage: toImgObj(p.heroImage),
         productMedia: toImgArray(p.productMedia),
         descImages: toImgArray(p.descImages),
         additionalInfo:
           Array.isArray(p.additionalInfo) && p.additionalInfo.length
-            ? p.additionalInfo.map((r) => ({
-                label: r.label || "",
-                value: r.value || "",
-              }))
+            ? p.additionalInfo.map((r) => ({ label: r.label || "", value: r.value || "" }))
             : [{ label: "", value: "" }],
-        showInWebsite:
-          typeof p.showInWebsite === "boolean" ? p.showInWebsite : true,
+        showInWebsite: typeof p.showInWebsite === "boolean" ? p.showInWebsite : true,
       });
     }
   }, [productRes, reset]);
@@ -168,9 +139,7 @@ const EditProduct = () => {
   useEffect(() => {
     const sub = watch((value, { name }) => {
       if (name === "name") {
-        const s = value.name?.trim()
-          ? slugify(value.name, { lower: true, strict: true })
-          : "";
+        const s = value.name?.trim() ? slugify(value.name, { lower: true, strict: true }) : "";
         setValue("slug", s);
       }
     });
@@ -183,12 +152,11 @@ const EditProduct = () => {
 
       const payload = {
         ...values,
+        modelNumber: values.modelNumber.trim(), // ✅ added
         category: String(values.category),
         mrp: values.mrp === "" ? undefined : Number(values.mrp),
-        specialPrice:
-          values.specialPrice === "" ? undefined : Number(values.specialPrice),
-        warrantyMonths:
-          values.warrantyMonths === "" ? undefined : Number(values.warrantyMonths), // <-- added
+        specialPrice: values.specialPrice === "" ? undefined : Number(values.specialPrice),
+        warrantyMonths: values.warrantyMonths === "" ? undefined : Number(values.warrantyMonths),
       };
 
       const { data: res } = await axios.put("/api/product/update", payload);
@@ -215,9 +183,8 @@ const EditProduct = () => {
               {/* Top bar: visibility */}
               <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-sm text-muted-foreground">
-                  Update product details, pricing, media and visibility.
+                  Update product details, model number, pricing, media and visibility.
                 </div>
-
                 <FormField
                   control={form.control}
                   name="showInWebsite"
@@ -225,10 +192,7 @@ const EditProduct = () => {
                     <FormItem className="flex items-center gap-3">
                       <FormLabel className="m-0">Show on website</FormLabel>
                       <FormControl>
-                        <Switch
-                          checked={!!field.value}
-                          onCheckedChange={field.onChange}
-                        />
+                        <Switch checked={!!field.value} onCheckedChange={field.onChange} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -236,8 +200,8 @@ const EditProduct = () => {
                 />
               </div>
 
-              {/* Name + Slug */}
-              <div className="mb-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Name + Slug + Model Number */}
+              <div className="mb-5 grid grid-cols-1 md:grid-cols-3 gap-4">
                 <FormField
                   control={form.control}
                   name="name"
@@ -251,7 +215,6 @@ const EditProduct = () => {
                     </FormItem>
                   )}
                 />
-
                 <FormField
                   control={form.control}
                   name="slug"
@@ -260,6 +223,19 @@ const EditProduct = () => {
                       <FormLabel>Slug</FormLabel>
                       <FormControl>
                         <Input placeholder="product-slug" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="modelNumber"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Model Number</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., PBX-1234" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -276,10 +252,7 @@ const EditProduct = () => {
                     <FormItem>
                       <FormLabel>Short Description</FormLabel>
                       <FormControl>
-                        <Input
-                          placeholder="Brief summary (max 300 chars)"
-                          {...field}
-                        />
+                        <Input placeholder="Brief summary (max 300 chars)" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -287,7 +260,7 @@ const EditProduct = () => {
                 />
               </div>
 
-              {/* Category + Pricing (+ Warranty) */}
+              {/* Category + Pricing + Warranty */}
               <div className="mb-5 grid grid-cols-1 md:grid-cols-4 gap-4">
                 <FormField
                   control={form.control}
@@ -296,16 +269,9 @@ const EditProduct = () => {
                     <FormItem>
                       <FormLabel>Category</FormLabel>
                       <FormControl>
-                        <Select
-                          value={field.value || ""}
-                          onValueChange={(val) => field.onChange(String(val))}
-                        >
+                        <Select value={field.value || ""} onValueChange={(val) => field.onChange(String(val))}>
                           <SelectTrigger className="w-full">
-                            <SelectValue
-                              placeholder={
-                                isLoadingCats ? "Loading..." : "Select category"
-                              }
-                            />
+                            <SelectValue placeholder={isLoadingCats ? "Loading..." : "Select category"} />
                           </SelectTrigger>
                           <SelectContent>
                             {categories.map((c) => (
@@ -320,7 +286,6 @@ const EditProduct = () => {
                     </FormItem>
                   )}
                 />
-
                 <FormField
                   control={form.control}
                   name="mrp"
@@ -328,18 +293,12 @@ const EditProduct = () => {
                     <FormItem>
                       <FormLabel>MRP</FormLabel>
                       <FormControl>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          placeholder="0.00"
-                          {...field}
-                        />
+                        <Input type="number" step="0.01" placeholder="0.00" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-
                 <FormField
                   control={form.control}
                   name="specialPrice"
@@ -347,19 +306,12 @@ const EditProduct = () => {
                     <FormItem>
                       <FormLabel>Special Price</FormLabel>
                       <FormControl>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          placeholder="Optional"
-                          {...field}
-                        />
+                        <Input type="number" step="0.01" placeholder="Optional" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-
-                {/* ✅ Warranty Months */}
                 <FormField
                   control={form.control}
                   name="warrantyMonths"
@@ -367,13 +319,7 @@ const EditProduct = () => {
                     <FormItem>
                       <FormLabel>Warranty (months)</FormLabel>
                       <FormControl>
-                        <Input
-                          type="number"
-                          step="1"
-                          min="0"
-                          placeholder="e.g., 12"
-                          {...field}
-                        />
+                        <Input type="number" step="1" min="0" placeholder="e.g., 12" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -392,16 +338,10 @@ const EditProduct = () => {
                       <MediaSelector
                         multiple={false}
                         selectedMedia={field.value}
-                        triggerLabel={
-                          field.value ? "Change Hero Image" : "Select Hero Image"
-                        }
+                        triggerLabel={field.value ? "Change Hero Image" : "Select Hero Image"}
                         onSelect={(selected) => {
                           if (!selected) return field.onChange(undefined);
-                          field.onChange({
-                            _id: selected._id,
-                            alt: selected.alt || "",
-                            path: selected.path,
-                          });
+                          field.onChange({ _id: selected._id, alt: selected.alt || "", path: selected.path });
                         }}
                       />
                       <FormMessage />
@@ -421,20 +361,11 @@ const EditProduct = () => {
                       <MediaSelector
                         multiple
                         selectedMedia={field.value}
-                        triggerLabel={
-                          field.value?.length
-                            ? "Change Gallery"
-                            : "Select Gallery"
-                        }
+                        triggerLabel={field.value?.length ? "Change Gallery" : "Select Gallery"}
                         onSelect={(selected) => {
-                          if (!selected || !Array.isArray(selected))
-                            return field.onChange([]);
+                          if (!selected || !Array.isArray(selected)) return field.onChange([]);
                           field.onChange(
-                            selected.map((f) => ({
-                              _id: f._id,
-                              alt: f.alt || "",
-                              path: f.path,
-                            }))
+                            selected.map((f) => ({ _id: f._id, alt: f.alt || "", path: f.path }))
                           );
                         }}
                       />
@@ -455,20 +386,11 @@ const EditProduct = () => {
                       <MediaSelector
                         multiple
                         selectedMedia={field.value}
-                        triggerLabel={
-                          field.value?.length
-                            ? "Change Description Images"
-                            : "Select Description Images"
-                        }
+                        triggerLabel={field.value?.length ? "Change Description Images" : "Select Description Images"}
                         onSelect={(selected) => {
-                          if (!selected || !Array.isArray(selected))
-                            return field.onChange([]);
+                          if (!selected || !Array.isArray(selected)) return field.onChange([]);
                           field.onChange(
-                            selected.map((f) => ({
-                              _id: f._id,
-                              alt: f.alt || "",
-                              path: f.path,
-                            }))
+                            selected.map((f) => ({ _id: f._id, alt: f.alt || "", path: f.path }))
                           );
                         }}
                       />
@@ -483,10 +405,7 @@ const EditProduct = () => {
                 <FormLabel>Additional Info</FormLabel>
                 <div className="mt-2 space-y-3">
                   {fields.map((row, idx) => (
-                    <div
-                      key={row.id}
-                      className="grid grid-cols-12 gap-3 items-end"
-                    >
+                    <div key={row.id} className="grid grid-cols-12 gap-3 items-end">
                       <div className="col-span-5">
                         <FormField
                           control={form.control}
@@ -494,10 +413,7 @@ const EditProduct = () => {
                           render={({ field }) => (
                             <FormItem>
                               <FormControl>
-                                <Input
-                                  placeholder="Label (e.g., Color)"
-                                  {...field}
-                                />
+                                <Input placeholder="Label (e.g., Color)" {...field} />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -511,10 +427,7 @@ const EditProduct = () => {
                           render={({ field }) => (
                             <FormItem>
                               <FormControl>
-                                <Input
-                                  placeholder="Value (e.g., Black)"
-                                  {...field}
-                                />
+                                <Input placeholder="Value (e.g., Black)" {...field} />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -522,19 +435,8 @@ const EditProduct = () => {
                         />
                       </div>
                       <div className="col-span-2 flex gap-2">
-                        <ButtonLoading
-                          type="button"
-                          text="+"
-                          loading={false}
-                          onClick={() => append({ label: "", value: "" })}
-                        />
-                        <ButtonLoading
-                          type="button"
-                          text="−"
-                          loading={false}
-                          onClick={() => remove(idx)}
-                          disabled={fields.length === 1}
-                        />
+                        <ButtonLoading type="button" text="+" loading={false} onClick={() => append({ label: "", value: "" })} />
+                        <ButtonLoading type="button" text="−" loading={false} onClick={() => remove(idx)} disabled={fields.length === 1} />
                       </div>
                     </div>
                   ))}
@@ -543,23 +445,16 @@ const EditProduct = () => {
 
               {/* Submit */}
               <div className="mb-5">
-                <ButtonLoading
-                  type="submit"
-                  text="Update Product"
-                  loading={loading}
-                  className="w-full"
-                />
+                <ButtonLoading type="submit" text="Update Product" loading={loading} className="w-full" />
               </div>
             </form>
           </Form>
 
           {(isLoadingProduct || isLoadingCats) && (
-            <p className="text-sm text-muted-foreground mt-2">Loading data…</p>
+            <p className="mt-2 text-sm text-muted-foreground">Loading data…</p>
           )}
           {(isErrorProduct || isErrorCats) && (
-            <p className="text-sm text-red-500 mt-2">
-              Failed to fetch required data.
-            </p>
+            <p className="mt-2 text-sm text-red-500">Failed to fetch required data.</p>
           )}
         </CardContent>
       </Card>
