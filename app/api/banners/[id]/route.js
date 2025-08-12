@@ -32,8 +32,8 @@ export async function GET(req, { params }) {
     if (!admin) return response(false, 401, "User Not Allowed");
 
     await connectDB();
-
-    const { id } = params || {};
+    const param = await params;
+    const { id } = param || {};
     if (!id) return response(false, 400, "Missing banner id");
 
     const banner = await Banner.findById(id).lean();
