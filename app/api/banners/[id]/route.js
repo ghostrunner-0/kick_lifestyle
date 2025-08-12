@@ -52,14 +52,19 @@ export async function PUT(req, { params }) {
     if (!admin) return response(false, 401, "User Not Allowed");
 
     await connectDB();
-
-    const { id } = params || {};
+    const param = await params;
+    const { id } = param || {};
     if (!id) return response(false, 400, "Missing banner id");
 
     const raw = await req.json();
     const parsed = payloadZ.safeParse(raw);
     if (!parsed.success) {
-      return response(false, 400, "Invalid or missing fields", parsed.error.format());
+      return response(
+        false,
+        400,
+        "Invalid or missing fields",
+        parsed.error.format()
+      );
     }
     const data = parsed.data;
 
@@ -68,7 +73,8 @@ export async function PUT(req, { params }) {
     if (!current) return response(false, 404, "Banner not found");
 
     const update = {};
-    if (data.desktopImage) update.desktopImage = normalizeImage(data.desktopImage);
+    if (data.desktopImage)
+      update.desktopImage = normalizeImage(data.desktopImage);
     if (data.mobileImage) update.mobileImage = normalizeImage(data.mobileImage);
     if (typeof data.href === "string") update.href = data.href.trim();
     if (typeof data.active === "boolean") update.active = data.active;
@@ -79,7 +85,10 @@ export async function PUT(req, { params }) {
       let newOrder = data.order;
 
       // Clamp to [0, maxOrder]
-      const maxDoc = await Banner.findOne().sort({ order: -1 }).select({ order: 1 }).lean();
+      const maxDoc = await Banner.findOne()
+        .sort({ order: -1 })
+        .select({ order: 1 })
+        .lean();
       const maxOrder = Number.isFinite(maxDoc?.order) ? maxDoc.order : 0;
       if (newOrder > maxOrder) newOrder = maxOrder;
 
@@ -87,13 +96,19 @@ export async function PUT(req, { params }) {
         if (newOrder < oldOrder) {
           // Moving up: shift down [newOrder, oldOrder-1]
           await Banner.updateMany(
-            { _id: { $ne: current._id }, order: { $gte: newOrder, $lt: oldOrder } },
+            {
+              _id: { $ne: current._id },
+              order: { $gte: newOrder, $lt: oldOrder },
+            },
             { $inc: { order: 1 } }
           );
         } else {
           // Moving down: shift up (oldOrder, newOrder]
           await Banner.updateMany(
-            { _id: { $ne: current._id }, order: { $gt: oldOrder, $lte: newOrder } },
+            {
+              _id: { $ne: current._id },
+              order: { $gt: oldOrder, $lte: newOrder },
+            },
             { $inc: { order: -1 } }
           );
         }
@@ -101,7 +116,11 @@ export async function PUT(req, { params }) {
       }
     }
 
-    const updated = await Banner.findByIdAndUpdate(id, { $set: update }, { new: true }).lean();
+    const updated = await Banner.findByIdAndUpdate(
+      id,
+      { $set: update },
+      { new: true }
+    ).lean();
     if (!updated) return response(false, 404, "Banner not found after update");
 
     return response(true, 200, "Banner updated successfully", updated);
@@ -117,8 +136,8 @@ export async function DELETE(req, { params }) {
     if (!admin) return response(false, 401, "User Not Allowed");
 
     await connectDB();
-
-    const { id } = params || {};
+    const param = await params;
+    const { id } = param || {};
     if (!id) return response(false, 400, "Missing banner id");
 
     // Fetch to know its order, then hard delete
@@ -128,7 +147,10 @@ export async function DELETE(req, { params }) {
     await Banner.deleteOne({ _id: id });
 
     // Shift down any items that were after the removed one
-    await Banner.updateMany({ order: { $gt: toRemove.order } }, { $inc: { order: -1 } });
+    await Banner.updateMany(
+      { order: { $gt: toRemove.order } },
+      { $inc: { order: -1 } }
+    );
 
     return response(true, 200, "Banner deleted successfully", { _id: id });
   } catch (err) {
