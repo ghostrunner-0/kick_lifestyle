@@ -55,12 +55,24 @@ const hrefZ = z
     { message: "Use '#', an absolute URL, or a relative path" }
   );
 
+// HEX color: normalize and validate (#abc or #aabbcc)
+const hexColorRegex = /^#(?:[A-Fa-f0-9]{3}){1,2}$/;
+const bgColorZ = z
+  .string()
+  .trim()
+  .transform((v) => (v?.startsWith("#") ? v : `#${v || ""}`))
+  .refine((v) => hexColorRegex.test(v), {
+    message: "Enter a valid HEX color, e.g. #fcba17",
+  })
+  .default("#ffffff");
+
 const formSchema = z.object({
   desktopImage: imageZ,
   mobileImage: imageZ,
   href: hrefZ.default("#"),
   active: z.boolean().default(true),
   order: z.coerce.number().int().min(0, "Order must be 0 or greater"),
+  bgColor: bgColorZ, // NEW
 });
 
 /* --- Helpers --- */
@@ -128,6 +140,7 @@ export default function AddBanner() {
       href: "",
       active: true,
       order: 1,
+      bgColor: "#ffffff", // NEW
     },
   });
 
@@ -140,6 +153,7 @@ export default function AddBanner() {
         ...vals,
         href: resolveHref(vals.href),
         order: Number(vals.order),
+        bgColor: vals.bgColor, // NEW
       };
       const { data: res } = await axios.post("/api/banners/create", payload);
       if (!res?.success)
@@ -151,6 +165,7 @@ export default function AddBanner() {
         href: "",
         active: true,
         order: 1,
+        bgColor: "#ffffff", // NEW
       });
       setDeskMeta({ width: undefined, height: undefined });
       setMobMeta({ width: undefined, height: undefined });
@@ -171,6 +186,12 @@ export default function AddBanner() {
   );
   const mobileOK = ratioOK(mobMeta.width, mobMeta.height, MOBILE_W, MOBILE_H);
 
+  const gradientPreviewStyle = {
+    backgroundImage: `linear-gradient(180deg, ${values.bgColor || "#ffffff"} 0%, ${
+      values.bgColor || "#ffffff"
+    } 50%, #ffffff 100%)`,
+  };
+
   return (
     <div className="space-y-4">
       <BreadCrumb BreadCrumbData={BreadCrumbData} />
@@ -187,13 +208,13 @@ export default function AddBanner() {
                 onSubmit={form.handleSubmit(onSubmit)}
                 className="space-y-8"
               >
-                {/* Row: Active / Order / Href */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Row: Active / Order / Href / Color */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <FormField
                     control={form.control}
                     name="active"
                     render={({ field }) => (
-                      <FormItem className="flex items-center justify-between gap-3 ">
+                      <FormItem className="flex items-center justify-between gap-3">
                         <div>
                           <FormLabel className="m-0">Active</FormLabel>
                           <FormDescription className="text-xs">
@@ -257,21 +278,56 @@ export default function AddBanner() {
                       </FormItem>
                     )}
                   />
+
+                  {/* NEW: HEX bgColor with text + color picker */}
+                  <FormField
+                    control={form.control}
+                    name="bgColor"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Top BG Color (HEX)</FormLabel>
+                        <div className="flex items-center gap-2">
+                          <FormControl>
+                            <Input
+                              type="text"
+                              placeholder="#fcba17"
+                              value={field.value || ""}
+                              onChange={(e) => field.onChange(e.target.value)}
+                            />
+                          </FormControl>
+                          {/* synced native color picker */}
+                          <input
+                            type="color"
+                            className="h-9 w-9 rounded border"
+                            value={
+                              hexColorRegex.test(field.value || "")
+                                ? field.value
+                                : "#ffffff"
+                            }
+                            onChange={(e) => field.onChange(e.target.value)}
+                            aria-label="Pick color"
+                          />
+                        </div>
+                        <FormDescription className="text-xs">
+                          Used for the header-half gradient behind the banner.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
 
-                {/* Images Section with Dark BG */}
-                <div className=" space-y-6 rounded-md border p-3">
+                {/* Images Section */}
+                <div className="space-y-6 rounded-md border p-3">
                   {/* Desktop */}
                   <FormField
                     control={form.control}
                     name="desktopImage"
                     render={({ field }) => (
                       <FormItem>
-                        <div className="flex items-center justify-between ">
-                          <FormLabel className="text-white">
-                            Desktop Image
-                          </FormLabel>
-                          <div className="flex items-center gap-2 text-xs text-gray-300">
+                        <div className="flex items-center justify-between">
+                          <FormLabel>Desktop Image</FormLabel>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <Badge variant="outline">
                               {DESKTOP_W}×{DESKTOP_H}
                             </Badge>
@@ -310,7 +366,7 @@ export default function AddBanner() {
                           }}
                         />
 
-                        <FormDescription className="text-xs text-gray-300 " >
+                        <FormDescription className="text-xs">
                           Recommended:{" "}
                           <strong>
                             {DESKTOP_W}×{DESKTOP_H}
@@ -344,10 +400,8 @@ export default function AddBanner() {
                     render={({ field }) => (
                       <FormItem>
                         <div className="flex items-center justify-between">
-                          <FormLabel className="text-white">
-                            Mobile Image
-                          </FormLabel>
-                          <div className="flex items-center gap-2 text-xs text-gray-300">
+                          <FormLabel>Mobile Image</FormLabel>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <Badge variant="outline">
                               {MOBILE_W}×{MOBILE_H}
                             </Badge>
@@ -386,7 +440,7 @@ export default function AddBanner() {
                           }}
                         />
 
-                        <FormDescription className="text-xs text-gray-300">
+                        <FormDescription className="text-xs">
                           Recommended:{" "}
                           <strong>
                             {MOBILE_W}×{MOBILE_H}
@@ -431,6 +485,7 @@ export default function AddBanner() {
                         href: "",
                         active: true,
                         order: 1,
+                        bgColor: "#ffffff", // NEW
                       })
                     }
                   >
@@ -460,6 +515,18 @@ export default function AddBanner() {
                 >
                   {values.active ? "Active" : "Inactive"}
                 </Badge>
+                {/* NEW: color chip */}
+                <span className="inline-flex items-center gap-2 text-xs">
+                  <span>Color:</span>
+                  <span
+                    className="inline-block h-4 w-6 rounded border"
+                    style={{ backgroundColor: values.bgColor || "#ffffff" }}
+                    title={values.bgColor}
+                  />
+                  <code className="text-muted-foreground">
+                    {values.bgColor || "#ffffff"}
+                  </code>
+                </span>
               </div>
 
               <div className="text-sm">
@@ -467,6 +534,17 @@ export default function AddBanner() {
                 <span className="text-muted-foreground break-all">
                   {previewHref || "#"}
                 </span>
+              </div>
+
+              {/* NEW: gradient preview bar */}
+              <div>
+                <div className="mb-1 text-xs text-muted-foreground">
+                  Header-half gradient preview
+                </div>
+                <div
+                  className="h-10 w-full rounded border"
+                  style={gradientPreviewStyle}
+                />
               </div>
 
               {/* Desktop preview */}

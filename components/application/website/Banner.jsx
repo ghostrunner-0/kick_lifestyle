@@ -3,185 +3,157 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Slider from "react-slick";
 import Image from "next/image";
-
+import { Skeleton } from "@/components/ui/skeleton"; // Shadcn skeleton
 import "slick-carousel/slick/slick.css";
 import "slick-carousel/slick/slick-theme.css";
 
-export default function Banner() {
-  const [banners, setBanners] = useState([]);
+export default function Banner({ banners = [], loading = false }) {
   const [active, setActive] = useState(0);
-
-  // two-layer background for a smooth crossfade
-  const [bgA, setBgA] = useState("");
-  const [bgB, setBgB] = useState("");
-  const [showA, setShowA] = useState(true); // which layer is visible
-
+  const [currentBg, setCurrentBg] = useState(banners?.[0]?.bgColor || "#ffffff");
   const sliderRef = useRef(null);
 
+  const hexToRgb = (hex) => {
+    const v = hex?.replace("#", "") || "ffffff";
+    const n = v.length === 3 ? v.split("").map((c) => c + c).join("") : v;
+    const num = parseInt(n, 16);
+    return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
+  };
+  const rgbToHex = ({ r, g, b }) =>
+    `#${[r, g, b].map((x) => x.toString(16).padStart(2, "0")).join("")}`;
+  const mixWithWhite = (hex, amt = 0.4) => {
+    const { r, g, b } = hexToRgb(hex);
+    return rgbToHex({
+      r: Math.round(r + (255 - r) * amt),
+      g: Math.round(g + (255 - g) * amt),
+      b: Math.round(b + (255 - b) * amt),
+    });
+  };
+  const mkGradient = (hex = "#000000") => {
+    const tint40 = mixWithWhite(hex, 0.4);
+    const tint70 = mixWithWhite(hex, 0.7);
+    return `linear-gradient(180deg, ${hex} 0%, ${tint40} 35%, ${tint70} 65%, rgba(255,255,255,0) 100%)`;
+  };
+
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch("/api/banners");
-        const json = await res.json();
-        if (json?.success && Array.isArray(json.data)) {
-          const list = [...json.data].sort(
-            (a, b) => (a.order ?? 0) - (b.order ?? 0)
-          );
-          setBanners(list);
+    const nextColor = banners?.[active]?.bgColor || banners?.[0]?.bgColor;
+    if (nextColor) setCurrentBg(nextColor);
+  }, [active, banners]);
 
-          // seed backgrounds
-          const first = list?.[0]?.desktopImage?.path;
-          setBgA(first || "");
-          setBgB(first || "");
-          setShowA(true);
-        }
-      } catch (e) {
-        console.error("Failed to fetch banners", e);
-      }
-    })();
-  }, []);
-
-  // update background with crossfade whenever active slide changes
-  useEffect(() => {
-    const nextSrc =
-      banners?.[active]?.desktopImage?.path ||
-      banners?.[0]?.desktopImage?.path ||
-      "";
-    if (!nextSrc) return;
-
-    if (showA) {
-      setBgB(nextSrc);
-      // fade B in
-      requestAnimationFrame(() => setShowA(false));
-    } else {
-      setBgA(nextSrc);
-      // fade A in
-      requestAnimationFrame(() => setShowA(true));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active]);
-
-const settings = useMemo(
-  () => ({
-    dots: true,
-    infinite: true,
-    speed: 800,
-    fade: true,                  // 🔹 enables crossfade between slides
-    slidesToShow: 1,
-    slidesToScroll: 1,
-    autoplay: true,
-    autoplaySpeed: 5000,
-    arrows: false,
-    beforeChange: (_, next) => setActive(next),
-    appendDots: (dots) => (
-      <div
-        style={{
-          position: "absolute",
-          left: 0,
-          right: 0,
-          bottom: 14,
-          display: "flex",
-          justifyContent: "center",
-          pointerEvents: "none",
-        }}
-      >
-        <ul
+  const settings = useMemo(
+    () => ({
+      dots: true,
+      infinite: true,
+      speed: 300,
+      cssEase: "ease-out",
+      fade: true,
+      slidesToShow: 1,
+      slidesToScroll: 1,
+      autoplay: true,
+      autoplaySpeed: 4200,
+      pauseOnHover: false,
+      pauseOnDotsHover: true,
+      arrows: false,
+      touchThreshold: 12,
+      beforeChange: (_, next) => setActive(next),
+      appendDots: (dots) => (
+        <div
           style={{
-            margin: 0,
-            padding: 0,
+            position: "absolute",
+            left: 0,
+            right: 0,
+            bottom: 14,
             display: "flex",
-            gap: 8,
-            pointerEvents: "auto",
+            justifyContent: "center",
+            pointerEvents: "none",
           }}
         >
-          {dots}
-        </ul>
-      </div>
-    ),
-    customPaging: () => (
-      <div
-        style={{
-          width: 12,
-          height: 12,
-          borderRadius: 6,
-          backgroundColor: "#d4d4d4",
-          cursor: "pointer",
-        }}
-      />
-    ),
-  }),
-  []
-);
-
+          <ul
+            style={{
+              margin: 0,
+              padding: 0,
+              display: "flex",
+              gap: 8,
+              pointerEvents: "auto",
+            }}
+          >
+            {dots}
+          </ul>
+        </div>
+      ),
+      customPaging: (i) => (
+        <div
+          style={{
+            height: 8,
+            borderRadius: 8,
+            backgroundColor: i === active ? "#ffffff" : "#d4d4d4",
+            width: i === active ? 24 : 8,
+            transition: "all 0.3s ease",
+          }}
+        />
+      ),
+    }),
+    [active]
+  );
 
   return (
-    <div className="relative w-full">
-      {/* --- Animated blurred background (two layers cross-fading) --- */}
-      <div className="absolute inset-0 -z-10 overflow-hidden">
-        {/* layer A */}
-        {bgA ? (
-          <Image
-            src={bgA}
-            alt=""
-            fill
-            sizes="100vw"
-            priority
-            className={[
-              "object-cover blur-3xl will-change-transform will-change-opacity",
-              "transition-[opacity,transform] duration-700 ease-out",
-              showA ? "opacity-100 scale-[1.12]" : "opacity-0 scale-[1.08]",
-            ].join(" ")}
-          />
-        ) : null}
+    <div className="relative w-full bg-white isolate">
+      <div
+        className="absolute left-0 right-0 top-0 -z-10 overflow-hidden h-[45vh] min-h-[260px] max-h-[520px]"
+        style={{ backgroundImage: mkGradient(currentBg) }}
+      />
 
-        {/* layer B */}
-        {bgB ? (
-          <Image
-            src={bgB}
-            alt=""
-            fill
-            sizes="100vw"
-            priority
-            className={[
-              "object-cover blur-3xl will-change-transform will-change-opacity",
-              "transition-[opacity,transform] duration-700 ease-out",
-              showA ? "opacity-0 scale-[1.08]" : "opacity-100 scale-[1.12]",
-            ].join(" ")}
-          />
-        ) : null}
+      <div className="relative z-10 max-w-[1980px] mx-auto px-4 pt-20 pb-12">
+        {loading || banners.length === 0 ? (
+          // Skeleton Loader
+          <div className="px-5">
+            <Skeleton className="w-full h-[200px] md:h-[400px] rounded-2xl" />
+          </div>
+        ) : (
+          <Slider ref={sliderRef} {...settings}>
+            {banners.map(({ _id, desktopImage, mobileImage, href }, i) => {
+              const desktopSrc = desktopImage?.path || mobileImage?.path || "";
+              const mobileSrc = mobileImage?.path || desktopImage?.path || "";
+              const alt = desktopImage?.alt || mobileImage?.alt || "Banner";
 
-        {/* subtle vignette so the edges blend nicely */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/10 pointer-events-none" />
+              return (
+                <div key={_id || i} className="px-5">
+                  <a
+                    href={href || "#"}
+                    target={href && href !== "#" ? "_blank" : undefined}
+                    rel="noreferrer"
+                    className="block rounded-2xl overflow-hidden shadow-lg"
+                  >
+                    <picture>
+                      <source media="(min-width: 768px)" srcSet={desktopSrc} />
+                      <Image
+                        src={mobileSrc}
+                        alt={alt}
+                        width={1600}
+                        height={900}
+                        priority={i === 0}
+                        sizes="(min-width: 768px) 1200px, 100vw"
+                        className="w-full h-auto object-cover rounded-2xl"
+                      />
+                    </picture>
+                  </a>
+                </div>
+              );
+            })}
+          </Slider>
+        )}
       </div>
 
-      {/* --- Foreground carousel --- */}
-      <div className="relative max-w-[1980px] mx-auto px-4 pt-20 pb-8 ">
-        {" "}
-        {/* pt adds breathing-room; dots overlay at bottom */}
-        <Slider ref={sliderRef} {...settings}>
-          {banners.map(({ _id, desktopImage, href }, i) => (
-            <div key={_id || i} className="px-5">
-              {" "}
-              {/* adds 8px each side */}
-              <a
-                href={href || "#"}
-                target={href && href !== "#" ? "_blank" : undefined}
-                rel="noreferrer"
-                className="block rounded-2xl overflow-hidden shadow-lg"
-              >
-                <Image
-                  src={desktopImage?.path}
-                  alt={desktopImage?.alt || "Banner"}
-                  width={1200}
-                  height={500}
-                  priority={i === 0}
-                  className="w-full h-auto object-cover rounded-2xl bg-white"
-                />
-              </a>
-            </div>
-          ))}
-        </Slider>
-      </div>
+      <style jsx global>{`
+        .slick-slider,
+        .slick-list,
+        .slick-track,
+        .slick-slide {
+          background: transparent !important;
+        }
+        .slick-slide > div {
+          background: transparent !important;
+        }
+      `}</style>
     </div>
   );
 }
