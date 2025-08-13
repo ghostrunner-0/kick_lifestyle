@@ -23,10 +23,8 @@ import {
 
 /* ---------- Data ---------- */
 const CATEGORIES = [
-  { label: "Smartwatch", href: "/smartwatch" },
-  { label: "True Wireless Earbuds", href: "/true-wireless-earbuds" },
-  { label: "Accessories", href: "/accessories" },
-  { label: "Offers", href: "/offers" },
+  { label: "Smartwatch", href: "category/smart-watch" },
+  { label: "True Wireless Earbuds", href: "category/true-wireless-earbuds" },
 ];
 
 const USEFUL = [
@@ -44,9 +42,17 @@ const HELP = [
 
 const SOCIAL = [
   { label: "Facebook", href: "https://facebook.com/yourbrand", Icon: Facebook },
-  { label: "Instagram", href: "https://instagram.com/yourbrand", Icon: Instagram },
+  {
+    label: "Instagram",
+    href: "https://instagram.com/yourbrand",
+    Icon: Instagram,
+  },
   { label: "YouTube", href: "https://youtube.com/@yourbrand", Icon: Youtube },
-  { label: "Twitter / X", href: "https://twitter.com/yourbrand", Icon: Twitter },
+  {
+    label: "Twitter / X",
+    href: "https://twitter.com/yourbrand",
+    Icon: Twitter,
+  },
 ];
 
 /* ---------- Reusable link ---------- */
@@ -70,7 +76,6 @@ export default function Footer() {
   return (
     <footer className="border-t bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/70">
       <div className="mx-auto max-w-[1600px] [padding-inline:clamp(1rem,5vw,6rem)] py-10">
-
         {/* Mobile View */}
         <div className="lg:hidden space-y-6">
           {/* Brand + Social (always visible) */}
@@ -161,8 +166,11 @@ export default function Footer() {
                     <Mail className="mt-0.5 h-4.5 w-4.5 text-muted-foreground" />
                     <div>
                       <div className="text-muted-foreground">Email</div>
-                      <Link href="mailto:hello@example.com" className="hover:underline">
-                        hello@example.com
+                      <Link
+                        href="mailto:info@kick.com.np"
+                        className="hover:underline"
+                      >
+                        info@kick.com.np
                       </Link>
                     </div>
                   </li>
@@ -170,8 +178,11 @@ export default function Footer() {
                     <Phone className="mt-0.5 h-4.5 w-4.5 text-muted-foreground" />
                     <div>
                       <div className="text-muted-foreground">Phone</div>
-                      <Link href="tel:+9779800000000" className="hover:underline">
-                        +977 9800000000
+                      <Link
+                        href="tel:+9779820810020"
+                        className="hover:underline"
+                      >
+                        +977 9820810020
                       </Link>
                     </div>
                   </li>
@@ -180,7 +191,8 @@ export default function Footer() {
                     <div>
                       <div className="text-muted-foreground">Address</div>
                       <p>
-                        Kick Lifestyle, Kathmandu, Nepal<br />
+                        Kick Lifestyle, Kathmandu, Nepal
+                        <br />
                         <Link href="/contact" className="hover:underline">
                           Get directions →
                         </Link>
@@ -270,7 +282,10 @@ export default function Footer() {
                 <Mail className="mt-0.5 h-4.5 w-4.5 text-muted-foreground" />
                 <div>
                   <div className="text-muted-foreground">Email</div>
-                  <Link href="mailto:hello@example.com" className="hover:underline">
+                  <Link
+                    href="mailto:hello@example.com"
+                    className="hover:underline"
+                  >
                     hello@example.com
                   </Link>
                 </div>
@@ -279,8 +294,8 @@ export default function Footer() {
                 <Phone className="mt-0.5 h-4.5 w-4.5 text-muted-foreground" />
                 <div>
                   <div className="text-muted-foreground">Phone</div>
-                  <Link href="tel:+9779800000000" className="hover:underline">
-                    +977 9800000000
+                  <Link href="tel:+9779820810020" className="hover:underline">
+                    +977 9820810020
                   </Link>
                 </div>
               </li>
@@ -288,9 +303,7 @@ export default function Footer() {
                 <MapPin className="mt-0.5 h-4.5 w-4.5 text-muted-foreground" />
                 <div>
                   <div className="text-muted-foreground">Address</div>
-                  <p>
-                    Kick Lifestyle, Kathmandu, Nepal
-                  </p>
+                  <p>Kick Lifestyle, Kathmandu, Nepal</p>
                 </div>
               </li>
             </ul>
