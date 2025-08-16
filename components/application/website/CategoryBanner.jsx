@@ -22,23 +22,7 @@ const pickBg = (key) => {
   return BG_COLORS[Math.abs(h) % BG_COLORS.length];
 };
 
-export default function CategoryBanner() {
-  const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data } = await axios.get("/api/website/category", {
-          cache: "no-store",
-        });
-        setCategories(Array.isArray(data?.data) ? data.data : []);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
-
+export default function CategoryBanner({ loading, setloading, categories }) {
   if (loading)
     return (
       <div className="py-10 text-center text-sm text-neutral-500">Loading…</div>

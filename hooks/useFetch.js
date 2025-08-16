@@ -2,21 +2,16 @@
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 
-/**
- * @param {string} key - Unique cache key for the query
- * @param {string} url - API endpoint to fetch data from
- * @param {object} [options] - Optional TanStack useQuery options
- */
 const useFetch = (key, url, options = {}) => {
-  const fetchData = async () => {
-    const response = await axios.get(url);
+  const fetchData = async ({ signal }) => {
+    const response = await axios.get(url, { signal }); // 👈 pass signal to axios
     return response.data;
   };
 
   return useQuery({
-    queryKey: [key, url], // helps cache based on both key and url
+    queryKey: [key, url],
     queryFn: fetchData,
-    enabled: !!url, // avoids running on undefined url
+    enabled: !!url,
     ...options,
   });
 };
