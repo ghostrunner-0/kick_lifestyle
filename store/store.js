@@ -1,17 +1,22 @@
+// store/index.js
 import { combineReducers, configureStore } from "@reduxjs/toolkit";
-import storage from "redux-persist/lib/storage"; // Correct import
-import { persistReducer, persistStore } from "redux-persist"; // Proper way to import
+import storage from "redux-persist/lib/storage";
+import { persistReducer, persistStore } from "redux-persist";
+
+// existing
 import authreducer from "./reducer/AuthReducer";
 
-// Example slice (add your slices here)
+// NEW
+import cartReducer from "./cartSlice";
+
 const rootReducer = combineReducers({
-    authStore: authreducer, // Ensure this matches the name in your slice
-  // yourSlice: yourSliceReducer
+  authStore: authreducer,
+  cart: cartReducer, // <-- add cart under the 'cart' key
 });
 
 const persistConfig = {
   key: "root",
-  storage, // should be lowercase
+  storage,
 };
 
 const persistedReducer = persistReducer(persistConfig, rootReducer);

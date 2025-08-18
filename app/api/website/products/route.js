@@ -1,4 +1,3 @@
-// app/api/website/products/route.js
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { connectDB } from "@/lib/DB";
@@ -6,12 +5,40 @@ import Product from "@/models/Product.model";
 import ProductVariant from "@/models/ProductVariant.model";
 import Category from "@/models/Category.model";
 
-export const revalidate = 0;            // no static caching
-export const dynamic = "force-dynamic"; // always fetch on request
-export const runtime = "nodejs";        // mongoose requires node runtime
+export const revalidate = 0;
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 function isObjectIdLike(val) {
   return !!val && /^[a-f\d]{24}$/i.test(val);
+}
+
+// Helper: get effective price for filtering
+function getEffPrice(product) {
+  if (
+    typeof product?.specialPrice === "number" &&
+    product.specialPrice > 0
+  )
+    return product.specialPrice;
+  return product?.mrp ?? 0;
+}
+
+// Helper: infer in-stock status
+function inferInStock(product) {
+  if (typeof product?.inStock === "boolean") return product.inStock;
+  if (Number.isFinite(product?.stock)) return product.stock > 0;
+  if (Number.isFinite(product?.inventory)) return product.inventory > 0;
+  if (Number.isFinite(product?.quantity)) return product.quantity > 0;
+  if (Array.isArray(product?.variants)) {
+    return product.variants.some((v) =>
+      typeof v?.inStock === "boolean"
+        ? v.inStock
+        : Number.isFinite(v?.stock)
+        ? v.stock > 0
+        : false
+    );
+  }
+  return true;
 }
 
 export async function GET(req) {
@@ -19,7 +46,7 @@ export async function GET(req) {
     await connectDB();
 
     const url = new URL(req.url);
-    const categoryParam = url.searchParams.get("category"); // slug or _id
+    const categoryParam = url.searchParams.get("category");
     if (!categoryParam) {
       return NextResponse.json(
         { success: false, message: "Missing ?category=<slug|id> query param" },
@@ -27,9 +54,8 @@ export async function GET(req) {
       );
     }
 
-    // Resolve category _id from slug or accept ObjectId directly
+    // Resolve category _id
     let categoryId = null;
-
     if (isObjectIdLike(categoryParam)) {
       categoryId = new mongoose.Types.ObjectId(categoryParam);
     } else {
@@ -41,29 +67,35 @@ export async function GET(req) {
         .select({ _id: 1 })
         .lean()
         .exec();
-
-      if (catDoc && catDoc._id) {
-        categoryId = catDoc._id;
-      }
+      if (catDoc && catDoc._id) categoryId = catDoc._id;
     }
 
     if (!categoryId) {
-      // Category not found -> empty list (200) to keep UX simple
       return NextResponse.json(
         { success: true, data: [], category: null },
         { status: 200 }
       );
     }
 
-    // Aggregation: fetch products in category and attach variants
-    const products = await Product.aggregate([
-      {
-        $match: {
-          category: categoryId,
-          showInWebsite: true,
-          deletedAt: null,
-        },
-      },
+    // Read filters from query
+    const priceParam = url.searchParams.get("price");
+    const warrantyParam = url.searchParams.get("warranty");
+    const stockParam = url.searchParams.get("stock");
+
+    // Build match object for aggregation
+    const match = {
+      category: categoryId,
+      showInWebsite: true,
+      deletedAt: null,
+    };
+
+    if (warrantyParam) {
+      match.warrantyMonths = { $gte: Number(warrantyParam) };
+    }
+
+    // Aggregation pipeline
+    const pipeline = [
+      { $match: match },
       {
         $project: {
           name: 1,
@@ -81,7 +113,7 @@ export async function GET(req) {
       },
       {
         $lookup: {
-          from: ProductVariant.collection.name, // usually "productVariants"
+          from: ProductVariant.collection.name,
           let: { productId: "$_id" },
           pipeline: [
             { $match: { $expr: { $eq: ["$product", "$$productId"] } } },
@@ -95,6 +127,8 @@ export async function GET(req) {
                 swatchImage: 1,
                 sku: 1,
                 createdAt: 1,
+                stock: 1,
+                inStock: 1,
               },
             },
             { $sort: { createdAt: 1 } },
@@ -128,7 +162,33 @@ export async function GET(req) {
       },
       { $project: { _category: 0 } },
       { $sort: { createdAt: -1 } },
-    ]).exec();
+    ];
+
+    let products = await Product.aggregate(pipeline).exec();
+
+    // Filter by price (client-side, since price can be in variant or product)
+    if (priceParam) {
+      const [min, max] = priceParam.split("-").map(Number);
+      if (Number.isFinite(min) && Number.isFinite(max)) {
+        products = products.filter((p) => {
+          // Check variants first
+          if (Array.isArray(p.variants) && p.variants.length) {
+            return p.variants.some((v) => {
+              const price = typeof v.specialPrice === "number" && v.specialPrice > 0 ? v.specialPrice : v.mrp;
+              return price >= min && price <= max;
+            });
+          }
+          // Fallback to product price
+          const price = getEffPrice(p);
+          return price >= min && price <= max;
+        });
+      }
+    }
+
+    // Filter by stock (client-side)
+    if (stockParam === "in") {
+      products = products.filter((p) => inferInStock(p));
+    }
 
     return NextResponse.json(
       { success: true, category: { _id: categoryId }, data: products },

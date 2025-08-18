@@ -4,6 +4,7 @@ import { isAuthenticated } from "@/lib/Authentication";
 import { zSchema } from "@/lib/zodSchema";
 import Product from "@/models/Product.model";
 import { z } from "zod";
+
 export async function PUT(req) {
   try {
     const admin = await isAuthenticated("admin");
@@ -13,86 +14,99 @@ export async function PUT(req) {
 
     const payload = await req.json();
 
-    const formSchema = zSchema
-      .pick({
-        _id: true,
-        name: true,
-        slug: true,
-        shortDesc: true,
-        category: true,
-        mrp: true,
-        specialPrice: true,
-        productMedia: true,
-        descImages: true,
-        heroImage: true,
-        additionalInfo: true,
-        showInWebsite: true,
-        warrantyMonths: true,
-      })
+    // Build server-side schema for Update:
+    // - specialPrice optional
+    // - hasVariants boolean
+    // - stock required iff hasVariants = false (int ≥ 0)
+    // - modelNumber required
+    const basePick = zSchema.pick({
+      _id: true,
+      name: true,
+      slug: true,
+      shortDesc: true,
+      category: true,
+      mrp: true,
+      productMedia: true,
+      descImages: true,
+      heroImage: true,
+      additionalInfo: true,
+      showInWebsite: true,
+      // we'll override specialPrice/warrantyMonths below
+    });
+
+    const formSchema = basePick
       .extend({
-        modelNumber: z.string().min(1, "Model number is required"),
-        warrantyMonths: z.number().min(0, "Warranty cannot be negative"),
+        specialPrice: z.union([z.string(), z.number()]).optional(),
+        warrantyMonths: z.union([z.string(), z.number()]).optional(),
+        modelNumber: z.string().trim().min(1, "Model number is required"),
+        hasVariants: z.boolean().default(false),
+        stock: z.union([z.string(), z.number()]).optional(),
+      })
+      .superRefine((vals, ctx) => {
+        // stock checks only when there are NO variants
+        if (!vals.hasVariants) {
+          const n = Number(vals.stock);
+          if (
+            vals.stock === undefined ||
+            vals.stock === "" ||
+            Number.isNaN(n) ||
+            n < 0 ||
+            !Number.isInteger(n)
+          ) {
+            ctx.addIssue({
+              path: ["stock"],
+              code: z.ZodIssueCode.custom,
+              message: "Stock is required and must be an integer ≥ 0.",
+            });
+          }
+        }
+        // specialPrice checks (only if provided)
+        if (vals.specialPrice !== undefined && vals.specialPrice !== "") {
+          const sp = Number(vals.specialPrice);
+          const mrp = Number(vals.mrp);
+          if (Number.isNaN(sp) || sp < 0) {
+            ctx.addIssue({
+              path: ["specialPrice"],
+              code: z.ZodIssueCode.custom,
+              message: "Special price must be a valid non-negative number.",
+            });
+          } else if (!Number.isNaN(mrp) && sp > mrp) {
+            ctx.addIssue({
+              path: ["specialPrice"],
+              code: z.ZodIssueCode.custom,
+              message: "Special price cannot be greater than MRP.",
+            });
+          }
+        }
       });
 
     const parsed = formSchema.safeParse(payload);
     if (!parsed.success) {
-      return response(
-        false,
-        400,
-        "Invalid or missing fields",
-        parsed.error.format()
-      );
+      return response(false, 400, "Invalid or missing fields", parsed.error.format());
     }
 
-    const {
-      _id,
-      name,
-      slug,
-      shortDesc,
-      category,
-      mrp,
-      specialPrice,
-      productMedia,
-      descImages,
-      heroImage,
-      additionalInfo,
-      showInWebsite,
-      warrantyMonths,
-      modelNumber,
-    } = parsed.data;
+    const data = parsed.data;
 
-    // ✅ Check if product exists
-    const product = await Product.findOne({ _id, deletedAt: null });
-    if (!product) {
-      return response(false, 404, "Product not found");
-    }
+    // Ensure product exists (ignore soft-deleted)
+    const product = await Product.findOne({ _id: data._id, deletedAt: null });
+    if (!product) return response(false, 404, "Product not found");
 
-    // ✅ Check duplicate slug
+    // Duplicate slug (excluding current)
     const slugClash = await Product.findOne({
-      _id: { $ne: _id },
-      slug,
+      _id: { $ne: data._id },
+      slug: data.slug,
       deletedAt: null,
     }).lean();
-    if (slugClash) {
-      return response(
-        false,
-        409,
-        "Another product with this slug already exists"
-      );
-    }
+    if (slugClash) return response(false, 409, "Another product with this slug already exists");
 
-    // ✅ Check duplicate model number
+    // Duplicate model number (excluding current)
     const modelClash = await Product.findOne({
-      _id: { $ne: _id },
-      modelNumber: modelNumber.trim(),
+      _id: { $ne: data._id },
+      modelNumber: data.modelNumber.trim(),
       deletedAt: null,
     }).lean();
     if (modelClash) {
-      return response(
-        false,
-        409,
-        "Another product with this model number already exists"
-      );
+      return response(false, 409, "Another product with this model number already exists");
     }
 
     const normalizeImage = (img) => ({
@@ -101,29 +115,43 @@ export async function PUT(req) {
       path: String(img.path),
     });
 
-    // ✅ Update fields
-    product.name = name.trim();
-    product.slug = slug.trim();
-    product.shortDesc = shortDesc?.trim() || "";
-    product.category = category;
-    product.mrp = mrp;
-    product.specialPrice = specialPrice ?? undefined;
-    product.heroImage = normalizeImage(heroImage);
-    product.productMedia = (productMedia || []).map(normalizeImage);
-    product.descImages = (descImages || []).map(normalizeImage);
-    product.additionalInfo = (additionalInfo || []).map((row) => ({
-      label: row.label.trim(),
-      value: row.value.trim(),
+    // Coerce numbers
+    const mrpNum = Number(data.mrp);
+    const spNum =
+      data.specialPrice == null || data.specialPrice === ""
+        ? undefined
+        : Number(data.specialPrice);
+    const warrantyNum =
+      data.warrantyMonths == null || data.warrantyMonths === ""
+        ? 0
+        : Math.max(0, Number(data.warrantyMonths));
+
+    const hasVariants = !!data.hasVariants;
+    const stockNum = hasVariants
+      ? 0 // when variants exist, product stock is derived by variant sums
+      : Number(data.stock === "" || data.stock == null ? 0 : data.stock);
+
+    // Update fields
+    product.name = String(data.name || "").trim();
+    product.slug = String(data.slug || "").trim();
+    product.shortDesc = (data.shortDesc || "").trim();
+    product.category = data.category;
+    product.mrp = mrpNum;
+    product.specialPrice = spNum; // optional
+    product.warrantyMonths = warrantyNum;
+    product.modelNumber = data.modelNumber.trim();
+    product.hasVariants = hasVariants; // ✅ new field
+    product.stock = stockNum;          // ✅ new field
+
+    product.heroImage = normalizeImage(data.heroImage);
+    product.productMedia = (data.productMedia || []).map(normalizeImage);
+    product.descImages = (data.descImages || []).map(normalizeImage);
+    product.additionalInfo = (data.additionalInfo || []).map((row) => ({
+      label: String(row.label || "").trim(),
+      value: String(row.value || "").trim(),
     }));
     product.showInWebsite =
-      typeof showInWebsite === "boolean"
-        ? showInWebsite
-        : product.showInWebsite;
-    product.warrantyMonths =
-      typeof warrantyMonths === "number"
-        ? warrantyMonths
-        : product.warrantyMonths;
-    product.modelNumber = modelNumber.trim();
+      typeof data.showInWebsite === "boolean" ? data.showInWebsite : product.showInWebsite;
 
     await product.save();
 

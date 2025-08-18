@@ -1,7 +1,13 @@
+// components/application/website/ProductCard.jsx
 "use client";
 
-import React, { useMemo, useState, useCallback, useId } from "react";
+import React, { useMemo, useState, useCallback, useId, useRef } from "react";
+import { showToast } from "@/lib/ShowToast";
+import Link from "next/link";
 import Image from "next/image";
+import { useDispatch } from "react-redux";
+import { addItem } from "@/store/cartSlice";
+
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +18,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ShoppingCart } from "lucide-react";
+import { PRODUCT_VIEW_ROUTE } from "@/routes/WebsiteRoutes";
 
 /* Brand + helpers */
 const BRAND = "#fcba17";
@@ -41,6 +48,20 @@ const percentOff = (mrp, sp) => {
     : null;
 };
 
+// Try common stock fields and normalize to a number or null (unknown)
+const readStock = (obj) => {
+  if (!obj) return null;
+  const raw =
+    obj.stock ??
+    obj.quantity ??
+    obj.qty ??
+    obj.inventory ??
+    obj.availableQty ??
+    null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+};
+
 /**
  * Props:
  * - product
@@ -54,6 +75,9 @@ export default function ProductCard({
   onAddToCart,
   onVariantChange,
 }) {
+  const dispatch = useDispatch();
+  const swatchGroupRef = useRef(null);
+
   if (!product) return null;
 
   const {
@@ -66,6 +90,8 @@ export default function ProductCard({
     productMedia,
     variants = [],
   } = product;
+
+  const productHref = PRODUCT_VIEW_ROUTE(slug);
 
   const [selectedIdx, setSelectedIdx] = useState(-1);
   const groupId = useId();
@@ -90,6 +116,19 @@ export default function ProductCard({
   const off = percentOff(effMrp, effSp);
   const priceNow = off ? effSp : effMrp;
   const priceWas = off ? effMrp : null;
+
+  // Stock guards
+  const hasVariants = variants.length > 0;
+  const needsVariantSelection = hasVariants && !activeVariant;
+
+  const productStock = readStock(product);
+  const variantStock = readStock(activeVariant);
+
+  // Only mark out of stock when we positively know stock is 0 or less.
+  const variantOutOfStock = hasVariants && activeVariant && variantStock !== null && variantStock <= 0;
+  const productOutOfStock = !hasVariants && productStock !== null && productStock <= 0;
+
+  const canAdd = !needsVariantSelection && !variantOutOfStock && !productOutOfStock;
 
   // Swatches
   const swatches = variants.map((v, i) => ({
@@ -127,6 +166,26 @@ export default function ProductCard({
   };
 
   const handleAddToCart = () => {
+    // 1) Require variant selection
+    if (needsVariantSelection) {
+      showToast("info", "Please select a color first.");
+      try {
+        swatchGroupRef.current?.focus();
+        swatchGroupRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      } catch {}
+      return;
+    }
+
+    // 2) Guard stock
+    if (variantOutOfStock) {
+      showToast("warning", "Selected color is out of stock.");
+      return;
+    }
+    if (productOutOfStock) {
+      showToast("warning", "This product is out of stock.");
+      return;
+    }
+
     const payload = {
       productId: _id,
       slug,
@@ -134,16 +193,33 @@ export default function ProductCard({
       qty: 1,
       price: priceNow,
       mrp: effMrp,
+      image: primaryImage, // variant image if selected, else hero/product image
       variant: activeVariant
         ? {
             id: activeVariant._id,
             sku: activeVariant.sku,
             name: activeVariant.variantName,
+            image:
+              activeVariant.productGallery?.[0]?.path ||
+              activeVariant.swatchImage?.path ||
+              null,
           }
         : null,
     };
-    onAddToCart ? onAddToCart(payload) : console.log("ADD_TO_CART", payload);
+
+    dispatch(addItem(payload));
+    showToast(
+      "success",
+      `${name}${activeVariant ? ` — ${activeVariant.variantName}` : ""} added to cart.`
+    );
+    onAddToCart?.(payload);
   };
+
+  const buttonLabel = needsVariantSelection
+    ? "Select Color"
+    : variantOutOfStock || productOutOfStock
+    ? "Out of Stock"
+    : "Add To Cart";
 
   return (
     <div
@@ -183,16 +259,42 @@ export default function ProductCard({
           </div>
         )}
 
-        {/* Image */}
+        {/* OOS badge */}
+        {(variantOutOfStock || productOutOfStock) && (
+          <div className="absolute left-3 top-3 z-10">
+            <span className="rounded-full bg-red-600/90 px-2.5 py-1 text-[11px] font-bold text-white shadow">
+              Out of stock
+            </span>
+          </div>
+        )}
+
+        {/* Image -> Link to product details */}
         <div className="absolute inset-0">
-          <Image
-            src={primaryImage}
-            alt={name || "Product"}
-            fill
-            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
-            className="object-contain"
-            priority={false}
-          />
+          {productHref ? (
+            <Link
+              href={productHref}
+              aria-label={name ? `View ${name}` : "View product"}
+              className="absolute inset-0 block"
+            >
+              <Image
+                src={primaryImage}
+                alt={name || "Product"}
+                fill
+                sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+                className="object-contain"
+                priority={false}
+              />
+            </Link>
+          ) : (
+            <Image
+              src={primaryImage}
+              alt={name || "Product"}
+              fill
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+              className="object-contain"
+              priority={false}
+            />
+          )}
         </div>
       </div>
 
@@ -201,7 +303,17 @@ export default function ProductCard({
         {/* Title + Variants */}
         <div className="mb-1 flex items-start gap-3">
           <h3 className="flex-1 line-clamp-2 text-[15px] font-medium text-slate-900 dark:text-white">
-            {name}
+            {productHref ? (
+              <Link
+                href={productHref}
+                className="hover:underline underline-offset-2"
+                aria-label={name ? `View ${name}` : "View product"}
+              >
+                {name}
+              </Link>
+            ) : (
+              name
+            )}
           </h3>
 
           {swatches.length > 0 && (
@@ -209,12 +321,14 @@ export default function ProductCard({
               <div
                 id={groupId}
                 role="radiogroup"
-                aria-label="Choose a variant"
+                aria-label="Choose a color"
                 aria-activedescendant={
                   selectedIdx >= 0 ? `${groupId}-opt-${selectedIdx}` : undefined
                 }
                 className="flex items-center gap-2"
                 onKeyDown={onVariantKeyDown}
+                ref={swatchGroupRef}
+                tabIndex={-1} // focusable programmatically
               >
                 <TooltipProvider delayDuration={200}>
                   {swatches.map((s) => {
@@ -302,19 +416,38 @@ export default function ProductCard({
         <div className="mt-3">
           <Button
             type="button"
-            className="w-full rounded-full px-4 py-2 text-[12px] font-bold text-white transition-colors"
+            disabled={!canAdd}
+            className={[
+              "w-full rounded-full px-4 py-2 text-[12px] font-bold text-white transition-colors",
+              needsVariantSelection ? "ring-1 ring-amber-300" : "",
+              !canAdd ? "opacity-70 cursor-not-allowed" : "",
+            ].join(" ")}
             style={{ backgroundColor: BRAND }}
-            onMouseEnter={(e) =>
-              (e.currentTarget.style.backgroundColor = BRAND_HOVER)
-            }
-            onMouseLeave={(e) =>
-              (e.currentTarget.style.backgroundColor = BRAND)
-            }
+            onMouseEnter={(e) => {
+              if (canAdd) e.currentTarget.style.backgroundColor = BRAND_HOVER;
+            }}
+            onMouseLeave={(e) => {
+              if (canAdd) e.currentTarget.style.backgroundColor = BRAND;
+            }}
             onClick={handleAddToCart}
-            aria-label={`Add ${name || "product"} to cart`}
+            aria-disabled={!canAdd}
+            aria-label={
+              needsVariantSelection
+                ? "Select a color first"
+                : !canAdd
+                ? "Out of stock"
+                : `Add ${name || "product"} to cart`
+            }
+            title={
+              needsVariantSelection
+                ? "Select a color first"
+                : !canAdd
+                ? "Out of stock"
+                : "Add to cart"
+            }
           >
             <ShoppingCart className="mr-2 h-4 w-4" />
-            Add To Cart
+            {buttonLabel}
           </Button>
         </div>
       </div>

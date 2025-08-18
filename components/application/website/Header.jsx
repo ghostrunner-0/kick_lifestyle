@@ -4,8 +4,11 @@ import React, { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import CartSidebar from "./CartSidebar";
 
+import { selectCartCount } from "@/store/cartSlice";
 // Logos
+
 import LOGO_BLACK from "@/public/assets/images/logo-black.png";
 import LOGO_WHITE from "@/public/assets/images/logo-white.png";
 
@@ -19,6 +22,7 @@ import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/
 
 // Categories (from single global fetch)
 import { useCategories } from "@/components/providers/CategoriesProvider";
+import { useSelector } from "react-redux";
 
 /* ------------------ Static (non-category) items ------------------ */
 const STATIC_NAV = [
@@ -45,8 +49,9 @@ const toTitle = (s) =>
   (s || "").trim().replace(/\s+/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
 
 export default function Header() {
-  const cartCount = 2; // replace with real state/store
+const cartCount = useSelector(selectCartCount);
   const [isSticky, setIsSticky] = useState(false);
+  const [cartOpen, setCartOpen] = useState(false); // <-- controls CartSidebar
   const pathname = usePathname();
   const isHome = pathname === "/" || pathname === WEBSITE_HOME;
 
@@ -54,7 +59,6 @@ export default function Header() {
   const { categories, isLoading } = useCategories();
 
   useEffect(() => {
-    // track scroll only for home (overlay mode)
     if (!isHome) return;
     const onScroll = () => setIsSticky(window.scrollY > 8);
     onScroll();
@@ -74,16 +78,14 @@ export default function Header() {
   const containerPad = "[padding-inline:clamp(1rem,5vw,6rem)]";
 
   /* ------------------ Header styles ------------------ */
-// Header styles
-const headerCls = isHome
-  ? [
-      "fixed inset-x-0 top-0 z-50 transition-colors",
-      isSticky
-        ? "bg-white/70 supports-[backdrop-filter]:bg-white/60 backdrop-blur border-b"
-        : "bg-transparent",
-    ].join(" ")
-  : "sticky top-0 inset-x-0 z-50 bg-white/70 supports-[backdrop-filter]:bg-white/60 backdrop-blur";
-
+  const headerCls = isHome
+    ? [
+        "fixed inset-x-0 top-0 z-50 transition-colors",
+        isSticky
+          ? "bg-white/70 supports-[backdrop-filter]:bg-white/60 backdrop-blur border-b"
+          : "bg-transparent",
+      ].join(" ")
+    : "sticky top-0 inset-x-0 z-50 bg-white/70 supports-[backdrop-filter]:bg-white/60 backdrop-blur";
 
   const textCls = isHome ? (isSticky ? "text-gray-900" : "text-white") : "text-gray-900";
   const iconCls = textCls;
@@ -93,7 +95,7 @@ const headerCls = isHome
   return (
     <>
       <header className={headerCls}>
-        <div className={`mx-auto ${containerMaxW} ${containerPad} flex items-center justify-between lg:py-5 py-3`}>
+        <div className={`mx-auto ${containerMaxW} ${containerPad} flex items-center justify-between lg:py-5 py-3 px-3`}>
           {/* Left: mobile trigger + (desktop logo) */}
           <div className="flex items-center gap-2">
             <Sheet>
@@ -208,7 +210,6 @@ const headerCls = isHome
 
             {/* Desktop nav */}
             <nav className={`hidden lg:flex items-center gap-6 relative whitespace-nowrap ${textCls}`}>
-              {/* Dynamic category links */}
               {catLinks.map((item) => (
                 <Link
                   key={item.label}
@@ -219,7 +220,6 @@ const headerCls = isHome
                 </Link>
               ))}
 
-              {/* Static dropdowns / links */}
               {STATIC_NAV.map((item) =>
                 item.items ? (
                   <div key={item.label} className="relative group">
@@ -231,7 +231,6 @@ const headerCls = isHome
                       <ChevronDown className={`h-4 w-4 transition-transform duration-500 group-hover:rotate-180 ${iconCls}`} />
                     </button>
 
-                    {/* Dropdown */}
                     <div className="invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all duration-150 absolute left-1/2 -translate-x-1/2 mt-3 min-w-[240px] rounded-md border bg-white shadow-lg">
                       <ul className="py-2">
                         {item.items.map((child) => (
@@ -266,10 +265,11 @@ const headerCls = isHome
               <User className="h-5 w-5" />
             </Button>
 
-            {/* Cart */}
-            <Link
-              href="/cart"
-              className={`relative inline-flex h-10 w-10 items-center justify-center rounded-md ${iconCls}`}
+            {/* Cart opens the sidebar */}
+            <button
+              type="button"
+              onClick={() => setCartOpen(true)}
+              className={`relative inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-md ${iconCls}`}
               aria-label="Cart"
               title="Cart"
             >
@@ -279,10 +279,13 @@ const headerCls = isHome
                   {cartCount}
                 </span>
               )}
-            </Link>
+            </button>
           </div>
         </div>
       </header>
+
+      {/* Mounted once so it can be controlled from the header */}
+      <CartSidebar open={cartOpen} onOpenChange={setCartOpen} />
 
       {/* underline animation */}
       <style jsx global>{`

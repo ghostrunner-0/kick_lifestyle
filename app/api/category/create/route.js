@@ -2,8 +2,8 @@ import { connectDB } from "@/lib/DB";
 import { catchError, response } from "@/lib/helperFunctions";
 import { isAuthenticated } from "@/lib/Authentication";
 import { zSchema } from "@/lib/zodSchema";
+import { z } from "zod";
 import Category from "@/models/Category.model";
-import {z} from 'zod'
 
 export async function POST(req) {
   try {
@@ -14,36 +14,57 @@ export async function POST(req) {
 
     const payload = await req.json();
 
-    // Extend schema to include showInWebsite (optional, default true)
-    const formSchema = zSchema
-      .pick({
-        name: true,
-        slug: true,
-        image: true,
-      })
-      .extend({
-        showInWebsite: z.boolean().optional().default(true),
+    // Reuse your image shape; fallback if not present on zSchema
+    const imageShape =
+      zSchema.shape?.image ??
+      z.object({
+        _id: z.string(),
+        alt: z.string().optional().default(""),
+        path: z.string(),
       });
 
-    const validate = formSchema.safeParse(payload);
-    if (!validate.success) {
-      return response(false, 400, "Invalid or missing fields", validate.error.format());
+    // Accept both showInWebsite (legacy from form) and showOnWebsite (canonical/model)
+    const formSchema = z.object({
+      name: zSchema.shape.name,
+      slug: zSchema.shape.slug,
+      image: imageShape,
+      banner: imageShape.optional().nullable(), // <-- NEW optional banner
+      showInWebsite: z.boolean().optional(),
+      showOnWebsite: z.boolean().optional(),
+    });
+
+    const parsed = formSchema.safeParse(payload);
+    if (!parsed.success) {
+      return response(false, 400, "Invalid or missing fields", parsed.error.format());
     }
 
-    const { name, slug, image, showInWebsite } = validate.data;
+    const { name, slug, image, banner, showInWebsite, showOnWebsite } = parsed.data;
 
-    // Create and save the category with showInWebsite field
+    // Final visibility flag for the model
+    const visible =
+      typeof showOnWebsite === "boolean"
+        ? showOnWebsite
+        : typeof showInWebsite === "boolean"
+        ? showInWebsite
+        : true;
+
     const newCategory = new Category({
       name,
       slug,
       image,
-      showInWebsite,
+      ...(banner ? { banner } : {}), // only include if provided
+      showOnWebsite: visible,
     });
 
     await newCategory.save();
 
     return response(true, 200, "Category created successfully!", newCategory);
   } catch (error) {
+    // Handle duplicate key nicely (unique name/slug)
+    if (error?.code === 11000) {
+      const fields = Object.keys(error.keyPattern || {}).join(", ") || "unique field";
+      return response(false, 409, `Duplicate ${fields}. Please use a different value.`);
+    }
     return catchError(error, "Something went wrong");
   }
 }

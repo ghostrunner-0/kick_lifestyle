@@ -7,28 +7,37 @@ import { isValidObjectId } from "mongoose";
 export async function GET(req, { params }) {
   try {
     const auth = await isAuthenticated("admin");
-    if (!auth) {
-      return response(false, 403, "unauthorized");
-    }
+    if (!auth) return response(false, 403, "unauthorized");
 
     await connectDB();
-    const getParams = await params;
-    const id = getParams.id;
-
-    if (!isValidObjectId(id)) {
+    const param = await params;
+    const id = param?.id;
+    if (!id || !isValidObjectId(id)) {
       return response(false, 400, "Invalid category ID");
     }
 
-    const category = await Category.findOne({
-      _id: id,
-      deletedAt: null,
-    }).lean();
+    const doc = await Category.findOne({ _id: id, deletedAt: null })
+      .select("-__v")
+      .lean();
 
-    if (!category) {
-      return response(false, 404, "Category not found");
-    }
+    if (!doc) return response(false, 404, "Category not found");
 
-    return response(true, 200, "Category found", category);
+    // normalize fields for the admin forms
+    const visible =
+      typeof doc.showOnWebsite === "boolean"
+        ? doc.showOnWebsite
+        : typeof doc.showInWebsite === "boolean"
+        ? doc.showInWebsite
+        : true;
+
+    const payload = {
+      ...doc,
+      banner: doc.banner ?? null,          // ensure key exists
+      showOnWebsite: visible,              // canonical (matches model)
+      showInWebsite: visible,              // alias for existing forms
+    };
+
+    return response(true, 200, "Category found", payload);
   } catch (error) {
     return catchError(error);
   }

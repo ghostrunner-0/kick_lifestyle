@@ -31,7 +31,7 @@ const BreadCrumbData = [
   { href: "", label: "Add" },
 ];
 
-// Extend schema to include showInWebsite boolean with default true
+/* --------- Zod: add optional banner (same shape as image) --------- */
 const formSchema = zSchema
   .pick({
     name: true,
@@ -39,6 +39,14 @@ const formSchema = zSchema
     image: true,
   })
   .extend({
+    // Optional banner image (same shape as `image`)
+    banner: zSchema.shape?.image ? zSchema.shape.image.optional() : z
+      .object({
+        _id: z.string(),
+        alt: z.string().optional().default(""),
+        path: z.string(),
+      })
+      .optional(),
     showInWebsite: z.boolean().optional().default(true),
   });
 
@@ -51,6 +59,7 @@ const AddCategory = () => {
       name: "",
       slug: "",
       image: undefined,
+      banner: undefined, // <-- new
       showInWebsite: true,
     },
   });
@@ -71,24 +80,35 @@ const AddCategory = () => {
   const handleCategoryFormSubmit = async (values) => {
     try {
       setLoading(true);
-console.log(values)
+      // console.log(values);
       const { data: response } = await axios.post("/api/category/create", values);
 
-      if (!response.success) throw new Error(response.message);
+      if (!response?.success) throw new Error(response?.message || "Failed");
 
       showToast("success", "Category added successfully!");
       form.reset({
         name: "",
         slug: "",
         image: undefined,
+        banner: undefined, // <-- reset banner too
         showInWebsite: true,
       });
     } catch (error) {
-      showToast("error", error.message || "Something went wrong");
+      showToast("error", error?.message || "Something went wrong");
     } finally {
       setLoading(false);
     }
   };
+
+  // helper to sanitize a media item coming from MediaSelector
+  const sanitizeMedia = (file) =>
+    file
+      ? {
+          _id: file._id,
+          alt: file.alt || "",
+          path: file.path,
+        }
+      : undefined;
 
   return (
     <div>
@@ -150,7 +170,7 @@ console.log(values)
                 />
               </div>
 
-              {/* Media Selector */}
+              {/* Category Image (required) */}
               <div className="mb-5">
                 <FormField
                   control={form.control}
@@ -162,22 +182,61 @@ console.log(values)
                       <MediaSelector
                         multiple={false}
                         onSelect={(selected) => {
-                          const sanitize = (file) => ({
-                            _id: file._id,
-                            alt: file.alt || "",
-                            path: file.path,
-                          });
-
                           if (Array.isArray(selected) && selected.length > 0) {
-                            field.onChange(sanitize(selected[0]));
+                            field.onChange(sanitizeMedia(selected[0]));
                           } else if (selected) {
-                            field.onChange(sanitize(selected));
+                            field.onChange(sanitizeMedia(selected));
                           } else {
                             field.onChange(undefined);
                           }
                         }}
                         triggerLabel={field.value ? "Change Image" : "Select Image"}
                       />
+
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              {/* Category Banner (optional) */}
+              <div className="mb-5">
+                <FormField
+                  control={form.control}
+                  name="banner"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Category Banner (optional)</FormLabel>
+
+                      <MediaSelector
+                        multiple={false}
+                        onSelect={(selected) => {
+                          if (Array.isArray(selected) && selected.length > 0) {
+                            field.onChange(sanitizeMedia(selected[0]));
+                          } else if (selected) {
+                            field.onChange(sanitizeMedia(selected));
+                          } else {
+                            field.onChange(undefined);
+                          }
+                        }}
+                        triggerLabel={field.value ? "Change Banner" : "Select Banner"}
+                      />
+
+                      {/* helper text / clear */}
+                      <div className="mt-2 flex items-center justify-between">
+                        <p className="text-xs text-muted-foreground">
+                          Recommended ratio: <span className="font-medium">~4:1</span> (e.g. 1600×400).
+                        </p>
+                        {field.value ? (
+                          <button
+                            type="button"
+                            className="text-xs text-red-600 hover:underline"
+                            onClick={() => field.onChange(undefined)}
+                          >
+                            Remove banner
+                          </button>
+                        ) : null}
+                      </div>
 
                       <FormMessage />
                     </FormItem>

@@ -18,6 +18,7 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
+  FormDescription,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import MediaSelector from "@/components/application/admin/MediaSelector";
@@ -39,24 +40,67 @@ const BreadCrumbData = [
   { href: "", label: "Add" },
 ];
 
-// Build form schema from your base zSchema, then EXTEND with modelNumber
-const formSchema = zSchema
-  .pick({
-    name: true,
-    slug: true,
-    shortDesc: true,
-    category: true,
-    mrp: true,
-    specialPrice: true,
-    warrantyMonths: true,
-    productMedia: true,
-    descImages: true,
-    heroImage: true,
-    additionalInfo: true,
-    showInWebsite: true,
-  })
+/** ---------- Schema ----------
+ * We take your base zSchema and:
+ * - make specialPrice optional
+ * - add hasVariants (boolean)
+ * - add stock (number, required when hasVariants=false)
+ */
+const basePick = zSchema.pick({
+  name: true,
+  slug: true,
+  shortDesc: true,
+  category: true,
+  mrp: true,
+  // NOTE: we'll re-define specialPrice to be optional below
+  warrantyMonths: true,
+  productMedia: true,
+  descImages: true,
+  heroImage: true,
+  additionalInfo: true,
+  showInWebsite: true,
+});
+
+const formSchema = basePick
   .extend({
     modelNumber: z.string().trim().min(1, "Model number is required"),
+    hasVariants: z.boolean().default(false),
+    // specialPrice optional (accept string or number; empty string => handled in submit)
+    specialPrice: z.union([z.string(), z.number()]).optional(),
+    // stock only used when hasVariants=false (we validate in superRefine)
+    stock: z.union([z.string(), z.number()]).optional(),
+  })
+  .superRefine((vals, ctx) => {
+    // If product has NO variants, require a non-negative stock number
+    if (!vals.hasVariants) {
+      const s = vals.stock;
+      const n = Number(s);
+      if (s === undefined || s === "" || Number.isNaN(n) || n < 0) {
+        ctx.addIssue({
+          path: ["stock"],
+          code: z.ZodIssueCode.custom,
+          message: "Stock is required and must be 0 or greater.",
+        });
+      }
+    }
+    // If specialPrice provided, it must be <= mrp and >= 0
+    if (vals.specialPrice !== undefined && vals.specialPrice !== "") {
+      const sp = Number(vals.specialPrice);
+      const mrp = Number(vals.mrp);
+      if (Number.isNaN(sp) || sp < 0) {
+        ctx.addIssue({
+          path: ["specialPrice"],
+          code: z.ZodIssueCode.custom,
+          message: "Special price must be a valid non-negative number.",
+        });
+      } else if (!Number.isNaN(mrp) && sp > mrp) {
+        ctx.addIssue({
+          path: ["specialPrice"],
+          code: z.ZodIssueCode.custom,
+          message: "Special price cannot be greater than MRP.",
+        });
+      }
+    }
   });
 
 export default function AddProduct() {
@@ -68,11 +112,13 @@ export default function AddProduct() {
     defaultValues: {
       name: "",
       slug: "",
-      modelNumber: "", // ✅ added
+      modelNumber: "",
       shortDesc: "",
       category: "",
       mrp: "",
-      specialPrice: "",
+      specialPrice: "", // optional
+      hasVariants: false, // 🔹 default: no variants, allow direct stock entry
+      stock: "0", // 🔹 visible when hasVariants=false
       warrantyMonths: "",
       productMedia: [],
       descImages: [],
@@ -82,11 +128,13 @@ export default function AddProduct() {
     },
   });
 
-  const { control } = form;
+  const { control, watch, setValue } = form;
   const { fields, append, remove } = useFieldArray({
     control,
     name: "additionalInfo",
   });
+
+  const hasVariants = watch("hasVariants");
 
   useEffect(() => {
     (async () => {
@@ -112,18 +160,49 @@ export default function AddProduct() {
     return () => sub.unsubscribe();
   }, [form]);
 
+  // If toggling hasVariants ON, disable stock entry (UI) and keep value but ignore on submit
+  useEffect(() => {
+    if (hasVariants) {
+      // optional UX: grey out stock by keeping it but not required
+      // setValue("stock", "");
+    } else if (watch("stock") === "" || watch("stock") === undefined) {
+      setValue("stock", "0");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasVariants]);
+
   const onSubmit = async (values) => {
     try {
       setLoading(true);
 
+      // Extra runtime checks (in addition to zod) for friendly toasts
+      if (values.specialPrice !== "" && values.specialPrice !== undefined) {
+        const sp = Number(values.specialPrice);
+        const mrp = Number(values.mrp);
+        if (sp > mrp) {
+          showToast("warning", "Special price cannot be greater than MRP.");
+          setLoading(false);
+          return;
+        }
+      }
+
       const payload = {
         ...values,
-        modelNumber: values.modelNumber.trim(), // ✅ ensure clean string
+        modelNumber: values.modelNumber.trim(),
         mrp: values.mrp === "" ? undefined : Number(values.mrp),
+        // ✅ optional specialPrice (omit if empty)
         specialPrice:
-          values.specialPrice === "" ? undefined : Number(values.specialPrice),
+          values.specialPrice === "" || values.specialPrice === undefined
+            ? undefined
+            : Number(values.specialPrice),
         warrantyMonths:
           values.warrantyMonths === "" ? 0 : Number(values.warrantyMonths),
+        hasVariants: !!values.hasVariants,
+        // ✅ stock: only send when hasVariants=false; backend will auto-sum when true
+        stock:
+          values.hasVariants
+            ? undefined
+            : Number(values.stock === "" ? 0 : values.stock),
       };
 
       const { data: res } = await axios.post("/api/product/create", payload);
@@ -138,6 +217,8 @@ export default function AddProduct() {
         category: "",
         mrp: "",
         specialPrice: "",
+        hasVariants: false,
+        stock: "0",
         warrantyMonths: "",
         productMedia: [],
         descImages: [],
@@ -164,17 +245,35 @@ export default function AddProduct() {
         <CardContent className="pb-5">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)}>
-              {/* Top bar: visibility */}
-              <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div className="text-sm text-muted-foreground">
-                  Configure core details, model number, pricing, warranty and media below.
-                </div>
+              {/* Top bar: visibility + hasVariants */}
+              <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <FormField
                   control={form.control}
                   name="showInWebsite"
                   render={({ field }) => (
-                    <FormItem className="flex items-center gap-3">
-                      <FormLabel className="m-0">Show on website</FormLabel>
+                    <FormItem className="flex items-center justify-between gap-3 border rounded-md px-3 py-2">
+                      <div>
+                        <FormLabel className="m-0">Show on website</FormLabel>
+                        <FormDescription>Make this product visible on your storefront.</FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch checked={!!field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="hasVariants"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center justify-between gap-3 border rounded-md px-3 py-2">
+                      <div>
+                        <FormLabel className="m-0">This product has variants</FormLabel>
+                        <FormDescription>
+                          If enabled, total stock will be calculated from variant stocks.
+                        </FormDescription>
+                      </div>
                       <FormControl>
                         <Switch checked={!!field.value} onCheckedChange={field.onChange} />
                       </FormControl>
@@ -243,13 +342,13 @@ export default function AddProduct() {
                 />
               </div>
 
-              {/* Category + Pricing + Warranty */}
-              <div className="mb-5 grid grid-cols-1 md:grid-cols-4 gap-4">
+              {/* Category + Pricing + Warranty (+ Stock) */}
+              <div className="mb-5 grid grid-cols-1 md:grid-cols-5 gap-4">
                 <FormField
                   control={form.control}
                   name="category"
                   render={({ field }) => (
-                    <FormItem>
+                    <FormItem className="md:col-span-2">
                       <FormLabel>Category</FormLabel>
                       <FormControl>
                         <Select value={field.value || ""} onValueChange={field.onChange}>
@@ -293,6 +392,34 @@ export default function AddProduct() {
                       <FormControl>
                         <Input type="number" step="0.01" placeholder="Optional" {...field} />
                       </FormControl>
+                      <FormDescription>Leave blank if there is no discount.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* Stock (only meaningful when hasVariants = false) */}
+                <FormField
+                  control={form.control}
+                  name="stock"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Stock</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="1"
+                          placeholder={hasVariants ? "Calculated from variants" : "0"}
+                          disabled={hasVariants}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        {hasVariants
+                          ? "This value is auto-calculated from variant stocks."
+                          : "Total available quantity for this product."}
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}

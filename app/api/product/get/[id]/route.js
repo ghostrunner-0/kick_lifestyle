@@ -11,15 +11,34 @@ export async function GET(req, { params }) {
     if (!admin) return response(false, 403, "unauthorized");
 
     await connectDB();
-    const getparam = await params;
-    const { id } = getparam || {};
+    const param = await  params ;
+    const { id } =param|| {};
     if (!isValidObjectId(id)) {
       return response(false, 400, "Invalid product ID");
     }
 
     const product = await Product.findById(id)
       .select(
-        "name slug shortDesc category modelNumber mrp specialPrice warrantyMonths showInWebsite heroImage productMedia descImages additionalInfo createdAt updatedAt deletedAt"
+        [
+          "name",
+          "slug",
+          "shortDesc",
+          "category",
+          "modelNumber",
+          "mrp",
+          "specialPrice",
+          "warrantyMonths",
+          "showInWebsite",
+          "hasVariants",   // ✅ include variants flag
+          "stock",         // ✅ include total stock
+          "heroImage",
+          "productMedia",
+          "descImages",
+          "additionalInfo",
+          "createdAt",
+          "updatedAt",
+          "deletedAt",
+        ].join(" ")
       )
       .populate({
         path: "category",

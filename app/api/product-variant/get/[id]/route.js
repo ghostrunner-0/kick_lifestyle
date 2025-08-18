@@ -16,7 +16,7 @@ export async function GET(req, { params }) {
     const { id } = params || {};
     if (!id) return response(false, 400, "Missing variant id/sku");
 
-    // Build matcher: prefer ObjectId, otherwise treat incoming as SKU
+    // Match by ObjectId if valid; otherwise treat as SKU (case-insensitive via uppercasing)
     let match = { deletedAt: null };
     if (isValidObjectId(id)) {
       match._id = id;
@@ -26,11 +26,22 @@ export async function GET(req, { params }) {
 
     const variant = await ProductVariant.findOne(match)
       .select(
-        "product variantName mrp specialPrice sku swatchImage productGallery createdAt updatedAt"
+        [
+          "product",
+          "variantName",
+          "mrp",
+          "specialPrice",
+          "sku",
+          "stock",            // ✅ include variant stock
+          "swatchImage",
+          "productGallery",
+          "createdAt",
+          "updatedAt",
+        ].join(" ")
       )
       .populate({
         path: "product",
-        select: "_id name slug",
+        select: "_id name slug hasVariants stock", // ✅ include product-level flags/stock
         model: "Product",
       })
       .lean();

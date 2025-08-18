@@ -17,13 +17,13 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
+  FormDescription,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import ButtonLoading from "@/components/application/ButtonLoading";
 import MediaSelector from "@/components/application/admin/MediaSelector";
 import { showToast } from "@/lib/ShowToast";
 
-// shadcn/ui select
 import {
   Select,
   SelectContent,
@@ -32,7 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-// ---------- Local zod schema (variant edit) ----------
+/* ---------- zod schema (edit variant) ---------- */
 const imageObject = z.object({
   _id: z.string().min(1, "_id is required"),
   alt: z.string().optional(),
@@ -44,18 +44,49 @@ const variantSchema = z
     product: z.string().min(1, "Product is required"),
     variantName: z.string().trim().min(1, "Variant name is required"),
     mrp: z.coerce.number().positive("MRP must be > 0"),
-    specialPrice: z.coerce.number().positive().optional(),
+    specialPrice: z.union([z.string(), z.number()]).optional(), // ✅ optional
+    stock: z.union([z.string(), z.number()]).optional(),        // ✅ validated below
     sku: z.string().trim().min(1, "SKU is required"),
-    productGallery: z
-      .array(imageObject)
-      .min(1, "At least one gallery image is required"),
+    productGallery: z.array(imageObject).min(1, "At least one gallery image is required"),
     swatchImage: imageObject.optional(),
   })
-  .refine((v) => v.specialPrice == null || v.specialPrice <= v.mrp, {
-    path: ["specialPrice"],
-    message: "Special price must be less than or equal to MRP",
+  .superRefine((v, ctx) => {
+    // specialPrice checks only if provided
+    if (v.specialPrice !== undefined && v.specialPrice !== "") {
+      const sp = Number(v.specialPrice);
+      const mrp = Number(v.mrp);
+      if (Number.isNaN(sp) || sp < 0) {
+        ctx.addIssue({
+          path: ["specialPrice"],
+          code: z.ZodIssueCode.custom,
+          message: "Special price must be a valid non-negative number.",
+        });
+      } else if (!Number.isNaN(mrp) && sp > mrp) {
+        ctx.addIssue({
+          path: ["specialPrice"],
+          code: z.ZodIssueCode.custom,
+          message: "Special price cannot be greater than MRP.",
+        });
+      }
+    }
+    // stock required and integer ≥ 0
+    const s = v.stock;
+    const n = Number(s);
+    if (s === undefined || s === "") {
+      ctx.addIssue({
+        path: ["stock"],
+        code: z.ZodIssueCode.custom,
+        message: "Stock is required.",
+      });
+    } else if (Number.isNaN(n) || n < 0 || !Number.isInteger(n)) {
+      ctx.addIssue({
+        path: ["stock"],
+        code: z.ZodIssueCode.custom,
+        message: "Stock must be an integer (0 or greater).",
+      });
+    }
   });
-// ----------------------------------------------------
+/* ------------------------------------------------ */
 
 const BreadCrumbData = [
   { href: ADMIN_DASHBOARD, label: "Home" },
@@ -76,6 +107,7 @@ export default function EditProductVariant() {
       variantName: "",
       mrp: "",
       specialPrice: "",
+      stock: "0", // ✅ default
       sku: "",
       productGallery: [],
       swatchImage: undefined,
@@ -86,46 +118,33 @@ export default function EditProductVariant() {
   useEffect(() => {
     (async () => {
       try {
-        // Load product list
-        const { data } = await axios.get(
-          "/api/product?start=0&size=1000&deleType=SD"
-        );
-        const list = Array.isArray(data?.data)
-          ? data.data
-          : Array.isArray(data)
-          ? data
-          : [];
+        const { data } = await axios.get("/api/product?start=0&size=1000&deleType=SD");
+        const list = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
         setProducts(list.map((p) => ({ _id: p._id, name: p.name })));
       } catch {
         showToast("error", "Failed to load products");
       }
 
       try {
-        // Load variant details
         if (!id) return;
         const { data: res } = await axios.get(`/api/product-variant/get/${id}`);
-        if (!res?.success)
-          throw new Error(res?.message || "Failed to fetch variant");
+        if (!res?.success) throw new Error(res?.message || "Failed to fetch variant");
 
         const v = res.data;
 
         const toImg = (x) =>
           x ? { _id: String(x._id), alt: x.alt || "", path: String(x.path) } : undefined;
-
         const toImgArr = (arr) =>
           Array.isArray(arr)
-            ? arr.map((f) => ({
-                _id: String(f._id),
-                alt: f.alt || "",
-                path: String(f.path),
-              }))
+            ? arr.map((f) => ({ _id: String(f._id), alt: f.alt || "", path: String(f.path) }))
             : [];
 
         form.reset({
           product: String(v.product?._id || v.product),
           variantName: v.variantName || "",
           mrp: v.mrp ?? "",
-          specialPrice: v.specialPrice ?? "",
+          specialPrice: v.specialPrice ?? "", // ✅ show empty when not set
+          stock: v.stock ?? "0",              // ✅ prefill stock
           sku: v.sku || "",
           productGallery: toImgArr(v.productGallery),
           swatchImage: toImg(v.swatchImage),
@@ -147,17 +166,16 @@ export default function EditProductVariant() {
         ...values,
         mrp: Number(values.mrp),
         specialPrice:
-          values.specialPrice === "" ? undefined : Number(values.specialPrice),
+          values.specialPrice === "" || values.specialPrice === undefined
+            ? undefined
+            : Number(values.specialPrice),
+        stock: Number(values.stock === "" ? 0 : values.stock), // ✅ ensure number
       };
 
-      const { data: res } = await axios.put(
-        "/api/product-variant/update",
-        payload
-      );
-      if (!res?.success)
-        throw new Error(res?.message || "Failed to update variant");
+      const { data: res } = await axios.put("/api/product-variant/update", payload);
+      if (!res?.success) throw new Error(res?.message || "Failed to update variant");
 
-      showToast("success", "Variant updated!");
+      showToast("success", "Variant updated! Product stock will auto-recalculate.");
     } catch (err) {
       showToast("error", err?.message || "Something went wrong");
     } finally {
@@ -189,10 +207,7 @@ export default function EditProductVariant() {
                       <FormItem>
                         <FormLabel>Product</FormLabel>
                         <FormControl>
-                          <Select
-                            value={field.value || ""}
-                            onValueChange={field.onChange}
-                          >
+                          <Select value={field.value || ""} onValueChange={field.onChange}>
                             <SelectTrigger className="w-full">
                               <SelectValue placeholder="Select product" />
                             </SelectTrigger>
@@ -205,6 +220,9 @@ export default function EditProductVariant() {
                             </SelectContent>
                           </Select>
                         </FormControl>
+                        <FormDescription>
+                          Editing a variant will automatically update the parent product’s total stock.
+                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -217,10 +235,7 @@ export default function EditProductVariant() {
                       <FormItem>
                         <FormLabel>Variant Name</FormLabel>
                         <FormControl>
-                          <Input
-                            placeholder="e.g., Black / Blue / Green"
-                            {...field}
-                          />
+                          <Input placeholder="e.g., Steel Black / Blue / Green" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -228,8 +243,8 @@ export default function EditProductVariant() {
                   />
                 </div>
 
-                {/* Pricing + SKU */}
-                <div className="mb-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Pricing + Stock + SKU */}
+                <div className="mb-5 grid grid-cols-1 md:grid-cols-4 gap-4">
                   <FormField
                     control={form.control}
                     name="mrp"
@@ -237,12 +252,7 @@ export default function EditProductVariant() {
                       <FormItem>
                         <FormLabel>MRP</FormLabel>
                         <FormControl>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            placeholder="0.00"
-                            {...field}
-                          />
+                          <Input type="number" step="0.01" placeholder="0.00" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -256,13 +266,24 @@ export default function EditProductVariant() {
                       <FormItem>
                         <FormLabel>Special Price</FormLabel>
                         <FormControl>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            placeholder="Optional"
-                            {...field}
-                          />
+                          <Input type="number" step="0.01" placeholder="Optional" {...field} />
                         </FormControl>
+                        <FormDescription>Leave blank if there is no discount.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="stock"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Stock</FormLabel>
+                        <FormControl>
+                          <Input type="number" min="0" step="1" placeholder="0" {...field} />
+                        </FormControl>
+                        <FormDescription>Integer only (0 or greater).</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -278,9 +299,7 @@ export default function EditProductVariant() {
                           <Input
                             placeholder="SKU (unique)"
                             value={field.value}
-                            onChange={(e) =>
-                              field.onChange(e.target.value.toUpperCase())
-                            }
+                            onChange={(e) => field.onChange(e.target.value.toUpperCase())}
                           />
                         </FormControl>
                         <FormMessage />
@@ -300,22 +319,19 @@ export default function EditProductVariant() {
                         <MediaSelector
                           multiple
                           selectedMedia={field.value}
-                          triggerLabel={
-                            field.value?.length
-                              ? "Change Gallery"
-                              : "Select Gallery"
-                          }
+                          triggerLabel={field.value?.length ? "Change Gallery" : "Select Gallery"}
                           onSelect={(selected) => {
                             if (!selected || !Array.isArray(selected)) {
                               field.onChange([]);
                               return;
                             }
-                            const imgs = selected.map((f) => ({
-                              _id: f._id,
-                              alt: f.alt || "",
-                              path: f.path,
-                            }));
-                            field.onChange(imgs);
+                            field.onChange(
+                              selected.map((f) => ({
+                                _id: f._id,
+                                alt: f.alt || "",
+                                path: f.path,
+                              }))
+                            );
                           }}
                         />
                         <FormMessage />
@@ -335,9 +351,7 @@ export default function EditProductVariant() {
                         <MediaSelector
                           multiple={false}
                           selectedMedia={field.value}
-                          triggerLabel={
-                            field.value ? "Change Swatch" : "Select Swatch"
-                          }
+                          triggerLabel={field.value ? "Change Swatch" : "Select Swatch"}
                           onSelect={(selected) => {
                             if (!selected) {
                               field.onChange(undefined);
@@ -357,12 +371,7 @@ export default function EditProductVariant() {
                 </div>
 
                 {/* Submit */}
-                <ButtonLoading
-                  type="submit"
-                  text="Update Variant"
-                  loading={loading}
-                  className="w-full"
-                />
+                <ButtonLoading type="submit" text="Update Variant" loading={loading} className="w-full" />
               </form>
             </Form>
           )}

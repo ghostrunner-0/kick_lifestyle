@@ -5,3 +5,5 @@ export const WEBSITE_FORGOT_PASSWORD='/auth/reset-password'
 export const USER_DASHABOARD='/my-account'
 export const CATEGORY_VIEW_ROUTE = (slug) =>
   slug ? `/category/${slug}` : "";
+export const PRODUCT_VIEW_ROUTE = (slug) =>
+  slug ? `/product/${slug}` : "";
