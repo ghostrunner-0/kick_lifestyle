@@ -4,6 +4,7 @@ import React, { useMemo, useState, useCallback, useRef, useEffect } from "react"
 import { useDispatch, useSelector } from "react-redux";
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
+import axios from "axios";
 
 /* data */
 import useFetch from "@/hooks/useFetch";
@@ -39,6 +40,8 @@ import "swiper/css";
 import { motion, AnimatePresence } from "framer-motion";
 
 /* ------------ helpers ------------ */
+const api = axios.create({ baseURL: "/", withCredentials: true });
+
 const toNum = (v) => (typeof v === "string" ? Number(v) : v);
 const formatPrice = (value) => {
   const n = toNum(value);
@@ -113,35 +116,38 @@ function ReviewsTab({ productId, animateUI }) {
 
   const loadSummary = React.useCallback(async () => {
     if (!productId) return;
-    const res = await fetch(`/api/website/reviews/summary?productId=${productId}`);
-    const json = await res.json();
-    if (json?.success) setSummary(json.data);
+    try {
+      const { data } = await api.get("/api/website/reviews/summary", { params: { productId } });
+      if (data?.success) setSummary(data.data);
+    } catch {}
   }, [productId]);
 
-  const loadPage = React.useCallback(async (reset = false) => {
-    if (!productId) return;
-    setIsLoadingList(true);
-    try {
-      const params = new URLSearchParams({
-        productId,
-        page: String(reset ? 1 : page),
-        limit: String(pageSize),
-        sort,
-      });
-      if (ratingFilter !== "all") params.set("rating", ratingFilter);
+  const loadPage = React.useCallback(
+    async (reset = false) => {
+      if (!productId) return;
+      setIsLoadingList(true);
+      try {
+        const params = {
+          productId,
+          page: String(reset ? 1 : page),
+          limit: String(pageSize),
+          sort,
+        };
+        if (ratingFilter !== "all") params.rating = ratingFilter;
 
-      const res = await fetch(`/api/website/reviews?${params.toString()}`);
-      const json = await res.json();
-      if (json?.success) {
-        setTotal(json.data.total || 0);
-        if (reset) setItems(json.data.items || []);
-        else setItems((prev) => [...prev, ...(json.data.items || [])]);
-        if (reset) setPage(1);
+        const { data } = await api.get("/api/website/reviews", { params });
+        if (data?.success) {
+          setTotal(data.data.total || 0);
+          if (reset) setItems(data.data.items || []);
+          else setItems((prev) => [...prev, ...(data.data.items || [])]);
+          if (reset) setPage(1);
+        }
+      } finally {
+        setIsLoadingList(false);
       }
-    } finally {
-      setIsLoadingList(false);
-    }
-  }, [productId, page, pageSize, sort, ratingFilter]);
+    },
+    [productId, page, pageSize, sort, ratingFilter]
+  );
 
   useEffect(() => { loadSummary(); }, [loadSummary]);
   useEffect(() => { setPage(1); loadPage(true); }, [sort, ratingFilter]); // eslint-disable-line
@@ -159,23 +165,24 @@ function ReviewsTab({ productId, animateUI }) {
     if (!productId || !formTitle.trim() || !formBody.trim() || !formRating) return;
     setSubmitting(true);
     try {
-      const res = await fetch("/api/website/reviews", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          product: productId,
-          rating: Number(formRating),
-          title: formTitle.trim(),
-          review: formBody.trim(),
-        }),
+      const { data } = await api.post("/api/website/reviews", {
+        product: productId,
+        rating: Number(formRating),
+        title: formTitle.trim(),
+        review: formBody.trim(),
       });
-      const json = await res.json();
-      if (json?.success) {
+      if (data?.success) {
         setOpen(false);
-        setFormRating(5); setFormTitle(""); setFormBody("");
+        setFormRating(5);
+        setFormTitle("");
+        setFormBody("");
         await loadSummary(); // appears after moderation
       }
-    } finally { setSubmitting(false); }
+    } catch (err) {
+      if (err?.response?.status === 401) alert("Please login to write a review.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const totalCount = summary?.total || 0;
@@ -340,6 +347,26 @@ export default function ProductPage() {
     }
   }, [dataReady]);
 
+  /* NEW: rating summary for product card + sticky bar */
+  const [ratingSummary, setRatingSummary] = useState({ average: 0, total: 0, loaded: false });
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!product?._id) return;
+      try {
+        const { data } = await api.get("/api/website/reviews/summary", { params: { productId: product._id } });
+        if (!cancelled && data?.success) {
+          const avg = Number(data.data?.average || 0);
+          const total = Number(data.data?.total || 0);
+          setRatingSummary({ average: avg, total, loaded: true });
+        }
+      } catch {
+        if (!cancelled) setRatingSummary((s) => ({ ...s, loaded: true }));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [product?._id]);
+
   /* variants */
   const variants = Array.isArray(product?.variants) ? product.variants : [];
   const [selectedIdx, setSelectedIdx] = useState(-1);
@@ -481,8 +508,18 @@ export default function ProductPage() {
                     </motion.div>
                     <div className="truncate">
                       <div className="text-sm font-medium truncate">{product?.name || "Product"}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {formatPrice(priceNow)} {priceWas ? <span className="ml-2 line-through">{formatPrice(priceWas)}</span> : null}
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>
+                          {formatPrice(priceNow)} {priceWas ? <span className="ml-1 line-through">{formatPrice(priceWas)}</span> : null}
+                        </span>
+                        {/* NEW: sticky bar rating */}
+                        {ratingSummary.loaded && ratingSummary.total > 0 && (
+                          <span className="inline-flex items-center gap-1">
+                            <Stars value={ratingSummary.average} size={14} />
+                            <span className="tabular-nums">{ratingSummary.average.toFixed(1)}</span>
+                            <span>({ratingSummary.total})</span>
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -723,6 +760,14 @@ export default function ProductPage() {
               <div className="space-y-2">
                 <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">{product?.name}</h1>
                 <p className="text-sm text-muted-foreground">{product?.shortDescription}</p>
+                {/* NEW: rating beside the card header */}
+                {ratingSummary.loaded && ratingSummary.total > 0 && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Stars value={ratingSummary.average} />
+                    <span className="font-medium tabular-nums">{ratingSummary.average.toFixed(1)}</span>
+                    <span className="text-muted-foreground">({ratingSummary.total})</span>
+                  </div>
+                )}
               </div>
 
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -889,7 +934,7 @@ export default function ProductPage() {
               )}
             </TabsContent>
 
-            {/* REVIEWS (no hooks inlined here) */}
+            {/* REVIEWS */}
             <TabsContent value="reviews" className="mt-6">
               <ReviewsTab productId={product?._id} animateUI={animateUI} />
             </TabsContent>

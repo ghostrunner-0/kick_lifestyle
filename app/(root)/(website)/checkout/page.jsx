@@ -1,8 +1,6 @@
-// app/checkout/page.jsx
 "use client";
 
-import React, { useMemo, useEffect, useState } from "react";
-import Link from "next/link";
+import React, { useMemo, useEffect, useState, useCallback, useRef } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -64,6 +62,16 @@ const formatNpr = (v) => {
   }
 };
 const sanitizePhone = (val) => (String(val || "").match(/\d+/g) || []).join("").slice(0, 10);
+
+// label resolver (fallback to saved if options not loaded yet)
+const getLabel = (options, id, fallback = "") =>
+  options.find((o) => String(o.value) === String(id))?.label || fallback || "";
+
+// safe number parser
+const toNum = (v) => {
+  const n = typeof v === "string" ? parseFloat(v) : Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
 
 /* Combobox with valueLabel fallback */
 function ComboBox({
@@ -142,62 +150,24 @@ const schema = z.object({
   couponCode: z.string().optional(),
 });
 
-const idStr = (v) =>
-  typeof v === "object" && v?._id ? String(v._id) : v != null ? String(v) : "";
-
-/** Strict helpers mirrored on client for UI decisions */
-const strictCouponCheck = {
-  extractTargets: (couponObj) => {
-    const productIds = (couponObj?.targets?.productIds ?? couponObj?.specificProducts ?? [])
-      .map(idStr)
-      .filter(Boolean);
-    const variantIds = (couponObj?.targets?.variantIds ?? couponObj?.specificVariants ?? [])
-      .map(idStr)
-      .filter(Boolean);
-    const freeItemVariantIdRaw =
-      couponObj?.freeItem?.variantId ??
-      couponObj?.freeItem?.variant?._id ??
-      couponObj?.freeItem?.variant ??
-      null;
-    const freeItemVariantId = freeItemVariantIdRaw ? idStr(freeItemVariantIdRaw) : null;
-    return { productIds, variantIds, freeItemVariantId };
-  },
-  isDiscountEligible: (couponObj, items) => {
-    const { productIds, variantIds } = strictCouponCheck.extractTargets(couponObj);
-    const setProduct = new Set(items.map((it) => String(it.productId)));
-    const setVariant = new Set(items.map((it) => String(it?.variant?.id || "")));
-
-    if (productIds.length > 0) {
-      return productIds.some((pid) => setProduct.has(String(pid)));
-    }
-    if (variantIds.length > 0) {
-      return variantIds.some((vid) => setVariant.has(String(vid)));
-    }
-    return true; // global
-  },
-  isFreeItemEligible: (couponObj, items) => {
-    if (!strictCouponCheck.isDiscountEligible(couponObj, items)) return false;
-    const { freeItemVariantId } = strictCouponCheck.extractTargets(couponObj);
-    if (!freeItemVariantId) return true;
-    const setVariant = new Set(items.map((it) => String(it?.variant?.id || "")));
-    return setVariant.has(freeItemVariantId);
-  },
-};
-
-export default function CheckoutPage() {
+export default function CheckoutClient({ initialUser = null }) {
   const router = useRouter();
   const dispatch = useDispatch();
 
+  // --- Auth from Redux (email-based) ---
   const auth = useSelector((s) => s?.authStore?.auth);
-  const isLoggedIn = !!auth;
-  const authUser = auth?.user || auth;
-  const authUserId = authUser?._id;
+  const isHydrated = useSelector((s) => !!s?._persist?.rehydrated);
+  const authUser = auth?.user || auth || null;
+  const authEmail = authUser?.email ?? null;
+  const isLoggedIn = !!authEmail;
 
+  // --- Cart selectors ---
   const items = useSelector(selectItems) || [];
   const itemCount = items.reduce((n, it) => n + (it.qty || 0), 0);
   const subtotal = useSelector(selectSubtotal) || 0;
   const couponState = useSelector((s) => s?.cart?.coupon || null);
 
+  // --- Form ---
   const form = useForm({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -211,7 +181,6 @@ export default function CheckoutPage() {
       couponCode: "",
     },
   });
-
   const paymentMethod = form.watch("paymentMethod");
 
   /* location options (Pathao) */
@@ -226,17 +195,26 @@ export default function CheckoutPage() {
   /* Shipping (Pathao price plan) */
   const [ship, setShip] = useState({ price: 0, loading: false, error: null });
 
+  // ---- Persisted user from /getuser for user id/name/email in payload
+  const [currentUser, setCurrentUser] = useState(null);
+
+  // ---- price-plan de-dupe & race guards ----
+  const lastPriceKeyRef = useRef(""); // avoid duplicate same-input calls
+  const latestReqRef = useRef(0);     // drop out-of-order responses
+  const lastPricePlanReqRef = useRef(null);
+  const lastPricePlanResRef = useRef(null);
+
   // Guards
   useEffect(() => {
-    if (!isLoggedIn) router.replace("/auth/login?next=/checkout");
-  }, [isLoggedIn, router]);
+    if (isHydrated && !isLoggedIn) router.replace("/auth/login?next=/checkout");
+  }, [isHydrated, isLoggedIn, router]);
 
   useEffect(() => {
-    if (isLoggedIn && itemCount === 0) router.replace("/cart");
-  }, [isLoggedIn, itemCount, router]);
+    if (isHydrated && isLoggedIn && itemCount === 0) router.replace("/cart");
+  }, [isHydrated, isLoggedIn, itemCount, router]);
 
   // ---- Pathao fetch helpers ----
-  const fetchCities = async () => {
+  const fetchCities = useCallback(async () => {
     setLoadingLoc((s) => ({ ...s, city: true }));
     try {
       const res = await axios.get("/api/pathao/cities");
@@ -252,9 +230,9 @@ export default function CheckoutPage() {
     } finally {
       setLoadingLoc((s) => ({ ...s, city: false }));
     }
-  };
+  }, []);
 
-  const fetchZones = async (cityId) => {
+  const fetchZones = useCallback(async (cityId) => {
     if (!cityId) return setZoneOptions([]);
     setLoadingLoc((s) => ({ ...s, zone: true }));
     try {
@@ -271,9 +249,9 @@ export default function CheckoutPage() {
     } finally {
       setLoadingLoc((s) => ({ ...s, zone: false }));
     }
-  };
+  }, []);
 
-  const fetchAreas = async (zoneId) => {
+  const fetchAreas = useCallback(async (zoneId) => {
     if (!zoneId) return setAreaOptions([]);
     setLoadingLoc((s) => ({ ...s, area: true }));
     try {
@@ -290,118 +268,193 @@ export default function CheckoutPage() {
     } finally {
       setLoadingLoc((s) => ({ ...s, area: false }));
     }
-  };
+  }, []);
 
-  // Calculate delivery price (Pathao price plan) when COD + city/zone are selected
-  const calcDeliveryPrice = async (cityId, zoneId) => {
-    if (!cityId || !zoneId) return;
+  // Robust price-plan
+  const calcDeliveryPrice = useCallback(async (cityId, zoneId, areaId) => {
+    const reqId = ++latestReqRef.current;
     setShip({ price: 0, loading: true, error: null });
+
     try {
-      const { data } = await axios.post("/api/pathao/price-plan", {
+      const body = {
         item_type: 2,
         delivery_type: 48,
         item_weight: 0.5,
         recipient_city: Number(cityId),
         recipient_zone: Number(zoneId),
-      });
+      };
+      if (areaId) body.recipient_area = Number(areaId);
 
-      // Prefer final_price if > 0, otherwise fallback to price
-      const finalRaw = data?.data?.final_price ?? data?.final_price;
-      const priceRaw  = data?.data?.price ?? data?.price ?? 0;
-      const finalNum  = typeof finalRaw === "number" ? finalRaw : NaN;
-      const shipping  = finalNum > 0 ? finalNum : Number(priceRaw || 0);
+      // keep last request for metadata
+      lastPricePlanReqRef.current = body;
+
+      const { data } = await axios.post("/api/pathao/price-plan", body);
+
+      if (reqId !== latestReqRef.current) return; // stale response, ignore
+
+      // keep last response for metadata
+      lastPricePlanResRef.current = data;
+
+      if (data && data.success === false) {
+        const msg = data?.message || "Failed to fetch delivery price";
+        setShip({ price: 0, loading: false, error: msg });
+        return;
+      }
+
+      const priceCandidates = [
+        data?.data?.final_price,
+        data?.final_price,
+        data?.data?.price,
+        data?.price,
+        data?.data?.result?.final_price,
+        data?.data?.result?.price,
+      ];
+      const shipping = priceCandidates.map(toNum).find((n) => n > 0) ?? 0;
+
+      if (shipping <= 0) {
+        setShip({ price: 0, loading: false, error: "Delivery price unavailable for this address" });
+        return;
+      }
 
       setShip({ price: shipping, loading: false, error: null });
     } catch (e) {
-      setShip({ price: 0, loading: false, error: "Could not fetch delivery price" });
+      if (reqId !== latestReqRef.current) return;
+      const msg =
+        e?.response?.data?.message ||
+        e?.response?.data?.error ||
+        e?.message ||
+        "Could not fetch delivery price";
+      setShip({ price: 0, loading: false, error: msg });
     }
-  };
-  // ------------------------------
-
-  /* Load city list on mount for immediate UI */
-  useEffect(() => {
-    fetchCities();
   }, []);
 
-  /* Fetch logged-in user profile and prefill */
+  // Call calc only when allowed (area present + COD), and not with same params twice
+  const maybeRecalc = useCallback(
+    async (cityId, zoneId, areaId, pay) => {
+      if (pay !== "cod" || !cityId || !zoneId || !areaId) {
+        setShip({ price: 0, loading: false, error: null });
+        lastPriceKeyRef.current = "";
+        return;
+      }
+      const key = `c:${cityId}|z:${zoneId}|a:${areaId}|pm:${pay}`;
+      if (lastPriceKeyRef.current === key) return; // duplicate, skip
+      lastPriceKeyRef.current = key;
+      await calcDeliveryPrice(cityId, zoneId, areaId);
+    },
+    [calcDeliveryPrice]
+  );
+
+  /** Prefill helper (NO manual shipping calc here; area set will trigger watch) */
+  const prefillFromUser = useCallback(
+    async (u) => {
+      if (!u) return;
+
+      // keep full user object for payload.user.id/email/name
+      setCurrentUser(u);
+
+      setSavedLabels({
+        city: u.pathaoCityLabel || "",
+        zone: u.pathaoZoneLabel || "",
+        area: u.pathaoAreaLabel || "",
+      });
+
+      if (!form.getValues("fullName") && u.name) {
+        form.setValue("fullName", u.name, { shouldValidate: true });
+      }
+      if (!form.getValues("landmark") && u.address) {
+        form.setValue("landmark", u.address, { shouldValidate: true });
+      }
+      const phone = sanitizePhone(u.phone || u.mobile || u?.profile?.phone);
+      if (phone) form.setValue("phone", phone, { shouldValidate: true });
+
+      await fetchCities();
+
+      const cityId = u.pathaoCityId ? String(u.pathaoCityId) : "";
+      if (cityId) {
+        form.setValue("city", cityId, { shouldValidate: true });
+        await fetchZones(cityId);
+      }
+
+      const zoneId = u.pathaoZoneId ? String(u.pathaoZoneId) : "";
+      if (zoneId) {
+        form.setValue("zone", zoneId, { shouldValidate: true });
+        await fetchAreas(zoneId);
+      }
+
+      const areaId = u.pathaoAreaId ? String(u.pathaoAreaId) : "";
+      if (areaId) {
+        form.setValue("area", areaId, { shouldValidate: true });
+      }
+      // DO NOT call calc here; area set triggers watcher once.
+    },
+    [form, fetchCities, fetchZones, fetchAreas]
+  );
+
+  /* Load city list on mount */
   useEffect(() => {
-    if (!isLoggedIn || !authUserId) return;
+    fetchCities();
+  }, [fetchCities]);
+
+  /* Fetch user on load AFTER rehydration (or use initialUser if provided) */
+  useEffect(() => {
+    if (!isHydrated) return;
 
     (async () => {
       try {
-        const res = await axios.get(`/api/users/${authUserId}/getuser`);
-        const u = res?.data?.data ?? res?.data?.user ?? res?.data ?? null;
-        if (!u) return;
+        if (initialUser) {
+          await prefillFromUser(initialUser);
+          return;
+        }
+        if (!authEmail) return;
 
-        setSavedLabels({
-          city: u.pathaoCityLabel || "",
-          zone: u.pathaoZoneLabel || "",
-          area: u.pathaoAreaLabel || "",
+        const res = await axios.get(`/api/website/users/${encodeURIComponent(authEmail)}/getuser`, {
+          withCredentials: true,
         });
-
-        // name → fullName
-        if (!form.getValues("fullName") && u.name)
-          form.setValue("fullName", u.name, { shouldValidate: true });
-
-        // phone → 10 digits
-        const phone = sanitizePhone(u.phone || u.mobile || u?.profile?.phone);
-        if (phone) form.setValue("phone", phone, { shouldValidate: true });
-
-        // Prefill Pathao IDs + cascade
-        await fetchCities();
-
-        const cityId = u.pathaoCityId ? String(u.pathaoCityId) : "";
-        if (cityId) {
-          form.setValue("city", cityId, { shouldValidate: true });
-          await fetchZones(cityId);
-        }
-
-        const zoneId = u.pathaoZoneId ? String(u.pathaoZoneId) : "";
-        if (zoneId) {
-          form.setValue("zone", zoneId, { shouldValidate: true });
-          await fetchAreas(zoneId);
-        }
-
-        const areaId = u.pathaoAreaId ? String(u.pathaoAreaId) : "";
-        if (areaId) {
-          form.setValue("area", areaId, { shouldValidate: true });
-        }
-
-        // If COD and city/zone ready, calculate shipping
-        if (form.getValues("paymentMethod") === "cod" && cityId && zoneId) {
-          await calcDeliveryPrice(cityId, zoneId);
-        }
-      } catch {
-        // allow manual entry
+        const u = res?.data?.data ?? res?.data?.user ?? res?.data ?? null;
+        await prefillFromUser(u);
+      } catch (e) {
+        console.log("USER API ERROR →", e?.response?.data || e?.message);
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoggedIn, authUserId]);
+  }, [isHydrated, authEmail, initialUser, prefillFromUser]);
 
-  // Cascade + recalc delivery when user changes location/method
+  // Cascade loaders; ONLY calc on area & payment method changes
   useEffect(() => {
     const sub = form.watch(async (vals, { name }) => {
       if (name === "city") {
+        // reset deep chain, clear shipping & dedupe key
         form.setValue("zone", "");
         form.setValue("area", "");
         setAreaOptions([]);
+        setShip({ price: 0, loading: false, error: null });
+        lastPriceKeyRef.current = "";
         await fetchZones(vals.city);
-      } else if (name === "zone") {
-        form.setValue("area", "");
-        await fetchAreas(vals.zone);
+        return;
       }
 
-      if (["city", "zone", "area", "paymentMethod"].includes(String(name))) {
-        if (vals.paymentMethod === "cod" && vals.city && vals.zone) {
-          await calcDeliveryPrice(vals.city, vals.zone);
-        } else {
-          setShip((s) => ({ price: 0, loading: false, error: null }));
-        }
+      if (name === "zone") {
+        // reset area when zone changes, clear shipping & dedupe key
+        form.setValue("area", "");
+        setShip({ price: 0, loading: false, error: null });
+        lastPriceKeyRef.current = "";
+        await fetchAreas(vals.zone);
+        return;
+      }
+
+      if (name === "area") {
+        // RUN ONLY when area selected/loaded and payment is COD
+        await maybeRecalc(vals.city, vals.zone, vals.area || null, vals.paymentMethod);
+        return;
+      }
+
+      if (name === "paymentMethod") {
+        // payment toggled → calc if COD & we already have city/zone/area
+        await maybeRecalc(vals.city, vals.zone, vals.area || null, vals.paymentMethod);
+        return;
       }
     });
     return () => sub.unsubscribe();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form]);
+  }, [form, fetchZones, fetchAreas, maybeRecalc]);
 
   /* coupon apply/remove (STRICT) */
   const applyCoupon = async () => {
@@ -415,7 +468,7 @@ export default function CheckoutPage() {
           productId: it.productId,
           variantId: it?.variant?.id || null,
           qty: Number(it.qty || 0),
-    price: it.isFreeItem ? 0 : Number(it.price || 0),
+          price: it.isFreeItem ? 0 : Number(it.price || 0),
         })),
       };
       const { data } = await axios.post("/api/website/coupons/apply", payload);
@@ -428,14 +481,12 @@ export default function CheckoutPage() {
 
       const d = data.data;
 
-      // If not eligible — show toast + clear coupon
       if (!d?.eligible) {
         dispatch(setCouponAction(null));
         showToast("error", d?.reason || "Coupon is not applicable to your cart");
         return;
       }
 
-      // If it’s a free-item coupon (eligible), store info and add free item to cart if not present
       if (d?.freeItem?.exists && d?.freeItem?.eligible) {
         dispatch(
           setCouponAction({
@@ -450,13 +501,12 @@ export default function CheckoutPage() {
             },
           })
         );
-        // Add free item to cart if not present
-        const freeItemKey = `${d.freeItem.productId}|${d.freeItem.variantId}`;
         const alreadyInCart = items.some(
-          (it) => String(it.productId) === String(d.freeItem.productId) && String(it.variant?.id || it.variantId) === String(d.freeItem.variantId)
+          (it) =>
+            String(it.productId) === String(d.freeItem.productId) &&
+            String(it.variant?.id || it.variantId) === String(d.freeItem.variantId)
         );
         if (!alreadyInCart) {
-          // Fetch real image for variant
           let image = "/placeholder.png";
           try {
             const res = await axios.get(`/api/website/product-variant/${d.freeItem.variantId}`);
@@ -479,7 +529,6 @@ export default function CheckoutPage() {
         return;
       }
 
-      // Else: standard money discount
       const applied = Number(d?.moneyDiscount?.applied || 0);
       const type = d?.moneyDiscount?.type || "fixed";
       const amount = Number(d?.moneyDiscount?.amount || 0);
@@ -501,7 +550,6 @@ export default function CheckoutPage() {
   };
 
   const removeCoupon = () => {
-    // Remove free item from cart if present
     if (couponState?.mode === "freeItem" && couponState?.freeItem?.variantId) {
       dispatch({
         type: "cart/removeItem",
@@ -520,7 +568,6 @@ export default function CheckoutPage() {
     if (!couponState) return { discountApplied: 0, freeItemActive: false };
 
     if (couponState.mode === "freeItem" && couponState?.freeItem?.variantId) {
-      // Ensure strict: free-item still only “active” if that variant is currently in cart
       const setVariant = new Set(items.map((it) => String(it?.variant?.id || "")));
       const active = setVariant.has(String(couponState.freeItem.variantId));
       return { discountApplied: 0, freeItemActive: active };
@@ -540,8 +587,15 @@ export default function CheckoutPage() {
   const shippingCost = paymentMethod === "cod" ? ship.price : 0;
   const total = Math.max(0, subtotal - discountApplied) + shippingCost + codFee;
 
+  // Single flag to disable both buttons
+  const isPlaceOrderDisabled = useMemo(() => {
+    if (paymentMethod !== "cod") return false;
+    return ship.loading || !!ship.error;
+  }, [paymentMethod, ship.loading, ship.error]);
+
   /* submit */
-  const onSubmit = (values) => {
+  const onSubmit = async (values) => {
+    // guards
     if (!isLoggedIn) {
       router.push("/auth/login?next=/checkout");
       return;
@@ -550,8 +604,6 @@ export default function CheckoutPage() {
       router.push("/cart");
       return;
     }
-
-    // Optional strict recheck for free item at submission
     if (couponState?.mode === "freeItem") {
       const setVariant = new Set(items.map((it) => String(it?.variant?.id || "")));
       if (!setVariant.has(String(couponState?.freeItem?.variantId))) {
@@ -559,27 +611,50 @@ export default function CheckoutPage() {
         return;
       }
     }
+    if (paymentMethod === "cod") {
+      if (ship.loading) {
+        showToast("info", "Hold on—calculating delivery price…");
+        return;
+      }
+      if (ship.error) {
+        showToast("error", "Fix delivery details to continue");
+        return;
+      }
+    }
 
+    // derive labels
+    const vals = form.getValues();
+    const cityLabel = getLabel(cityOptions, vals.city, savedLabels.city);
+    const zoneLabel = getLabel(zoneOptions, vals.zone, savedLabels.zone);
+    const areaLabel = getLabel(areaOptions, vals.area, savedLabels.area);
+
+    // ----- ORDER PAYLOAD (updated)
     const payload = {
+      // required for server to link & optionally update user
+      user: {
+        id: currentUser?._id || currentUser?.id || "",                  // string (required by server)
+        email: currentUser?.email || authEmail || "",                   // string (required by server)
+        name: currentUser?.name || values.fullName.trim(),              // snapshot
+      },
+
+      // customer snapshot
       customer: {
         fullName: values.fullName.trim(),
         phone: values.phone.trim(),
       },
+
+      // address snapshot
       address: {
         cityId: values.city,
+        cityLabel,
         zoneId: values.zone,
+        zoneLabel,
         areaId: values.area,
+        areaLabel,
         landmark: values.landmark.trim(),
       },
-      paymentMethod: values.paymentMethod,
-      coupon: couponState ?? undefined, // send exact applied metadata
-      amounts: {
-        subtotal,
-        discount: discountApplied,
-        shippingCost,
-        codFee,
-        total,
-      },
+
+      // items snapshot
       items: items.map((it) => ({
         productId: it.productId,
         variantId: it.variant?.id || null,
@@ -587,18 +662,70 @@ export default function CheckoutPage() {
         variantName: it.variant?.name || null,
         qty: it.qty,
         price: it.price,
-  mrp: it.isFreeItem ? 0 : it.mrp,
+        mrp: it.isFreeItem ? 0 : it.mrp,
+        image: it.image || it.variant?.image || undefined,
       })),
+
+      // totals
+      amounts: {
+        subtotal,
+        discount: discountApplied,
+        shippingCost,
+        codFee,
+        total,
+      },
+
+      // payment + coupon
+      paymentMethod: values.paymentMethod,   // "cod" | "khalti" | "qr"
+      // payment: { status: "paid", provider: "...", providerRef: "..." } // pass only if you already captured payment
+      coupon: couponState ?? undefined,
+
+      // metadata (store price-plan inputs/outputs & price used)
+      metadata: {
+        pricePlan: {
+          request: lastPricePlanReqRef.current || null,
+          response: lastPricePlanResRef.current || null,
+          shippingPrice: shippingCost,
+        },
+      },
+
+      // server will compare & update user if these differ
+      userUpdates: {
+        name: values.fullName.trim(),
+        phone: values.phone.trim(),
+        address: values.landmark.trim(),
+        pathaoCityId: values.city,
+        pathaoCityLabel: cityLabel,
+        pathaoZoneId: values.zone,
+        pathaoZoneLabel: zoneLabel,
+        pathaoAreaId: values.area,
+        pathaoAreaLabel: areaLabel,
+      },
     };
 
-    console.log("PLACE ORDER →", payload);
-    // TODO: POST /api/orders
+    if (!payload.user.id || !payload.user.email) {
+      showToast("error", "Could not identify user. Please re-login.");
+      router.push("/auth/login?next=/checkout");
+      return;
+    }
+
+    try {
+      const { data } = await axios.post("/api/website/orders", payload, { withCredentials: true });
+      if (data?.success && data?.data?._id) {
+        showToast("success", "Order placed successfully!");
+        router.replace(`/orders/${data.data._id}`);
+      } else {
+        showToast("error", data?.message || "Failed to place order");
+      }
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || "Failed to place order";
+      showToast("error", msg);
+    }
   };
 
   return (
     <div className="relative">
       <div className="mx-auto max-w-6xl px-4 py-6 pb-28 sm:pb-8">
-        {/* Clean header (no "back to cart") */}
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-xl font-semibold tracking-tight">Checkout</h1>
           <div className="text-sm text-slate-600 flex items-center gap-2">
@@ -608,7 +735,6 @@ export default function CheckoutPage() {
         </div>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-          {/* LEFT: form */}
           <Card className="lg:col-span-7">
             <CardHeader>
               <h2 className="text-lg font-semibold">Shipping details</h2>
@@ -641,11 +767,10 @@ export default function CheckoutPage() {
                               <Input
                                 placeholder="98XXXXXXXX"
                                 inputMode="numeric"
-                                pattern="\d{10}"
+                                pattern="\\d{10}"
                                 maxLength={10}
                                 {...field}
                                 onChange={(e) => {
-                                  // Only allow digits, max 10
                                   const val = e.target.value.replace(/[^\d]/g, "").slice(0, 10);
                                   field.onChange(val);
                                 }}
@@ -657,8 +782,6 @@ export default function CheckoutPage() {
                       />
                     </div>
 
-
-                    {/* City */}
                     <FormField
                       control={form.control}
                       name="city"
@@ -681,7 +804,6 @@ export default function CheckoutPage() {
                       )}
                     />
 
-                    {/* Zone */}
                     <FormField
                       control={form.control}
                       name="zone"
@@ -704,7 +826,6 @@ export default function CheckoutPage() {
                       )}
                     />
 
-                    {/* Area */}
                     <FormField
                       control={form.control}
                       name="area"
@@ -727,7 +848,6 @@ export default function CheckoutPage() {
                       )}
                     />
 
-                    {/* Landmark (required) */}
                     <FormField
                       control={form.control}
                       name="landmark"
@@ -744,7 +864,6 @@ export default function CheckoutPage() {
 
                     <Separator />
 
-                    {/* Payment */}
                     <div className="space-y-3">
                       <h3 className="text-base font-semibold">Payment</h3>
                       <FormField
@@ -809,107 +928,77 @@ export default function CheckoutPage() {
             </CardContent>
           </Card>
 
-          {/* RIGHT: sticky summary */}
           <div className="lg:col-span-5 lg:sticky lg:top-4 self-start space-y-6">
             <Card>
               <CardHeader>
                 <h2 className="text-lg font-semibold">Order summary</h2>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* Coupon */}
                 <div className="flex gap-2">
-                  <Input
-                    placeholder="Coupon code"
-                    {...form.register("couponCode")}
-                    className="h-10"
-                  />
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="h-10"
-                    onClick={applyCoupon}
-                  >
+                  <Input placeholder="Coupon code" {...form.register("couponCode")} className="h-10" />
+                  <Button type="button" variant="secondary" className="h-10" onClick={applyCoupon}>
                     Apply
                   </Button>
                   {couponState && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="h-10"
-                      onClick={removeCoupon}
-                    >
+                    <Button type="button" variant="ghost" className="h-10" onClick={removeCoupon}>
                       Remove
                     </Button>
                   )}
                 </div>
 
-                {/* Items */}
                 <div className="rounded-xl bg-white/60 p-3">
                   <ul className="divide-y max-h-72 overflow-auto">
                     {items.map((it) => {
                       const key = `${it.productId}|${it.variant?.id || ""}`;
-                      const title =
-                        it.variant ? `${it.name} — ${it.variant.name}` : it.name;
+                      const title = it.variant ? `${it.name} — ${it.variant.name}` : it.name;
                       const lineTotal =
                         (it.isFreeItem ? 0 : Number(it.price) || 0) * (Number(it.qty) || 0);
-                      const img =
-                        it.image || it.variant?.image || "/placeholder.png";
+                      const img = it.image || it.variant?.image || "/placeholder.png";
                       return (
                         <li key={key} className="flex items-center gap-3 py-2">
                           <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md border bg-white">
-                            <Image
-                              src={img}
-                              alt={title}
-                              fill
-                              sizes="48px"
-                              className="object-contain"
-                            />
+                            <Image src={img} alt={title} fill sizes="48px" className="object-contain" />
                           </div>
                           <div className="min-w-0 flex-1">
-                            <div className="line-clamp-1 text-sm font-medium">
-                              {title}
-                            </div>
+                            <div className="line-clamp-1 text-sm font-medium">{title}</div>
                             <div className="text-xs text-slate-500">
                               {it.qty} × {formatNpr(it.isFreeItem ? 0 : it.price)}
                             </div>
                           </div>
-                          <div className="text-sm font-semibold">
-                            {formatNpr(lineTotal)}
-                          </div>
+                          <div className="text-sm font-semibold">{formatNpr(lineTotal)}</div>
                         </li>
                       );
                     })}
 
-                    {/* Free item preview (only when active and not already in items list) */}
-                    {couponState?.mode === "freeItem" && freeItemActive && !items.some(
-                      (it) => String(it.productId) === String(couponState.freeItem.productId) && String(it.variant?.id || it.variantId) === String(couponState.freeItem.variantId)
-                    ) && (
-                      <li className="flex items-center gap-3 py-2 text-emerald-700">
-                        <div className="h-12 w-12 shrink-0 grid place-items-center rounded-md border bg-emerald-50">
-                          🎁
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="line-clamp-1 text-sm font-medium">
-                            Free item: {couponState.freeItem.productName} — {couponState.freeItem.variantName}
+                    {couponState?.mode === "freeItem" &&
+                      freeItemActive &&
+                      !items.some(
+                        (it) =>
+                          String(it.productId) === String(couponState.freeItem.productId) &&
+                          String(it.variant?.id || it.variantId) === String(couponState.freeItem.variantId)
+                      ) && (
+                        <li className="flex items-center gap-3 py-2 text-emerald-700">
+                          <div className="h-12 w-12 shrink-0 grid place-items-center rounded-md border bg-emerald-50">🎁</div>
+                          <div className="min-w-0 flex-1">
+                            <div className="line-clamp-1 text-sm font-medium">
+                              Free item: {couponState.freeItem.productName} — {couponState.freeItem.variantName}
+                            </div>
+                            <div className="text-xs">Qty: {couponState.freeItem.qty}</div>
                           </div>
-                          <div className="text-xs">Qty: {couponState.freeItem.qty}</div>
-                        </div>
-                        <div className="text-sm font-semibold">{formatNpr(0)}</div>
-                      </li>
-                    )}
+                          <div className="text-sm font-semibold">{formatNpr(0)}</div>
+                        </li>
+                      )}
                   </ul>
                 </div>
 
                 <Separator />
 
-                {/* Totals */}
                 <div className="space-y-2 text-sm">
                   <div className="flex items-center justify-between">
                     <span className="text-slate-600">Subtotal</span>
                     <span className="font-medium">{formatNpr(subtotal)}</span>
                   </div>
 
-                  {/* Money discount (only when not a free-item coupon) */}
                   {couponState?.mode === "money" && discountApplied > 0 && (
                     <div className="flex items-center justify-between">
                       <span className="text-slate-600">
@@ -919,7 +1008,6 @@ export default function CheckoutPage() {
                     </div>
                   )}
 
-                  {/* Delivery (Pathao) */}
                   {paymentMethod === "cod" && (
                     <div className="flex items-center justify-between">
                       <span className="text-slate-600">
@@ -934,7 +1022,6 @@ export default function CheckoutPage() {
                     <div className="text-xs text-red-600">{ship.error}</div>
                   )}
 
-                  {/* COD fee */}
                   {paymentMethod === "cod" && (
                     <div className="flex items-center justify-between">
                       <span className="text-slate-600">COD fee</span>
@@ -950,13 +1037,20 @@ export default function CheckoutPage() {
                   </div>
                 </div>
 
-                {/* Desktop button */}
+                {/* Desktop place order button */}
                 <Button
                   type="button"
                   className="mt-2 hidden w-full h-11 rounded-xl text-[14px] font-semibold sm:block"
                   onClick={form.handleSubmit(onSubmit)}
-                  disabled={paymentMethod === "cod" && (ship.loading || ship.error)}
-                  title={ship.error ? "Fix delivery details to continue" : undefined}
+                  disabled={isPlaceOrderDisabled}
+                  aria-busy={paymentMethod === "cod" && ship.loading}
+                  title={
+                    ship.error
+                      ? "Fix delivery details to continue"
+                      : paymentMethod === "cod" && ship.loading
+                      ? "Calculating delivery price…"
+                      : undefined
+                  }
                 >
                   {`Place Order — ${formatNpr(total)}`}
                 </Button>
@@ -966,14 +1060,21 @@ export default function CheckoutPage() {
         </div>
       </div>
 
-      {/* Sticky bottom CTA (mobile) */}
+      {/* Mobile place order button */}
       <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-white/90 backdrop-blur sm:hidden">
         <div className="mx-auto max-w-6xl px-4 py-3">
           <Button
             className="w-full h-11 rounded-xl text-[14px] font-semibold"
             onClick={form.handleSubmit(onSubmit)}
-            disabled={paymentMethod === "cod" && (ship.loading || ship.error)}
-            title={ship.error ? "Fix delivery details to continue" : undefined}
+            disabled={isPlaceOrderDisabled}
+            aria-busy={paymentMethod === "cod" && ship.loading}
+            title={
+              ship.error
+                ? "Fix delivery details to continue"
+                : paymentMethod === "cod" && ship.loading
+                ? "Calculating delivery price…"
+                : undefined
+            }
           >
             {`Place Order — ${formatNpr(total)}`}
           </Button>
