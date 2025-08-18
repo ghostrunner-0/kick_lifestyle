@@ -112,8 +112,12 @@ export default function CartSidebar({ open, onOpenChange }) {
         {/* Scrollable items */}
         <div className="flex-1 overflow-y-auto px-4 py-3">
           {items.length === 0 ? (
-            <div className="text-sm text-muted-foreground">
-              Your cart is empty.
+            <div className="h-full flex flex-col items-center justify-center gap-3 text-center px-4">
+              <span className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-muted">
+                <ShoppingCart className="h-8 w-8 text-slate-600" aria-hidden="true" />
+              </span>
+              <div className="text-sm font-medium text-slate-900">Your cart is empty</div>
+              <div className="text-xs text-muted-foreground">Add items to see them here</div>
             </div>
           ) : (
             <ul className="divide-y rounded-xl border bg-white">
@@ -205,31 +209,33 @@ export default function CartSidebar({ open, onOpenChange }) {
 
         {/* Footer (no subtotal card; total only in button) */}
     <div className="shrink-0 px-4 pb-4 pt-2 bg-white/80 backdrop-blur border-t">
-  {repricing ? (
-    <Button
-      className="mt-0 w-full h-11 rounded-xl text-[14px] font-semibold"
-      disabled
-    >
-      Updating…
-    </Button>
-  ) : (
-    <Button
-      asChild
-      className="mt-0 w-full h-11 rounded-xl text-[14px] font-semibold"
-      aria-label={`Go to checkout — ${formatNpr(subtotal)}`}
-    >
-      <Link
-        href="/checkout"
-        onClick={() => {
-          // optionally close the sheet if parent passed a handler
-          try { onOpenChange?.(false); } catch {}
-        }}
-      >
-        {`Checkout — ${formatNpr(subtotal)}`}
-      </Link>
-    </Button>
-  )}
-  <div className="pt-[env(safe-area-inset-bottom)]" />
+      {repricing ? (
+        <Button
+          className="mt-0 w-full h-11 rounded-xl text-[14px] font-semibold"
+          disabled
+        >
+          Updating…
+        </Button>
+      ) : items.length > 0 ? (
+        <Button
+          asChild
+          className="mt-0 w-full h-11 rounded-xl text-[14px] font-semibold"
+          aria-label={`Go to checkout — ${formatNpr(subtotal)}`}
+        >
+          <Link
+            href="/checkout"
+            onClick={() => {
+              // optionally close the sheet if parent passed a handler
+              try { onOpenChange?.(false); } catch {}
+            }}
+          >
+            {`Checkout — ${formatNpr(subtotal)}`}
+          </Link>
+        </Button>
+      ) : (
+        <div className="h-3" />
+      )}
+      <div className="pt-[env(safe-area-inset-bottom)]" />
 </div>
 
       </SheetContent>

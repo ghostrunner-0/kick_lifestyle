@@ -22,8 +22,8 @@ export async function GET(req, { params }) {
     const includeParam = url.searchParams.get("include");
     const includeVariants = includeParam !== "none";
     const debug = url.searchParams.get("debug") === "1";
-
-    const slug = String(params?.slug || "").trim().toLowerCase();
+    const param = await params;
+    const slug = String(param?.slug || "").trim().toLowerCase();
     if (!slug) return response(false, 400, "Invalid or missing product slug");
 
     // 1) Find public product by slug
