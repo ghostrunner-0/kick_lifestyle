@@ -33,3 +33,7 @@ export const ADMIN_QR_PAYMENT_ALL = "/admin/qr";
 export const ADMIN_BANNERS_ADD = "/admin/banners/add";
 export const ADMIN_BANNERS_EDIT = (id) =>
   id ? `/admin/banners/edit/${id}` : "";
+
+export const ADMIN_ORDERS_ALL = "/admin/orders";
+export const ADMIN_ORDERS_EDIT =(id) =>
+  id ? `/admin/orders/${id}` : "";

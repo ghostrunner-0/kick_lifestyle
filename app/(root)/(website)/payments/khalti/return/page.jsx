@@ -12,47 +12,77 @@ export default function KhaltiReturnPage() {
   const search = useSearchParams();
   const dispatch = useDispatch();
 
-  const [state, setState] = useState({ loading: true, error: "", orderId: "" });
+  const [state, setState] = useState({
+    loading: true,
+    error: "",
+    orderId: "",
+    rawStatus: undefined,
+  });
+
+  const statusMessage = (s) => {
+    switch (s) {
+      case "Completed":
+        return "Verifying payment…";
+      case "Pending":
+        return "Payment is pending. Please wait a moment and refresh.";
+      case "User canceled":
+        return "You canceled the payment.";
+      case "Expired":
+        return "Payment link expired. Please try again.";
+      case "Refunded":
+      case "Partially Refunded":
+        return "Payment was refunded. No charge has been made.";
+      case "Initiated":
+        return "Payment initiated. Please wait while we confirm.";
+      default:
+        return "Payment failed or not completed.";
+    }
+  };
 
   useEffect(() => {
     const pidx = search.get("pidx");
-    // optional params: status, purchase_order_id, etc.
+    const purchase_order_id = search.get("purchase_order_id") || "";
+    const statusFromQuery = search.get("status") || "";
+
     if (!pidx) {
-      setState({ loading: false, error: "Missing payment reference.", orderId: "" });
+      setState({
+        loading: false,
+        error: "Missing payment reference.",
+        orderId: "",
+        rawStatus: statusFromQuery || undefined,
+      });
       return;
     }
+
     (async () => {
       try {
         const res = await fetch("/api/website/payments/khalti/verify", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pidx }),
+          body: JSON.stringify({ pidx, purchase_order_id }),
         });
         const json = await res.json();
 
         if (json?.success && json?.order?.display_order_id) {
-          // ✅ clear cart and go to thank-you
           dispatch(clearCart());
           router.replace(ORDERS_THANK_YOU_ROUTE(json.order.display_order_id));
           return;
         }
 
-        // Not completed (Pending / User canceled / Expired ...)
-        const status = json?.status || "Failed";
+        const kStatus = json?.status || statusFromQuery || "Failed";
         setState({
           loading: false,
-          error:
-            status === "Pending"
-              ? "Payment is pending. Please wait a moment and refresh."
-              : status === "User canceled"
-              ? "You canceled the payment."
-              : status === "Expired"
-              ? "Payment link expired. Please try again."
-              : "Payment failed or not completed.",
+          error: statusMessage(kStatus),
           orderId: "",
+          rawStatus: kStatus,
         });
       } catch (e) {
-        setState({ loading: false, error: e?.message || "Verification failed.", orderId: "" });
+        setState({
+          loading: false,
+          error: e?.message || "Verification failed.",
+          orderId: "",
+          rawStatus: statusFromQuery || undefined,
+        });
       }
     })();
   }, [dispatch, router, search]);
@@ -70,9 +100,18 @@ export default function KhaltiReturnPage() {
     <div className="max-w-xl mx-auto px-4 py-16 text-center">
       <h1 className="text-xl font-semibold mb-2">Payment status</h1>
       <p className="text-red-600 mb-6">{state.error}</p>
+
+      {state.rawStatus === "Pending" && (
+        <p className="text-sm text-slate-600 mb-6">
+          If this remains pending for more than a couple of minutes, please contact support with your order reference.
+        </p>
+      )}
+
       <div className="flex justify-center gap-3">
         <Button onClick={() => location.reload()}>Refresh</Button>
-        <Button variant="outline" onClick={() => router.push("/")}>Go to home</Button>
+        <Button variant="outline" onClick={() => router.push("/")}>
+          Go to home
+        </Button>
       </div>
     </div>
   );
