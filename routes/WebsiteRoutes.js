@@ -7,3 +7,5 @@ export const CATEGORY_VIEW_ROUTE = (slug) =>
   slug ? `/category/${slug}` : "";
 export const PRODUCT_VIEW_ROUTE = (slug) =>
   slug ? `/product/${slug}` : "";
+export const ORDERS_THANK_YOU_ROUTE = (order_id) =>
+  order_id ? `/orders/${order_id}` : "";

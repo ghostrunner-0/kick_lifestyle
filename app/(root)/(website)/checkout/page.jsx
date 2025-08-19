@@ -13,7 +13,9 @@ import {
   selectItems,
   selectSubtotal,
   setCoupon as setCouponAction,
+  clearCart, // ⬅️ import clearCart
 } from "@/store/cartSlice";
+import { ORDERS_THANK_YOU_ROUTE } from "@/routes/WebsiteRoutes";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -62,12 +64,8 @@ const formatNpr = (v) => {
   }
 };
 const sanitizePhone = (val) => (String(val || "").match(/\d+/g) || []).join("").slice(0, 10);
-
-// label resolver (fallback to saved if options not loaded yet)
 const getLabel = (options, id, fallback = "") =>
   options.find((o) => String(o.value) === String(id))?.label || fallback || "";
-
-// safe number parser
 const toNum = (v) => {
   const n = typeof v === "string" ? parseFloat(v) : Number(v);
   return Number.isFinite(n) ? n : 0;
@@ -98,7 +96,7 @@ function ComboBox({
           role="combobox"
           aria-expanded={open}
           disabled={disabled}
-          className={cn("w-full justify-between", className)}
+          className={cn("w-full justify-between cursor-pointer", className)}
         >
           <span className={selected ? "text-slate-900" : "text-slate-400"}>
             {selected || placeholder}
@@ -195,12 +193,12 @@ export default function CheckoutClient({ initialUser = null }) {
   /* Shipping (Pathao price plan) */
   const [ship, setShip] = useState({ price: 0, loading: false, error: null });
 
-  // ---- Persisted user from /getuser for user id/name/email in payload
+  // Persisted user from /getuser for user id/name/email in payload
   const [currentUser, setCurrentUser] = useState(null);
 
-  // ---- price-plan de-dupe & race guards ----
-  const lastPriceKeyRef = useRef(""); // avoid duplicate same-input calls
-  const latestReqRef = useRef(0);     // drop out-of-order responses
+  // price-plan de-dupe & race guards
+  const lastPriceKeyRef = useRef("");
+  const latestReqRef = useRef(0);
   const lastPricePlanReqRef = useRef(null);
   const lastPricePlanResRef = useRef(null);
 
@@ -285,14 +283,12 @@ export default function CheckoutClient({ initialUser = null }) {
       };
       if (areaId) body.recipient_area = Number(areaId);
 
-      // keep last request for metadata
       lastPricePlanReqRef.current = body;
 
       const { data } = await axios.post("/api/pathao/price-plan", body);
 
       if (reqId !== latestReqRef.current) return; // stale response, ignore
 
-      // keep last response for metadata
       lastPricePlanResRef.current = data;
 
       if (data && data.success === false) {
@@ -344,12 +340,11 @@ export default function CheckoutClient({ initialUser = null }) {
     [calcDeliveryPrice]
   );
 
-  /** Prefill helper (NO manual shipping calc here; area set will trigger watch) */
+  /** Prefill helper */
   const prefillFromUser = useCallback(
     async (u) => {
       if (!u) return;
 
-      // keep full user object for payload.user.id/email/name
       setCurrentUser(u);
 
       setSavedLabels({
@@ -385,7 +380,7 @@ export default function CheckoutClient({ initialUser = null }) {
       if (areaId) {
         form.setValue("area", areaId, { shouldValidate: true });
       }
-      // DO NOT call calc here; area set triggers watcher once.
+      // do not call calc here; watch on "area" handles it.
     },
     [form, fetchCities, fetchZones, fetchAreas]
   );
@@ -422,7 +417,6 @@ export default function CheckoutClient({ initialUser = null }) {
   useEffect(() => {
     const sub = form.watch(async (vals, { name }) => {
       if (name === "city") {
-        // reset deep chain, clear shipping & dedupe key
         form.setValue("zone", "");
         form.setValue("area", "");
         setAreaOptions([]);
@@ -433,7 +427,6 @@ export default function CheckoutClient({ initialUser = null }) {
       }
 
       if (name === "zone") {
-        // reset area when zone changes, clear shipping & dedupe key
         form.setValue("area", "");
         setShip({ price: 0, loading: false, error: null });
         lastPriceKeyRef.current = "";
@@ -442,13 +435,11 @@ export default function CheckoutClient({ initialUser = null }) {
       }
 
       if (name === "area") {
-        // RUN ONLY when area selected/loaded and payment is COD
         await maybeRecalc(vals.city, vals.zone, vals.area || null, vals.paymentMethod);
         return;
       }
 
       if (name === "paymentMethod") {
-        // payment toggled → calc if COD & we already have city/zone/area
         await maybeRecalc(vals.city, vals.zone, vals.area || null, vals.paymentMethod);
         return;
       }
@@ -594,134 +585,137 @@ export default function CheckoutClient({ initialUser = null }) {
   }, [paymentMethod, ship.loading, ship.error]);
 
   /* submit */
-  const onSubmit = async (values) => {
-    // guards
-    if (!isLoggedIn) {
-      router.push("/auth/login?next=/checkout");
+// inside CheckoutClient
+const onSubmit = async (values) => {
+  if (!isLoggedIn) {
+    router.push("/auth/login?next=/checkout");
+    return;
+  }
+  if (itemCount === 0) {
+    showToast("info", "Your cart is empty. Add items to continue.");
+    return;
+  }
+  if (couponState?.mode === "freeItem") {
+    const setVariant = new Set(items.map((it) => String(it?.variant?.id || "")));
+    if (!setVariant.has(String(couponState?.freeItem?.variantId))) {
+      showToast("error", "Coupon requires a specific variant in your cart.");
       return;
     }
-    if (itemCount === 0) {
-      router.push("/cart");
+  }
+  if (paymentMethod === "cod") {
+    if (ship.loading) {
+      showToast("info", "Hold on—calculating delivery price…");
       return;
     }
-    if (couponState?.mode === "freeItem") {
-      const setVariant = new Set(items.map((it) => String(it?.variant?.id || "")));
-      if (!setVariant.has(String(couponState?.freeItem?.variantId))) {
-        showToast("error", "Coupon requires a specific variant in your cart.");
-        return;
-      }
-    }
-    if (paymentMethod === "cod") {
-      if (ship.loading) {
-        showToast("info", "Hold on—calculating delivery price…");
-        return;
-      }
-      if (ship.error) {
-        showToast("error", "Fix delivery details to continue");
-        return;
-      }
-    }
-
-    // derive labels
-    const vals = form.getValues();
-    const cityLabel = getLabel(cityOptions, vals.city, savedLabels.city);
-    const zoneLabel = getLabel(zoneOptions, vals.zone, savedLabels.zone);
-    const areaLabel = getLabel(areaOptions, vals.area, savedLabels.area);
-
-    // ----- ORDER PAYLOAD (updated)
-    const payload = {
-      // required for server to link & optionally update user
-      user: {
-        id: currentUser?._id || currentUser?.id || "",                  // string (required by server)
-        email: currentUser?.email || authEmail || "",                   // string (required by server)
-        name: currentUser?.name || values.fullName.trim(),              // snapshot
-      },
-
-      // customer snapshot
-      customer: {
-        fullName: values.fullName.trim(),
-        phone: values.phone.trim(),
-      },
-
-      // address snapshot
-      address: {
-        cityId: values.city,
-        cityLabel,
-        zoneId: values.zone,
-        zoneLabel,
-        areaId: values.area,
-        areaLabel,
-        landmark: values.landmark.trim(),
-      },
-
-      // items snapshot
-      items: items.map((it) => ({
-        productId: it.productId,
-        variantId: it.variant?.id || null,
-        name: it.name,
-        variantName: it.variant?.name || null,
-        qty: it.qty,
-        price: it.price,
-        mrp: it.isFreeItem ? 0 : it.mrp,
-        image: it.image || it.variant?.image || undefined,
-      })),
-
-      // totals
-      amounts: {
-        subtotal,
-        discount: discountApplied,
-        shippingCost,
-        codFee,
-        total,
-      },
-
-      // payment + coupon
-      paymentMethod: values.paymentMethod,   // "cod" | "khalti" | "qr"
-      // payment: { status: "paid", provider: "...", providerRef: "..." } // pass only if you already captured payment
-      coupon: couponState ?? undefined,
-
-      // metadata (store price-plan inputs/outputs & price used)
-      metadata: {
-        pricePlan: {
-          request: lastPricePlanReqRef.current || null,
-          response: lastPricePlanResRef.current || null,
-          shippingPrice: shippingCost,
-        },
-      },
-
-      // server will compare & update user if these differ
-      userUpdates: {
-        name: values.fullName.trim(),
-        phone: values.phone.trim(),
-        address: values.landmark.trim(),
-        pathaoCityId: values.city,
-        pathaoCityLabel: cityLabel,
-        pathaoZoneId: values.zone,
-        pathaoZoneLabel: zoneLabel,
-        pathaoAreaId: values.area,
-        pathaoAreaLabel: areaLabel,
-      },
-    };
-
-    if (!payload.user.id || !payload.user.email) {
-      showToast("error", "Could not identify user. Please re-login.");
-      router.push("/auth/login?next=/checkout");
+    if (ship.error) {
+      showToast("error", "Fix delivery details to continue");
       return;
     }
+  }
 
-    try {
-      const { data } = await axios.post("/api/website/orders", payload, { withCredentials: true });
-      if (data?.success && data?.data?._id) {
-        showToast("success", "Order placed successfully!");
-        router.replace(`/orders/${data.data._id}`);
-      } else {
-        showToast("error", data?.message || "Failed to place order");
-      }
-    } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || "Failed to place order";
-      showToast("error", msg);
-    }
+  // derive labels for address (as you already do)
+  const vals = form.getValues();
+  const cityLabel = getLabel(cityOptions, vals.city, savedLabels.city);
+  const zoneLabel = getLabel(zoneOptions, vals.zone, savedLabels.zone);
+  const areaLabel = getLabel(areaOptions, vals.area, savedLabels.area);
+
+  const payload = {
+    user: {
+      id: currentUser?._id || currentUser?.id || "",
+      email: currentUser?.email || authEmail || "",
+      name: currentUser?.name || values.fullName.trim(),
+    },
+    customer: {
+      fullName: values.fullName.trim(),
+      phone: values.phone.trim(),
+    },
+    address: {
+      cityId: values.city,
+      cityLabel,
+      zoneId: values.zone,
+      zoneLabel,
+      areaId: values.area,
+      areaLabel,
+      landmark: values.landmark.trim(),
+    },
+    items: items.map((it) => ({
+      productId: it.productId,
+      variantId: it.variant?.id || null,
+      name: it.name,
+      variantName: it.variant?.name || null,
+      qty: it.qty,
+      price: it.price,
+      mrp: it.isFreeItem ? 0 : it.mrp,
+      image: it.image || it.variant?.image || undefined,
+    })),
+    amounts: {
+      subtotal,
+      discount: discountApplied,
+      // online payments don't include COD shipping/fee in your UI:
+      shippingCost: 0,
+      codFee: 0,
+      total: Math.max(0, subtotal - discountApplied),
+    },
+    paymentMethod: values.paymentMethod,
+    coupon: couponState ?? undefined,
+    metadata: {
+      pricePlan: {
+        request: lastPricePlanReqRef.current || null,
+        response: lastPricePlanResRef.current || null,
+        shippingPrice: 0,
+      },
+    },
+    userUpdates: {
+      name: values.fullName.trim(),
+      phone: values.phone.trim(),
+      address: values.landmark.trim(),
+      pathaoCityId: values.city,
+      pathaoCityLabel: cityLabel,
+      pathaoZoneId: values.zone,
+      pathaoZoneLabel: zoneLabel,
+      pathaoAreaId: values.area,
+      pathaoAreaLabel: areaLabel,
+    },
   };
+
+  if (!payload.user.id || !payload.user.email) {
+    showToast("error", "Could not identify user. Please re-login.");
+    router.push("/auth/login?next=/checkout");
+    return;
+  }
+
+  try {
+    if (paymentMethod === "khalti") {
+      const { data } = await axios.post(
+        "/api/website/payments/khalti/initiate",
+        payload,
+        { withCredentials: true }
+      );
+      if (data?.success && data?.payment_url) {
+        // 👉 Don't clear cart here. Redirect to Khalti.
+        window.location.href = data.payment_url;
+        return;
+      }
+      showToast("error", data?.message || "Failed to initiate Khalti payment");
+      return;
+    }
+
+    // ---- COD (existing) ----
+    const { data } = await axios.post("/api/website/orders", payload, { withCredentials: true });
+    if (data?.success && data?.data?._id) {
+      dispatch(clearCart());
+      const displayId = data?.data?.display_order_id || data?.data?._id;
+      showToast("success", `Order placed! ID: ${displayId}`);
+      router.replace(ORDERS_THANK_YOU_ROUTE(displayId));
+    } else {
+      showToast("error", data?.message || "Failed to place order");
+    }
+  } catch (e) {
+    const msg = e?.response?.data?.message || e?.message || "Failed to place order";
+    showToast("error", msg);
+  }
+};
+
 
   return (
     <div className="relative">

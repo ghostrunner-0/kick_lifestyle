@@ -1,4 +1,3 @@
-// models/Order.js
 import mongoose from "mongoose";
 
 const ItemSchema = new mongoose.Schema(
@@ -91,7 +90,7 @@ const OrderSchema = new mongoose.Schema(
       providerRef: String,   // gateway txn/ref id
     },
 
-    // Shipping (no status field)
+    // Shipping (no status enum)
     shipping: {
       carrier: { type: String, default: "pathao" },
       trackingId: String,
@@ -119,6 +118,11 @@ const OrderSchema = new mongoose.Schema(
 
     notes: String,
     orderNumber: { type: String, index: true },
+
+    // Display order fields
+    display_order_id: { type: String, required: true, unique: true, index: true, trim: true },
+    display_order_seq: { type: Number, required: true, index: true }, // 2000, 2001, ...
+    display_order_prefix: { type: String, required: true }, // AXC/BLQ/MNP/ZQX
   },
   { timestamps: true }
 );
