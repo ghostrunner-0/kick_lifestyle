@@ -14,7 +14,7 @@ import {
   Pencil,
 } from "lucide-react";
 import BreadCrumb from "@/components/application/admin/BreadCrumb";
-import { ADMIN_DASHBOARD } from "@/routes/AdminRoutes";
+import { ADMIN_DASHBOARD, ADMIN_ORDERS_EDIT } from "@/routes/AdminRoutes";
 import { showToast } from "@/lib/ShowToast";
 
 /* shadcn ui */
@@ -776,7 +776,7 @@ const bulkBookPathao = async () => {
 function RowActions({ id }) {
   return (
     <Button variant="ghost" size="sm" asChild aria-label="Edit order">
-      <a href={`#/orders/${id}/edit`}>
+      <a href={ADMIN_ORDERS_EDIT(id)}>
         <Pencil className="h-4 w-4" />
       </a>
     </Button>
