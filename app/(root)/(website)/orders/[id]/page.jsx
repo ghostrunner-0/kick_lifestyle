@@ -7,8 +7,10 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { CheckCircle2, Copy, ShoppingBag } from "lucide-react";
 import { showToast } from "@/lib/ShowToast";
 
-export default function ThankYouPage({ params }) {
-  const displayId = decodeURIComponent(params?.order_id || "").trim();
+export default async function ThankYouPage({ params }) {
+  const param = await params;
+  const displayId = decodeURIComponent(param?.id || "").trim();
+  console.log(param);
 
   const copyId = async () => {
     if (!displayId) return;

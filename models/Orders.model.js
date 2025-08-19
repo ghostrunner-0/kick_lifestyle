@@ -107,6 +107,7 @@ const OrderSchema = new mongoose.Schema(
         "processing",
         "pending payment",
         "payment Not Verified",
+        "Invalid Payment",
         "cancelled",
         "completed",
         "ready to pack",

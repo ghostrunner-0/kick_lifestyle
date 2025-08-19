@@ -1,28 +1,40 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
-    // Use remotePatterns instead of deprecated domains for Next.js 13+
+    // If you ever pass absolute URLs like http://localhost:3000/shared/...
+    // or http://localhost:3000/payments/... to <Image />, allow them here.
     remotePatterns: [
       {
         protocol: "http",
         hostname: "localhost",
-        port: "3000", // change to your dev port if different
-        pathname: "/shared/**",  // changed from /uploads/**
+        port: "3000",
+        pathname: "/shared/**",
       },
-      // Add your production domain if needed, e.g.:
+      {
+        protocol: "http",
+        hostname: "localhost",
+        port: "3000",
+        pathname: "/payments/**",
+      },
+      // Add production domain(s) if you serve from the same paths in prod:
       // {
       //   protocol: "https",
       //   hostname: "yourdomain.com",
-      //   pathname: "/shared/**",  // also change here if needed
+      //   pathname: "/shared/**",
+      // },
+      // {
+      //   protocol: "https",
+      //   hostname: "yourdomain.com",
+      //   pathname: "/payments/**",
       // },
     ],
   },
+
   async rewrites() {
     return [
-      {
-        source: "/shared/:path*",
-        destination: "/api/shared/:path*", // route to API serving shared files
-      },
+      // serve media from your API routes
+      { source: "/shared/:path*", destination: "/api/shared/:path*" },
+      { source: "/payments/:path*", destination: "/api/payments/:path*" },
     ];
   },
 };

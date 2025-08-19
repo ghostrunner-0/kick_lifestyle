@@ -76,7 +76,7 @@ const formatNpr = (v) => {
 };
 const sanitizePhone = (val) => (String(val || "").match(/\d+/g) || []).join("").slice(0, 10);
 const getLabel = (options, id, fallback = "") =>
-  options.find((o) => String(o.value) === String(id))?.label || fallback || "";
+  (options || []).find((o) => String(o.value) === String(id))?.label || fallback || "";
 const toNum = (v) => {
   const n = typeof v === "string" ? parseFloat(v) : Number(v);
   return Number.isFinite(n) ? n : 0;
@@ -95,7 +95,7 @@ function ComboBox({
 }) {
   const [open, setOpen] = useState(false);
   const selected =
-    options.find((o) => String(o.value) === String(value))?.label ||
+    (options || []).find((o) => String(o.value) === String(value))?.label ||
     valueLabel ||
     "";
 
@@ -121,7 +121,7 @@ function ComboBox({
           <CommandList>
             <CommandEmpty>{emptyText}</CommandEmpty>
             <CommandGroup>
-              {options.map((opt) => (
+              {(options || []).map((opt) => (
                 <CommandItem
                   key={opt.value}
                   value={opt.label}
@@ -214,12 +214,13 @@ export default function CheckoutClient({ initialUser = null }) {
   const lastPricePlanReqRef = useRef(null);
   const lastPricePlanResRef = useRef(null);
 
-  // ---- QR dialog state ----
+  // ---- QR dialog state (show BEFORE creating order) ----
   const [qrOpen, setQrOpen] = useState(false);
   const [qrConfig, setQrConfig] = useState(null); // { displayName, image: { url|path } }
-  const [createdOrder, setCreatedOrder] = useState(null);
   const [qrFile, setQrFile] = useState(null);
   const [qrUploading, setQrUploading] = useState(false);
+  const [qrPendingPayload, setQrPendingPayload] = useState(null); // order payload to create after proof chosen
+  const [createdOrder, setCreatedOrder] = useState(null); // after successful creation
 
   const loadQRConfig = useCallback(async () => {
     try {
@@ -231,51 +232,13 @@ export default function CheckoutClient({ initialUser = null }) {
     }
   }, []);
 
-  const payableFromOrder = (o) => Math.max(0, Number(o?.amounts?.total ?? 0));
-
-  const submitQRProof = async () => {
-    if (!createdOrder?._id) {
-      showToast("error", "No order to attach payment to.");
-      return;
-    }
-    if (!qrFile) {
-      showToast("error", "Please attach the payment screenshot.");
-      return;
-    }
-    try {
-      setQrUploading(true);
-      const fd = new FormData();
-      fd.append("file", qrFile);
-      fd.append("order_id", createdOrder._id);
-      fd.append("display_order_id", createdOrder.display_order_id || "");
-      fd.append("amount", String(payableFromOrder(createdOrder)));
-
-      const { data } = await axios.post("/api/website/payments/qr/upload", fd, {
-        withCredentials: true,
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-
-      if (data?.success) {
-        showToast("success", "Payment uploaded. We’ll verify it shortly.");
-        setQrOpen(false);
-        router.replace(ORDERS_THANK_YOU_ROUTE(createdOrder.display_order_id || createdOrder._id));
-      } else {
-        showToast("error", data?.message || "Upload failed");
-      }
-    } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || "Upload failed";
-      showToast("error", msg);
-    } finally {
-      setQrUploading(false);
-    }
-  };
+  const payableFromPayload = (p) =>
+    Math.max(0, Number(p?.amounts?.total ?? Math.max(0, subtotal - (couponState?.discountApplied || 0))));
 
   // Guards
   useEffect(() => {
     if (isHydrated && !isLoggedIn) router.replace("/auth/login?next=/checkout");
   }, [isHydrated, isLoggedIn, router]);
-
-  // (Do NOT redirect if cart empty; just show a notice)
 
   /* ---- Pathao fetch helpers ---- */
   const fetchCities = useCallback(async () => {
@@ -422,7 +385,7 @@ export default function CheckoutClient({ initialUser = null }) {
       }
     });
     return () => sub.unsubscribe();
-  }, [form, fetchZones, fetchAreas]);
+  }, [form, fetchZones, fetchAreas]); // (calc is referenced via maybeRecalc’s stable closure)
 
   const maybeRecalc = useCallback(
     async (cityId, zoneId, areaId, pay) => {
@@ -580,7 +543,10 @@ export default function CheckoutClient({ initialUser = null }) {
             },
           });
         }
-        showToast("success", `Coupon applied! Free item: ${d.freeItem.productName} — ${d.freeItem.variantName}`);
+        showToast(
+          "success",
+          `Coupon applied! Free item: ${d.freeItem.productName} — ${d.freeItem.variantName}`
+        );
         return;
       }
 
@@ -619,7 +585,7 @@ export default function CheckoutClient({ initialUser = null }) {
   };
 
   /* totals */
-  const { discountApplied, freeItemActive } = useMemo(() => {
+  const memoTotals = useMemo(() => {
     if (!couponState) return { discountApplied: 0, freeItemActive: false };
 
     if (couponState.mode === "freeItem" && couponState?.freeItem?.variantId) {
@@ -637,6 +603,9 @@ export default function CheckoutClient({ initialUser = null }) {
 
     return { discountApplied: 0, freeItemActive: false };
   }, [couponState, items, subtotal]);
+
+  const discountApplied = memoTotals.discountApplied;
+  const freeItemActive = memoTotals.freeItemActive;
 
   const codFee = paymentMethod === "cod" ? 50 : 0;
   const shippingCost = paymentMethod === "cod" ? ship.price : 0;
@@ -719,7 +688,7 @@ export default function CheckoutClient({ initialUser = null }) {
         discount: discountApplied,
         shippingCost: paymentMethod === "cod" ? shippingCost : 0,
         codFee: paymentMethod === "cod" ? codFee : 0,
-        total: paymentMethod === "cod" ? total : baseTotal, // online payments exclude COD shipping/fee
+        total: paymentMethod === "cod" ? total : baseTotal,
       },
       paymentMethod: values.paymentMethod, // "cod" | "khalti" | "qr"
       coupon: couponState ?? undefined,
@@ -765,22 +734,10 @@ export default function CheckoutClient({ initialUser = null }) {
       }
 
       if (paymentMethod === "qr") {
-        // 1) Create the order (status: payment not verified / pending payment)
-        const { data } = await axios.post("/api/website/orders", payload, { withCredentials: true });
-        if (!data?.success || !data?.data?._id) {
-          showToast("error", data?.message || "Failed to place order");
-          return;
-        }
-
-        // 2) Clear cart immediately to avoid duplicates
-        dispatch(clearCart());
-
-        // 3) Open QR dialog for proof upload
-        const orderDoc = data.data;
-        setCreatedOrder(orderDoc);
-        await loadQRConfig();
+        // 👉 OPEN DIALOG FIRST (no order creation yet)
+        setQrPendingPayload(payload);
+        if (!qrConfig) await loadQRConfig();
         setQrOpen(true);
-        showToast("info", `Order created: ${orderDoc.display_order_id}. Upload your payment screenshot.`);
         return;
       }
 
@@ -797,6 +754,73 @@ export default function CheckoutClient({ initialUser = null }) {
     } catch (e) {
       const msg = e?.response?.data?.message || e?.message || "Failed to place order";
       showToast("error", msg);
+    }
+  };
+
+  // Submit proof THEN create order, THEN upload, THEN finish
+  const submitQRProofAndPlaceOrder = async () => {
+    if (!qrPendingPayload) {
+      showToast("error", "Missing order details.");
+      return;
+    }
+    if (!qrFile) {
+      showToast("error", "Please attach the payment screenshot.");
+      return;
+    }
+    try {
+      setQrUploading(true);
+
+      // 1) Create order (status should be 'payment not verified' on server)
+      const { data: orderRes } = await axios.post("/api/website/orders", qrPendingPayload, {
+        withCredentials: true,
+      });
+      if (!orderRes?.success || !orderRes?.data?._id) {
+        showToast("error", orderRes?.message || "Failed to place order");
+        return;
+      }
+      const orderDoc = orderRes.data;
+      setCreatedOrder(orderDoc);
+
+      // 2) Upload screenshot linked to that order
+      const fd = new FormData();
+      fd.append("file", qrFile);
+      fd.append("order_id", orderDoc._id);
+      fd.append("display_order_id", orderDoc.display_order_id || "");
+      fd.append("amount", String(Math.max(0, Number(orderDoc?.amounts?.total ?? 0))));
+
+      const { data: uploadRes } = await axios.post("/api/website/payments/qr/upload", fd, {
+        withCredentials: true,
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      if (!uploadRes?.success) {
+        showToast("error", uploadRes?.message || "Upload failed");
+        // optional best-effort rollback:
+        try {
+          await axios.delete(`/api/website/orders/${orderDoc._id}?reason=qr_proof_failed`, { withCredentials: true });
+        } catch {}
+        return;
+      }
+
+      // 3) Success -> clear cart, close dialog, go to thank you
+      dispatch(clearCart());
+      setQrOpen(false);
+      showToast("success", "Payment uploaded. We’ll verify it shortly.");
+      router.replace(ORDERS_THANK_YOU_ROUTE(orderDoc.display_order_id || orderDoc._id));
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || "Failed to submit proof";
+      showToast("error", msg);
+    } finally {
+      setQrUploading(false);
+    }
+  };
+
+  // Close dialog without creating any order
+  const handleQrOpenChange = (open) => {
+    setQrOpen(open);
+    if (!open) {
+      setQrFile(null);
+      setQrPendingPayload(null);
+      setCreatedOrder(null);
     }
   };
 
@@ -1171,25 +1195,23 @@ export default function CheckoutClient({ initialUser = null }) {
         </div>
       </div>
 
-      {/* QR Payment Dialog */}
-      <Dialog open={qrOpen} onOpenChange={setQrOpen}>
+      {/* QR Payment Dialog (opens BEFORE order is created) */}
+      <Dialog open={qrOpen} onOpenChange={handleQrOpenChange}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-lg">Scan &amp; Pay</DialogTitle>
             <DialogDescription>
-              {createdOrder?.display_order_id
-                ? `Order: ${createdOrder.display_order_id}`
-                : "Complete the payment by scanning the QR below."}
+              Complete the payment by scanning the QR below. Your order will be created after you submit the screenshot.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             {/* QR display */}
             <div className="rounded-xl border bg-white p-3 grid place-items-center">
-              {qrConfig?.image?.url ? (
+              {qrConfig?.image?.url || qrConfig?.image?.path ? (
                 <Image
-                  src={qrConfig.image.url}
-                  alt={qrConfig.displayName || "QR"}
+                  src={qrConfig?.image?.url || qrConfig?.image?.path}
+                  alt={qrConfig?.displayName || "QR"}
                   width={260}
                   height={260}
                   className="rounded-md object-contain"
@@ -1229,15 +1251,15 @@ export default function CheckoutClient({ initialUser = null }) {
             <div className="text-sm">
               <span className="text-slate-500 mr-1">Total:</span>
               <span className="font-semibold">
-                {formatNpr(payableFromOrder(createdOrder))}
+                {formatNpr(payableFromPayload(qrPendingPayload))}
               </span>
             </div>
             <div className="flex gap-2">
-              <Button variant="ghost" onClick={() => setQrOpen(false)}>
+              <Button variant="ghost" onClick={() => handleQrOpenChange(false)}>
                 Close
               </Button>
-              <Button onClick={submitQRProof} disabled={qrUploading || !qrFile}>
-                {qrUploading ? "Uploading…" : "Submit Proof"}
+              <Button onClick={submitQRProofAndPlaceOrder} disabled={qrUploading || !qrFile}>
+                {qrUploading ? "Uploading…" : "Submit Proof & Place Order"}
               </Button>
             </div>
           </DialogFooter>
