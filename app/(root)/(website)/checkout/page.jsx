@@ -13,7 +13,7 @@ import {
   selectItems,
   selectSubtotal,
   setCoupon as setCouponAction,
-  clearCart, // ⬅️ import clearCart
+  clearCart,
 } from "@/store/cartSlice";
 import { ORDERS_THANK_YOU_ROUTE } from "@/routes/WebsiteRoutes";
 
@@ -40,12 +40,23 @@ import {
 } from "@/components/ui/command";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+
+import {
   ChevronsUpDown,
   Check,
   Banknote,
   Wallet,
   QrCode,
   ShoppingBag,
+  Info,
 } from "lucide-react";
 import { showToast } from "@/lib/ShowToast";
 
@@ -164,6 +175,7 @@ export default function CheckoutClient({ initialUser = null }) {
   const itemCount = items.reduce((n, it) => n + (it.qty || 0), 0);
   const subtotal = useSelector(selectSubtotal) || 0;
   const couponState = useSelector((s) => s?.cart?.coupon || null);
+  const isCartEmpty = itemCount === 0;
 
   // --- Form ---
   const form = useForm({
@@ -202,16 +214,70 @@ export default function CheckoutClient({ initialUser = null }) {
   const lastPricePlanReqRef = useRef(null);
   const lastPricePlanResRef = useRef(null);
 
+  // ---- QR dialog state ----
+  const [qrOpen, setQrOpen] = useState(false);
+  const [qrConfig, setQrConfig] = useState(null); // { displayName, image: { url|path } }
+  const [createdOrder, setCreatedOrder] = useState(null);
+  const [qrFile, setQrFile] = useState(null);
+  const [qrUploading, setQrUploading] = useState(false);
+
+  const loadQRConfig = useCallback(async () => {
+    try {
+      const { data } = await axios.get("/api/website/payments/qr/config", { withCredentials: true });
+      if (data?.success) setQrConfig(data.data);
+      else showToast("error", data?.message || "QR not configured");
+    } catch {
+      showToast("error", "QR not configured");
+    }
+  }, []);
+
+  const payableFromOrder = (o) => Math.max(0, Number(o?.amounts?.total ?? 0));
+
+  const submitQRProof = async () => {
+    if (!createdOrder?._id) {
+      showToast("error", "No order to attach payment to.");
+      return;
+    }
+    if (!qrFile) {
+      showToast("error", "Please attach the payment screenshot.");
+      return;
+    }
+    try {
+      setQrUploading(true);
+      const fd = new FormData();
+      fd.append("file", qrFile);
+      fd.append("order_id", createdOrder._id);
+      fd.append("display_order_id", createdOrder.display_order_id || "");
+      fd.append("amount", String(payableFromOrder(createdOrder)));
+
+      const { data } = await axios.post("/api/website/payments/qr/upload", fd, {
+        withCredentials: true,
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      if (data?.success) {
+        showToast("success", "Payment uploaded. We’ll verify it shortly.");
+        setQrOpen(false);
+        router.replace(ORDERS_THANK_YOU_ROUTE(createdOrder.display_order_id || createdOrder._id));
+      } else {
+        showToast("error", data?.message || "Upload failed");
+      }
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || "Upload failed";
+      showToast("error", msg);
+    } finally {
+      setQrUploading(false);
+    }
+  };
+
   // Guards
   useEffect(() => {
     if (isHydrated && !isLoggedIn) router.replace("/auth/login?next=/checkout");
   }, [isHydrated, isLoggedIn, router]);
 
-  useEffect(() => {
-    if (isHydrated && isLoggedIn && itemCount === 0) router.replace("/cart");
-  }, [isHydrated, isLoggedIn, itemCount, router]);
+  // (Do NOT redirect if cart empty; just show a notice)
 
-  // ---- Pathao fetch helpers ----
+  /* ---- Pathao fetch helpers ---- */
   const fetchCities = useCallback(async () => {
     setLoadingLoc((s) => ({ ...s, city: true }));
     try {
@@ -324,7 +390,40 @@ export default function CheckoutClient({ initialUser = null }) {
     }
   }, []);
 
-  // Call calc only when allowed (area present + COD), and not with same params twice
+  // Cascade loaders; ONLY calc on area & payment method changes
+  useEffect(() => {
+    const sub = form.watch(async (vals, { name }) => {
+      if (name === "city") {
+        form.setValue("zone", "");
+        form.setValue("area", "");
+        setAreaOptions([]);
+        setShip({ price: 0, loading: false, error: null });
+        lastPriceKeyRef.current = "";
+        await fetchZones(vals.city);
+        return;
+      }
+
+      if (name === "zone") {
+        form.setValue("area", "");
+        setShip({ price: 0, loading: false, error: null });
+        lastPriceKeyRef.current = "";
+        await fetchAreas(vals.zone);
+        return;
+      }
+
+      if (name === "area") {
+        await maybeRecalc(vals.city, vals.zone, vals.area || null, vals.paymentMethod);
+        return;
+      }
+
+      if (name === "paymentMethod") {
+        await maybeRecalc(vals.city, vals.zone, vals.area || null, vals.paymentMethod);
+        return;
+      }
+    });
+    return () => sub.unsubscribe();
+  }, [form, fetchZones, fetchAreas]);
+
   const maybeRecalc = useCallback(
     async (cityId, zoneId, areaId, pay) => {
       if (pay !== "cod" || !cityId || !zoneId || !areaId) {
@@ -380,7 +479,6 @@ export default function CheckoutClient({ initialUser = null }) {
       if (areaId) {
         form.setValue("area", areaId, { shouldValidate: true });
       }
-      // do not call calc here; watch on "area" handles it.
     },
     [form, fetchCities, fetchZones, fetchAreas]
   );
@@ -412,40 +510,6 @@ export default function CheckoutClient({ initialUser = null }) {
       }
     })();
   }, [isHydrated, authEmail, initialUser, prefillFromUser]);
-
-  // Cascade loaders; ONLY calc on area & payment method changes
-  useEffect(() => {
-    const sub = form.watch(async (vals, { name }) => {
-      if (name === "city") {
-        form.setValue("zone", "");
-        form.setValue("area", "");
-        setAreaOptions([]);
-        setShip({ price: 0, loading: false, error: null });
-        lastPriceKeyRef.current = "";
-        await fetchZones(vals.city);
-        return;
-      }
-
-      if (name === "zone") {
-        form.setValue("area", "");
-        setShip({ price: 0, loading: false, error: null });
-        lastPriceKeyRef.current = "";
-        await fetchAreas(vals.zone);
-        return;
-      }
-
-      if (name === "area") {
-        await maybeRecalc(vals.city, vals.zone, vals.area || null, vals.paymentMethod);
-        return;
-      }
-
-      if (name === "paymentMethod") {
-        await maybeRecalc(vals.city, vals.zone, vals.area || null, vals.paymentMethod);
-        return;
-      }
-    });
-    return () => sub.unsubscribe();
-  }, [form, fetchZones, fetchAreas, maybeRecalc]);
 
   /* coupon apply/remove (STRICT) */
   const applyCoupon = async () => {
@@ -576,146 +640,165 @@ export default function CheckoutClient({ initialUser = null }) {
 
   const codFee = paymentMethod === "cod" ? 50 : 0;
   const shippingCost = paymentMethod === "cod" ? ship.price : 0;
-  const total = Math.max(0, subtotal - discountApplied) + shippingCost + codFee;
+  const baseTotal = Math.max(0, subtotal - discountApplied);
+  const total = baseTotal + shippingCost + codFee;
 
   // Single flag to disable both buttons
   const isPlaceOrderDisabled = useMemo(() => {
+    if (isCartEmpty) return true;
     if (paymentMethod !== "cod") return false;
     return ship.loading || !!ship.error;
-  }, [paymentMethod, ship.loading, ship.error]);
+  }, [isCartEmpty, paymentMethod, ship.loading, ship.error]);
 
   /* submit */
-// inside CheckoutClient
-const onSubmit = async (values) => {
-  if (!isLoggedIn) {
-    router.push("/auth/login?next=/checkout");
-    return;
-  }
-  if (itemCount === 0) {
-    showToast("info", "Your cart is empty. Add items to continue.");
-    return;
-  }
-  if (couponState?.mode === "freeItem") {
-    const setVariant = new Set(items.map((it) => String(it?.variant?.id || "")));
-    if (!setVariant.has(String(couponState?.freeItem?.variantId))) {
-      showToast("error", "Coupon requires a specific variant in your cart.");
+  const onSubmit = async (values) => {
+    if (!isLoggedIn) {
+      router.push("/auth/login?next=/checkout");
       return;
     }
-  }
-  if (paymentMethod === "cod") {
-    if (ship.loading) {
-      showToast("info", "Hold on—calculating delivery price…");
+    if (isCartEmpty) {
+      showToast("info", "Your cart is empty. Add items to continue.");
       return;
     }
-    if (ship.error) {
-      showToast("error", "Fix delivery details to continue");
-      return;
-    }
-  }
-
-  // derive labels for address (as you already do)
-  const vals = form.getValues();
-  const cityLabel = getLabel(cityOptions, vals.city, savedLabels.city);
-  const zoneLabel = getLabel(zoneOptions, vals.zone, savedLabels.zone);
-  const areaLabel = getLabel(areaOptions, vals.area, savedLabels.area);
-
-  const payload = {
-    user: {
-      id: currentUser?._id || currentUser?.id || "",
-      email: currentUser?.email || authEmail || "",
-      name: currentUser?.name || values.fullName.trim(),
-    },
-    customer: {
-      fullName: values.fullName.trim(),
-      phone: values.phone.trim(),
-    },
-    address: {
-      cityId: values.city,
-      cityLabel,
-      zoneId: values.zone,
-      zoneLabel,
-      areaId: values.area,
-      areaLabel,
-      landmark: values.landmark.trim(),
-    },
-    items: items.map((it) => ({
-      productId: it.productId,
-      variantId: it.variant?.id || null,
-      name: it.name,
-      variantName: it.variant?.name || null,
-      qty: it.qty,
-      price: it.price,
-      mrp: it.isFreeItem ? 0 : it.mrp,
-      image: it.image || it.variant?.image || undefined,
-    })),
-    amounts: {
-      subtotal,
-      discount: discountApplied,
-      // online payments don't include COD shipping/fee in your UI:
-      shippingCost: 0,
-      codFee: 0,
-      total: Math.max(0, subtotal - discountApplied),
-    },
-    paymentMethod: values.paymentMethod,
-    coupon: couponState ?? undefined,
-    metadata: {
-      pricePlan: {
-        request: lastPricePlanReqRef.current || null,
-        response: lastPricePlanResRef.current || null,
-        shippingPrice: 0,
-      },
-    },
-    userUpdates: {
-      name: values.fullName.trim(),
-      phone: values.phone.trim(),
-      address: values.landmark.trim(),
-      pathaoCityId: values.city,
-      pathaoCityLabel: cityLabel,
-      pathaoZoneId: values.zone,
-      pathaoZoneLabel: zoneLabel,
-      pathaoAreaId: values.area,
-      pathaoAreaLabel: areaLabel,
-    },
-  };
-
-  if (!payload.user.id || !payload.user.email) {
-    showToast("error", "Could not identify user. Please re-login.");
-    router.push("/auth/login?next=/checkout");
-    return;
-  }
-
-  try {
-    if (paymentMethod === "khalti") {
-      const { data } = await axios.post(
-        "/api/website/payments/khalti/initiate",
-        payload,
-        { withCredentials: true }
-      );
-      if (data?.success && data?.payment_url) {
-        // 👉 Don't clear cart here. Redirect to Khalti.
-        window.location.href = data.payment_url;
+    if (couponState?.mode === "freeItem") {
+      const setVariant = new Set(items.map((it) => String(it?.variant?.id || "")));
+      if (!setVariant.has(String(couponState?.freeItem?.variantId))) {
+        showToast("error", "Coupon requires a specific variant in your cart.");
         return;
       }
-      showToast("error", data?.message || "Failed to initiate Khalti payment");
+    }
+    if (paymentMethod === "cod") {
+      if (ship.loading) {
+        showToast("info", "Hold on—calculating delivery price…");
+        return;
+      }
+      if (ship.error) {
+        showToast("error", "Fix delivery details to continue");
+        return;
+      }
+    }
+
+    // derive labels
+    const vals = form.getValues();
+    const cityLabel = getLabel(cityOptions, vals.city, savedLabels.city);
+    const zoneLabel = getLabel(zoneOptions, vals.zone, savedLabels.zone);
+    const areaLabel = getLabel(areaOptions, vals.area, savedLabels.area);
+
+    // ----- ORDER PAYLOAD (server generates display_order_id + seq)
+    const payload = {
+      user: {
+        id: currentUser?._id || currentUser?.id || "",
+        email: currentUser?.email || authEmail || "",
+        name: currentUser?.name || values.fullName.trim(),
+      },
+      customer: {
+        fullName: values.fullName.trim(),
+        phone: values.phone.trim(),
+      },
+      address: {
+        cityId: values.city,
+        cityLabel,
+        zoneId: values.zone,
+        zoneLabel,
+        areaId: values.area,
+        areaLabel,
+        landmark: values.landmark.trim(),
+      },
+      items: items.map((it) => ({
+        productId: it.productId,
+        variantId: it.variant?.id || null,
+        name: it.name,
+        variantName: it.variant?.name || null,
+        qty: it.qty,
+        price: it.price,
+        mrp: it.isFreeItem ? 0 : it.mrp,
+        image: it.image || it.variant?.image || undefined,
+      })),
+      amounts: {
+        subtotal,
+        discount: discountApplied,
+        shippingCost: paymentMethod === "cod" ? shippingCost : 0,
+        codFee: paymentMethod === "cod" ? codFee : 0,
+        total: paymentMethod === "cod" ? total : baseTotal, // online payments exclude COD shipping/fee
+      },
+      paymentMethod: values.paymentMethod, // "cod" | "khalti" | "qr"
+      coupon: couponState ?? undefined,
+      metadata: {
+        pricePlan: {
+          request: lastPricePlanReqRef.current || null,
+          response: lastPricePlanResRef.current || null,
+          shippingPrice: paymentMethod === "cod" ? shippingCost : 0,
+        },
+      },
+      userUpdates: {
+        name: values.fullName.trim(),
+        phone: values.phone.trim(),
+        address: values.landmark.trim(),
+        pathaoCityId: values.city,
+        pathaoCityLabel: cityLabel,
+        pathaoZoneId: values.zone,
+        pathaoZoneLabel: zoneLabel,
+        pathaoAreaId: values.area,
+        pathaoAreaLabel: areaLabel,
+      },
+    };
+
+    if (!payload.user.id || !payload.user.email) {
+      showToast("error", "Could not identify user. Please re-login.");
+      router.push("/auth/login?next=/checkout");
       return;
     }
 
-    // ---- COD (existing) ----
-    const { data } = await axios.post("/api/website/orders", payload, { withCredentials: true });
-    if (data?.success && data?.data?._id) {
-      dispatch(clearCart());
-      const displayId = data?.data?.display_order_id || data?.data?._id;
-      showToast("success", `Order placed! ID: ${displayId}`);
-      router.replace(ORDERS_THANK_YOU_ROUTE(displayId));
-    } else {
-      showToast("error", data?.message || "Failed to place order");
-    }
-  } catch (e) {
-    const msg = e?.response?.data?.message || e?.message || "Failed to place order";
-    showToast("error", msg);
-  }
-};
+    try {
+      if (paymentMethod === "khalti") {
+        const { data } = await axios.post(
+          "/api/website/payments/khalti/initiate",
+          payload,
+          { withCredentials: true }
+        );
+        if (data?.success && data?.payment_url) {
+          window.location.href = data.payment_url;
+          return;
+        }
+        showToast("error", data?.message || "Failed to initiate Khalti payment");
+        return;
+      }
 
+      if (paymentMethod === "qr") {
+        // 1) Create the order (status: payment not verified / pending payment)
+        const { data } = await axios.post("/api/website/orders", payload, { withCredentials: true });
+        if (!data?.success || !data?.data?._id) {
+          showToast("error", data?.message || "Failed to place order");
+          return;
+        }
+
+        // 2) Clear cart immediately to avoid duplicates
+        dispatch(clearCart());
+
+        // 3) Open QR dialog for proof upload
+        const orderDoc = data.data;
+        setCreatedOrder(orderDoc);
+        await loadQRConfig();
+        setQrOpen(true);
+        showToast("info", `Order created: ${orderDoc.display_order_id}. Upload your payment screenshot.`);
+        return;
+      }
+
+      // ---- COD (existing) ----
+      const { data } = await axios.post("/api/website/orders", payload, { withCredentials: true });
+      if (data?.success && data?.data?._id) {
+        dispatch(clearCart());
+        const displayId = data?.data?.display_order_id || data?.data?._id;
+        showToast("success", `Order placed! ID: ${displayId}`);
+        router.replace(ORDERS_THANK_YOU_ROUTE(displayId));
+      } else {
+        showToast("error", data?.message || "Failed to place order");
+      }
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || "Failed to place order";
+      showToast("error", msg);
+    }
+  };
 
   return (
     <div className="relative">
@@ -724,9 +807,18 @@ const onSubmit = async (values) => {
           <h1 className="text-xl font-semibold tracking-tight">Checkout</h1>
           <div className="text-sm text-slate-600 flex items-center gap-2">
             <ShoppingBag className="h-4 w-4" />
-            <span>{itemCount} item{itemCount === 1 ? "" : "s"}</span>
+            <span>
+              {itemCount} item{itemCount === 1 ? "" : "s"}
+            </span>
           </div>
         </div>
+
+        {isCartEmpty && (
+          <div className="mb-6 rounded-xl border bg-amber-50 px-4 py-3 text-amber-900 flex items-center gap-3">
+            <Info className="h-4 w-4" />
+            <p className="text-sm">Your cart is empty. Add items to proceed with checkout.</p>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
           <Card className="lg:col-span-7">
@@ -1003,24 +1095,23 @@ const onSubmit = async (values) => {
                   )}
 
                   {paymentMethod === "cod" && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-600">
-                        Delivery {ship.loading ? "(calculating…)" : ""}
-                      </span>
-                      <span className="font-medium">
-                        {ship.loading ? "…" : formatNpr(shippingCost)}
-                      </span>
-                    </div>
-                  )}
-                  {ship.error && paymentMethod === "cod" && (
-                    <div className="text-xs text-red-600">{ship.error}</div>
-                  )}
-
-                  {paymentMethod === "cod" && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-600">COD fee</span>
-                      <span className="font-medium">{formatNpr(50)}</span>
-                    </div>
+                    <>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-600">
+                          Delivery {ship.loading ? "(calculating…)" : ""}
+                        </span>
+                        <span className="font-medium">
+                          {ship.loading ? "…" : formatNpr(shippingCost)}
+                        </span>
+                      </div>
+                      {ship.error && (
+                        <div className="text-xs text-red-600">{ship.error}</div>
+                      )}
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-600">COD fee</span>
+                        <span className="font-medium">{formatNpr(50)}</span>
+                      </div>
+                    </>
                   )}
 
                   <Separator />
@@ -1039,7 +1130,9 @@ const onSubmit = async (values) => {
                   disabled={isPlaceOrderDisabled}
                   aria-busy={paymentMethod === "cod" && ship.loading}
                   title={
-                    ship.error
+                    isCartEmpty
+                      ? "Your cart is empty"
+                      : ship.error && paymentMethod === "cod"
                       ? "Fix delivery details to continue"
                       : paymentMethod === "cod" && ship.loading
                       ? "Calculating delivery price…"
@@ -1063,7 +1156,9 @@ const onSubmit = async (values) => {
             disabled={isPlaceOrderDisabled}
             aria-busy={paymentMethod === "cod" && ship.loading}
             title={
-              ship.error
+              isCartEmpty
+                ? "Your cart is empty"
+                : ship.error && paymentMethod === "cod"
                 ? "Fix delivery details to continue"
                 : paymentMethod === "cod" && ship.loading
                 ? "Calculating delivery price…"
@@ -1075,6 +1170,79 @@ const onSubmit = async (values) => {
           <div className="pt-[env(safe-area-inset-bottom)]" />
         </div>
       </div>
+
+      {/* QR Payment Dialog */}
+      <Dialog open={qrOpen} onOpenChange={setQrOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-lg">Scan &amp; Pay</DialogTitle>
+            <DialogDescription>
+              {createdOrder?.display_order_id
+                ? `Order: ${createdOrder.display_order_id}`
+                : "Complete the payment by scanning the QR below."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* QR display */}
+            <div className="rounded-xl border bg-white p-3 grid place-items-center">
+              {qrConfig?.image?.url ? (
+                <Image
+                  src={qrConfig.image.url}
+                  alt={qrConfig.displayName || "QR"}
+                  width={260}
+                  height={260}
+                  className="rounded-md object-contain"
+                />
+              ) : (
+                <Image
+                  src="/api/website/payments/qr/config/image"
+                  alt={qrConfig?.displayName || "QR"}
+                  width={260}
+                  height={260}
+                  className="rounded-md object-contain"
+                />
+              )}
+              {qrConfig?.displayName && (
+                <div className="mt-2 text-sm text-slate-600">
+                  Pay to: <span className="font-medium">{qrConfig.displayName}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Upload proof */}
+            <div className="space-y-2">
+              <Label htmlFor="qr-proof">Upload payment screenshot</Label>
+              <Input
+                id="qr-proof"
+                type="file"
+                accept="image/*"
+                onChange={(e) => setQrFile(e.target.files?.[0] || null)}
+              />
+              <p className="text-xs text-slate-500">
+                We’ll verify and move your order to processing.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="text-sm">
+              <span className="text-slate-500 mr-1">Total:</span>
+              <span className="font-semibold">
+                {formatNpr(payableFromOrder(createdOrder))}
+              </span>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="ghost" onClick={() => setQrOpen(false)}>
+                Close
+              </Button>
+              <Button onClick={submitQRProof} disabled={qrUploading || !qrFile}>
+                {qrUploading ? "Uploading…" : "Submit Proof"}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

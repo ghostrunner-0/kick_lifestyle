@@ -28,6 +28,8 @@ export const ADMIN_COUPONS_EDIT = (id) =>
 export const ADMIN_USERS_ALL = "/admin/customers";
 export const ADMIN_REVIEWS_ALL = "/admin/reviews";
 export const ADMIN_BANNERS_ALL = "/admin/banners";  
+export const ADMIN_QR_PAYMENT_ADD = "/admin/qr/add";  
+export const ADMIN_QR_PAYMENT_ALL = "/admin/qr";  
 export const ADMIN_BANNERS_ADD = "/admin/banners/add";
 export const ADMIN_BANNERS_EDIT = (id) =>
   id ? `/admin/banners/edit/${id}` : "";
