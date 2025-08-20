@@ -102,7 +102,8 @@ export async function GET(_req, { params }) {
     if (!admin) return json(false, 401, "admin not authenticated");
 
     await connectDB();
-    const id = String(params?.id || "");
+    const param  = await params;
+    const id = String(param?.id || "");
     if (!mongoose.isValidObjectId(id))
       return json(false, 400, "Invalid order id");
 

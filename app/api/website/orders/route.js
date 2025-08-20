@@ -10,8 +10,8 @@ import Counter from "@/models/Counter.model";
 /** Keep prefixes consistent everywhere (Khalti route uses same map) */
 const ORDER_PREFIX = Object.freeze({
   cod: "AXC",
-  khalti: "BLQ",
-  qr: "MNP",
+  khalti: "MNP",
+  qr: "BLQ",
   default: "ZQX",
 });
 

@@ -1,9 +1,10 @@
 // /app/api/cart/reprice/route.js
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
-import Product from "@/models/Product";            // adjust path
-import ProductVariant from "@/models/ProductVariant"; // adjust path
-import connectDB from "@/lib/connectDB"; // your Mongo connection util
+import Product from "@/models/Product.model";            // adjust path
+import ProductVariant from "@/models/ProductVariant.model"; // adjust path
+import { connectDB } from "@/lib/DB";
+
 
 const priceOf = (doc) => {
   // choose the field you actually use
