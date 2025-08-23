@@ -136,6 +136,35 @@ const slideUp = {
   exit: { opacity: 0, y: 12, transition: { duration: 0.2 } },
 };
 
+/* NEW: staggered list + item variants */
+const listStagger = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: { when: "beforeChildren", staggerChildren: 0.06 },
+  },
+};
+const item = {
+  hidden: { opacity: 0, y: 10 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.28 } },
+};
+
+/* NEW: animated price flip on change */
+const AnimatedPrice = ({ value, className = "" }) => (
+  <AnimatePresence mode="popLayout">
+    <motion.span
+      key={value}
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -6 }}
+      transition={{ duration: 0.22 }}
+      className={className}
+    >
+      {value}
+    </motion.span>
+  </AnimatePresence>
+);
+
 /* stars + utilities for Reviews */
 function Stars({ value = 0, size = 16, className = "" }) {
   const full = Math.floor(value);
@@ -414,9 +443,19 @@ function ReviewsTab({ productId, animateUI }) {
       </div>
 
       {/* List */}
-      <div className="space-y-4">
+      <motion.div
+        className="space-y-4"
+        variants={listStagger}
+        initial={animateUI ? "hidden" : false}
+        animate={animateUI ? "show" : false}
+      >
         {items.map((r) => (
-          <div key={r._id} className="rounded-xl border p-4">
+          <motion.div
+            key={r._id}
+            className="rounded-xl border p-4"
+            variants={item}
+            layout
+          >
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
@@ -429,7 +468,7 @@ function ReviewsTab({ productId, animateUI }) {
               </div>
             </div>
             <p className="text-sm mt-3 leading-6">{r.review}</p>
-          </div>
+          </motion.div>
         ))}
 
         {isLoadingList && items.length === 0 && (
@@ -454,7 +493,7 @@ function ReviewsTab({ productId, animateUI }) {
             </Button>
           </div>
         )}
-      </div>
+      </motion.div>
     </motion.div>
   );
 }
@@ -686,7 +725,7 @@ export default function ProductPage() {
                       </div>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <span>
-                          {formatPrice(priceNow)}{" "}
+                          <AnimatedPrice value={formatPrice(priceNow)} />{" "}
                           {priceWas ? (
                             <span className="ml-1 line-through">
                               {formatPrice(priceWas)}
@@ -865,7 +904,7 @@ export default function ProductPage() {
               <div className="bg-white/95 dark:bg-neutral-900/95 supports-[backdrop-filter]:backdrop-blur rounded-t-lg shadow-lg border-t px-3 py-2">
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-base font-semibold">
-                    {formatPrice(priceNow)}
+                    <AnimatedPrice value={formatPrice(priceNow)} />
                   </div>
                   <Button
                     className="rounded-full h-9 px-4 text-sm"
@@ -988,12 +1027,14 @@ export default function ProductPage() {
                       {...(animateUI ? fadeIn : {})}
                     >
                       {gallery.map((g, i) => (
-                        <button
+                        <motion.button
                           key={g?._id || g?.path || i}
                           onClick={() => {
                             mainSwiperRef.current?.slideTo(i);
                             setActiveImg(i);
                           }}
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.98 }}
                           className={`relative w-14 h-14 md:w-16 md:h-16 rounded-md border overflow-hidden transition ${
                             i === activeImg
                               ? "ring-2 ring-yellow-300"
@@ -1012,7 +1053,7 @@ export default function ProductPage() {
                           ) : (
                             <div className="w-full h-full bg-muted" />
                           )}
-                        </button>
+                        </motion.button>
                       ))}
                     </motion.div>
                     <ScrollBar orientation="horizontal" />
@@ -1051,7 +1092,7 @@ export default function ProductPage() {
 
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                 <div className="text-2xl font-bold">
-                  {formatPrice(priceNow)}
+                  <AnimatedPrice value={formatPrice(priceNow)} />
                 </div>
                 {priceWas && (
                   <div className="text-sm text-muted-foreground line-through">
@@ -1087,10 +1128,12 @@ export default function ProductPage() {
                       const img = getVariantHero(v, heroSrc);
                       const selected = i === selectedIdx;
                       return (
-                        <button
+                        <motion.button
                           key={v?._id || i}
                           onClick={() => onVariantClick(i)}
                           type="button"
+                          whileHover={{ scale: 1.06 }}
+                          whileTap={{ scale: 0.97 }}
                           className={`relative h-10 w-10 rounded-full overflow-hidden border ${
                             selected
                               ? "ring-2 ring-offset-2 ring-yellow-300"
@@ -1110,7 +1153,7 @@ export default function ProductPage() {
                           ) : (
                             <div className="h-full w-full bg-muted" />
                           )}
-                        </button>
+                        </motion.button>
                       );
                     })}
                   </div>

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/DB";
-import Product from "@/models/Product";
-import ProductVariant from "@/models/ProductVariant";
-import Category from "@/models/Category";
+import Product from "@/models/Product.model";
+import ProductVariant from "@/models/ProductVariant.model";
+import Category from "@/models/Category.model";
 
 function escRegex(s = "") {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
