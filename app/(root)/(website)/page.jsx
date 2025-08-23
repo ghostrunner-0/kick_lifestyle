@@ -1,71 +1,103 @@
-// app/page.jsx
-"use client";
+import HomeClient from "./HomeClient";
+import Script from "next/script";
 
-import { useEffect, useMemo, useState } from "react";
-import axios from "axios";
+const BRAND = "KICK";                         // short brand for titles
+const BRAND_LONG = "Kick Lifestyle";          // full brand for copy
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://kick.com.np";
 
-import Banner from "@/components/application/website/Banner";
-import CategoryBanner from "@/components/application/website/CategoryBanner";
-import Trusted from "@/components/application/website/Trusted";
-import BestSellers from "@/components/application/website/BestSellers";
-import ProductGrid from "@/components/application/website/ProductGrid";
+export const metadata = {
+  metadataBase: new URL(SITE_URL),
+  title: `Best Earbuds in Nepal | ${BRAND}`,
+  description:
+    `${BRAND_LONG} by Kumod Begwani brings premium true wireless earbuds, smartwatches, and tech accessories to Nepal — cutting-edge features, great prices, and trusted quality. #ProudlyNepali`,
+  keywords: [
+    "best earbuds in Nepal",
+    "true wireless earbuds Nepal",
+    "TWS Nepal",
+    "noise cancellation earbuds Nepal",
+    "smart watch Nepal",
+    "tech accessories Nepal",
+    "Kick Lifestyle",
+    "Kumod Begwani",
+  ],
+  alternates: { canonical: "/" },
+  openGraph: {
+    title: `Best Earbuds in Nepal | ${BRAND}`,
+    description:
+      `${BRAND_LONG} is redefining tech accessories in Nepal with premium TWS earbuds (ZenBuds, Buds S Pro) and smart watches at honest prices.`,
+    url: "/",
+    type: "website",
+    siteName: BRAND_LONG,
+    images: [
+      {
+        url: "/og/home.jpg",      // change if you have a better OG image
+        width: 1200,
+        height: 630,
+        alt: `${BRAND_LONG} – Best Earbuds in Nepal`,
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `Best Earbuds in Nepal | ${BRAND}`,
+    description:
+      `Shop premium TWS earbuds and smartwatches from ${BRAND_LONG}. “Tune into Zen.” #ProudlyNepali`,
+    images: ["/og/home.jpg"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true },
+  },
+  category: "technology",
+};
 
-import { useCategories } from "@/components/providers/CategoriesProvider";
-import { useProducts, deriveKey } from "@/components/providers/ProductProvider";
+export default function Page() {
+  // JSON-LD: WebSite + Organization (uses your provided info)
+  const ldWebsite = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: BRAND_LONG,
+    url: SITE_URL,
+    inLanguage: "en",
+    potentialAction: {
+      "@type": "SearchAction",
+      target: `${SITE_URL}/search?q={search_term_string}`,
+      "query-input": "required name=search_term_string",
+    },
+  };
 
-export default function Home() {
-  const { categories, isLoading: catLoading } = useCategories();
-  const { setActiveKey, products, isLoading: prodLoading } = useProducts();
-
-  const [banners, setBanners] = useState([]);
-  const [bannerLoading, setBannerLoading] = useState(true);
-
-  const initialActive = useMemo(() => {
-    if (!categories?.length) return null;
-    return deriveKey(categories[0]);
-  }, [categories]);
-
-  // Banners (separate endpoint)
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data } = await axios.get(`/api/website/banners?active=true`);
-        if (data?.success) {
-          setBanners(
-            [...data.data].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-          );
-        } else {
-          setBanners([]);
-        }
-      } catch {
-        setBanners([]);
-      } finally {
-        setBannerLoading(false);
-      }
-    })();
-  }, []);
-
-  // When user changes category tab
-  const handleCategoryChange = (key) => {
-    setActiveKey(key); // ProductProvider fetches for this key
+  const ldOrg = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: BRAND_LONG,
+    alternateName: BRAND,
+    url: SITE_URL,
+    // Add your real logo URL if available:
+    // logo: `${SITE_URL}/logo.svg`,
+    slogan: "Tune into Zen",
+    founder: {
+      "@type": "Person",
+      name: "Kumod Begwani",
+      jobTitle: "Founder",
+    },
+    // Add social profiles if/when you have them:
+    // sameAs: ["https://www.facebook.com/...", "https://www.instagram.com/..."]
   };
 
   return (
-    <main>
-      <Banner banners={banners} loading={bannerLoading} />
-
-      {/* Categories from provider */}
-      <CategoryBanner loading={catLoading} categories={categories} />
-
-      <BestSellers
-        categories={categories}
-        initialActive={initialActive}
-        onChange={handleCategoryChange}
+    <>
+      <Script
+        id="ld-website"
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(ldWebsite) }}
       />
-
-      <ProductGrid products={products} loading={prodLoading} />
-
-      <Trusted />
-    </main>
+      <Script
+        id="ld-organization"
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(ldOrg) }}
+      />
+      <HomeClient />
+    </>
   );
 }

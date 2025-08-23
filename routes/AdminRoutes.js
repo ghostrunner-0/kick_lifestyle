@@ -32,6 +32,8 @@ export const ADMIN_QR_PAYMENT_ADD = "/admin/qr/add";
 export const ADMIN_QR_PAYMENT_ALL = "/admin/qr";  
 export const ADMIN_BANNERS_ADD = "/admin/banners/add";
 export const ADMIN_WEBSITE_WARRANTY = "/admin/website-warranty";
+export const ADMIN_OFFLINE_SHOPS = "/admin/offline-shops";
+export const ADMIN_add_customer_service = "/admin/customer-service/add";
 export const ADMIN_BANNERS_EDIT = (id) =>
   id ? `/admin/banners/edit/${id}` : "";
 

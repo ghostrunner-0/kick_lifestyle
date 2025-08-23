@@ -3,12 +3,14 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import CartSidebar from "./CartSidebar";
+import SearchSidebar from "@/components/application/SearchSidebar";
 
+import { useSelector } from "react-redux";
 import { selectCartCount } from "@/store/cartSlice";
-// Logos
 
+// Logos
 import LOGO_BLACK from "@/public/assets/images/logo-black.png";
 import LOGO_WHITE from "@/public/assets/images/logo-white.png";
 
@@ -22,7 +24,6 @@ import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/
 
 // Categories (from single global fetch)
 import { useCategories } from "@/components/providers/CategoriesProvider";
-import { useSelector } from "react-redux";
 
 /* ------------------ Static (non-category) items ------------------ */
 const STATIC_NAV = [
@@ -49,15 +50,51 @@ const toTitle = (s) =>
   (s || "").trim().replace(/\s+/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
 
 export default function Header() {
-const cartCount = useSelector(selectCartCount);
+  const router = useRouter();
+  const cartCount = useSelector(selectCartCount);
   const [isSticky, setIsSticky] = useState(false);
-  const [cartOpen, setCartOpen] = useState(false); // <-- controls CartSidebar
+  const [cartOpen, setCartOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [products, setProducts] = useState([]);
   const pathname = usePathname();
   const isHome = pathname === "/" || pathname === WEBSITE_HOME;
 
   // categories (single fetch globally)
   const { categories, isLoading } = useCategories();
 
+  // -------- auth-based account destination --------
+  const [accountHref, setAccountHref] = useState("/auth/login");
+  const [accountLabel, setAccountLabel] = useState("Login / Register");
+
+  useEffect(() => {
+    let cancelled = false;
+    async function resolveAccount() {
+      try {
+        const res = await fetch("/api/auth/me", { credentials: "include" });
+        if (!res.ok) throw new Error("not logged in");
+        const json = await res.json();
+        const user = json?.data || json?.user || null;
+        if (!user) throw new Error("no user");
+        const isAdmin =
+          user?.isAdmin === true ||
+          user?.role === "admin" ||
+          (Array.isArray(user?.roles) && user.roles.includes("admin"));
+        if (!cancelled) {
+          setAccountHref(isAdmin ? "/admin/dashboard" : "/account");
+          setAccountLabel(isAdmin ? "Admin Dashboard" : "My Account");
+        }
+      } catch {
+        if (!cancelled) {
+          setAccountHref("/auth/login");
+          setAccountLabel("Login / Register");
+        }
+      }
+    }
+    resolveAccount();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Sticky only on home
   useEffect(() => {
     if (!isHome) return;
     const onScroll = () => setIsSticky(window.scrollY > 8);
@@ -72,6 +109,32 @@ const cartCount = useSelector(selectCartCount);
       .filter((c) => c?.showOnWebsite)
       .map((c) => ({ label: toTitle(c?.name), href: CATEGORY_VIEW_ROUTE(c?.slug) }));
   }, [categories]);
+
+  // ---------- Load product list for search (update index whenever this changes) ----------
+  useEffect(() => {
+    let cancel = false;
+    async function load() {
+      try {
+        // Replace with your real API. Expecting: { products: [...] }
+        const res = await fetch("/api/website/search-index");
+        const json = await res.json();
+        if (!cancel) setProducts(json?.products || []);
+      } catch {
+        // fallback: try another endpoint or leave empty
+        if (!cancel) setProducts([]);
+      }
+    }
+    load();
+    return () => { cancel = true; };
+  }, []);
+
+  // Navigate when a product is selected from search
+  const handleSelectProduct = (p) => {
+    const slug = p?.slug || p?.data?.slug;
+    const id = p?.id || p?.product_id || p?._id;
+    const href = slug ? `/product/${slug}` : id ? `/product/${id}` : "/";
+    router.push(href);
+  };
 
   /* ------------------ Same width/padding everywhere ------------------ */
   const containerMaxW = "max-w-[1600px]";
@@ -107,10 +170,7 @@ const cartCount = useSelector(selectCartCount);
 
               <SheetContent
                 side="left"
-                className="
-                  w-[80%] sm:w-[380px] p-0 flex flex-col
-                  [&>button.absolute.right-4.top-4]:hidden
-                "
+                className="w-[80%] sm:w-[380px] p-0 flex flex-col [&>button.absolute.right-4.top-4]:hidden"
               >
                 {/* Drawer header */}
                 <div className="flex items-center justify-between px-4 py-3 border-b bg-white">
@@ -120,6 +180,18 @@ const cartCount = useSelector(selectCartCount);
                       <span className="sr-only">Close</span>✕
                     </button>
                   </SheetClose>
+                </div>
+
+                {/* Quick search button in the drawer */}
+                <div className="p-3 border-b">
+                  <Button
+                    onClick={() => setSearchOpen(true)}
+                    variant="outline"
+                    className="w-full justify-start gap-2"
+                  >
+                    <Search className="h-4 w-4" />
+                    <span>Search products</span>
+                  </Button>
                 </div>
 
                 {/* Sidebar nav */}
@@ -180,12 +252,12 @@ const cartCount = useSelector(selectCartCount);
                   <div className="p-3">
                     <SheetClose asChild>
                       <Link
-                        href="/auth/login"
+                        href={accountHref}
                         className="flex items-center justify-center gap-2 rounded-lg border bg-white hover:bg-muted h-11 px-4 text-sm font-medium"
-                        title="Login / Register"
+                        title={accountLabel}
                       >
                         <User className="h-5 w-5" />
-                        <span>Login / Register</span>
+                        <span>{accountLabel}</span>
                       </Link>
                     </SheetClose>
                   </div>
@@ -228,7 +300,7 @@ const cartCount = useSelector(selectCartCount);
                       aria-haspopup="menu"
                     >
                       <span className="whitespace-nowrap">{item.label}</span>
-                      <ChevronDown className={`h-4 w-4 transition-transform duration-500 group-hover:rotate-180 ${iconCls}`} />
+                      <ChevronDown className={`h-4 w-4 transition-transform duration-500 group-hover:rotate-180 ${textCls}`} />
                     </button>
 
                     <div className="invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all duration-150 absolute left-1/2 -translate-x-1/2 mt-3 min-w-[240px] rounded-md border bg-white shadow-lg">
@@ -258,18 +330,37 @@ const cartCount = useSelector(selectCartCount);
 
           {/* Right icons */}
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" className={`hidden lg:inline-flex hover:bg-transparent ${iconCls}`} aria-label="Search" title="Search">
+            {/* Desktop search opens the sidebar (the sidebar includes the input) */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`hidden lg:inline-flex hover:bg-transparent ${textCls}`}
+              aria-label="Search"
+              title="Search"
+              onClick={() => setSearchOpen(true)}
+            >
               <Search className="h-5 w-5" />
             </Button>
-            <Button variant="ghost" size="icon" className={`hidden lg:inline-flex hover:bg-transparent ${iconCls}`} aria-label="Account" title="Account">
-              <User className="h-5 w-5" />
+
+            {/* Account */}
+            <Button
+              asChild
+              variant="ghost"
+              size="icon"
+              className={`hidden lg:inline-flex hover:bg-transparent ${textCls}`}
+              aria-label="Account"
+              title={accountLabel}
+            >
+              <Link href={accountHref}>
+                <User className="h-5 w-5" />
+              </Link>
             </Button>
 
             {/* Cart opens the sidebar */}
             <button
               type="button"
               onClick={() => setCartOpen(true)}
-              className={`relative inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-md ${iconCls}`}
+              className={`relative inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-md ${textCls}`}
               aria-label="Cart"
               title="Cart"
             >
@@ -284,8 +375,15 @@ const cartCount = useSelector(selectCartCount);
         </div>
       </header>
 
-      {/* Mounted once so it can be controlled from the header */}
+      {/* Sidebars mounted once for control */}
       <CartSidebar open={cartOpen} onOpenChange={setCartOpen} />
+      <SearchSidebar
+        open={searchOpen}
+        onOpenChange={setSearchOpen}
+        products={products}                  // 🔁 Fuse.js index rebuilds when this changes
+        onSelectProduct={handleSelectProduct}
+        accent="#fcba17"
+      />
 
       {/* underline animation */}
       <style jsx global>{`
@@ -298,7 +396,7 @@ const cartCount = useSelector(selectCartCount);
           bottom: -2px;
           height: 2px;
           width: 0;
-          background: ${hoverUnderlineColor};
+          background: var(--primary);
           transition: width 500ms ease;
         }
         .nav-link-underline:hover::after, .group:hover .nav-link-underline::after { width: 100%; }

@@ -45,7 +45,7 @@ const WarrantyRegistrationSchema = new Schema(
 
 // helpful indexes
 WarrantyRegistrationSchema.index({ "items.serial": 1 }, { unique: true });
-WarrantyRegistrationSchema.index({ orderId: 1 }, { unique: true, sparse: true });
+// WarrantyRegistrationSchema.index({ orderId: 1 }, { unique: true, sparse: true });
 WarrantyRegistrationSchema.index({ "customer.phone": 1, createdAt: -1 });
 WarrantyRegistrationSchema.index({ channel: 1, createdAt: -1 });
 

@@ -119,3 +119,41 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* smooth scroll + hide scrollbars utility */
+html {
+  scroll-behavior: smooth;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* marquee */
+@keyframes marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+.animate-marquee {
+  animation: marquee 26s linear infinite;
+}
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
+/* radar */
+@keyframes radar-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.animate-radar-spin {
+  animation: radar-spin 12s linear infinite;
+}
