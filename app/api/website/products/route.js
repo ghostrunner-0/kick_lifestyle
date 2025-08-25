@@ -109,6 +109,7 @@ export async function GET(req) {
           modelNumber: 1,
           createdAt: 1,
           category: 1,
+          stock:1,
         },
       },
       {

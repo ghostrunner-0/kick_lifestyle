@@ -4,7 +4,7 @@ import Image from "next/image";
 
 const Loading = () => {
   return (
-    <div className="h-screen w-screen flex items-center justify-center bg-white animate-pulse">
+    <div className="h-screen w-screen flex items-center justify-center animate-pulse">
       <Image
         src={loadingImg}
         width={80}

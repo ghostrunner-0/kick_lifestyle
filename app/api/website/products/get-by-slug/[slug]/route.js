@@ -33,7 +33,7 @@ export async function GET(req, { params }) {
       deletedAt: null,
     })
       .select(
-        "_id name slug shortDesc category mrp specialPrice warrantyMonths showInWebsite productMedia descImages heroImage additionalInfo modelNumber createdAt updatedAt"
+        "_id name slug shortDesc category mrp specialPrice warrantyMonths stock showInWebsite productMedia descImages heroImage additionalInfo modelNumber createdAt updatedAt"
       )
       // Do NOT filter category visibility here; we'll report a flag instead.
       .populate({

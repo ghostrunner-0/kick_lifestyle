@@ -22,7 +22,7 @@ export default function Layout({ children }) {
             <ProductProvider>
               <Header />
               <main>{children}</main>
-              <Footer />
+              <Footer/>
             </ProductProvider>
           </CategoriesProvider>
         </ReactQueryProvider>

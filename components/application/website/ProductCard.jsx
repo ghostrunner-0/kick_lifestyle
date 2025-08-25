@@ -1,15 +1,22 @@
 // components/application/website/ProductCard.jsx
 "use client";
 
-import React, { useMemo, useState, useCallback, useId, useRef } from "react";
+import React, {
+  useMemo,
+  useState,
+  useCallback,
+  useId,
+  useRef,
+  useEffect,
+} from "react";
 import { showToast } from "@/lib/ShowToast";
 import Link from "next/link";
 import Image from "next/image";
-import { useDispatch } from "react-redux";
-import { addItem } from "@/store/cartSlice";
+import { useDispatch, useSelector } from "react-redux";
+import { addItem, setQty, selectItems } from "@/store/cartSlice";
 
 import { Button } from "@/components/ui/button";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { ScrollArea } from "@/components/ui/scroll-area"; // no ScrollBar
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
@@ -19,16 +26,19 @@ import {
 } from "@/components/ui/tooltip";
 import { ShoppingCart } from "lucide-react";
 import { PRODUCT_VIEW_ROUTE } from "@/routes/WebsiteRoutes";
+import useEmblaCarousel from "embla-carousel-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 /* Brand + helpers */
 const BRAND = "#fcba17";
 const BRAND_HOVER = "#e9ae12";
+const PLACEHOLDER_SRC = "/placeholder.png";
 
 const toNum = (v) => (typeof v === "string" ? Number(v) : v);
 
 const formatPrice = (value) => {
   const n = toNum(value);
-  if (typeof n !== "number" || Number.isNaN(n)) return "";
+  if (!Number.isFinite(n)) return "";
   try {
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
@@ -48,7 +58,7 @@ const percentOff = (mrp, sp) => {
     : null;
 };
 
-// Try common stock fields and normalize to a number or null (unknown)
+// Normalize stock from common fields
 const readStock = (obj) => {
   if (!obj) return null;
   const raw =
@@ -62,13 +72,6 @@ const readStock = (obj) => {
   return Number.isFinite(n) ? n : null;
 };
 
-/**
- * Props:
- * - product
- * - className?: string
- * - onAddToCart?: (payload) => void
- * - onVariantChange?: (variant|null) => void
- */
 export default function ProductCard({
   product,
   className = "",
@@ -92,8 +95,11 @@ export default function ProductCard({
   } = product;
 
   const productHref = PRODUCT_VIEW_ROUTE(slug);
+  const cartLines = useSelector(selectItems);
 
-  const [selectedIdx, setSelectedIdx] = useState(-1);
+  const [selectedIdx, setSelectedIdx] = useState(() =>
+    variants.length ? 0 : -1
+  );
   const groupId = useId();
 
   const activeVariant = useMemo(
@@ -101,16 +107,47 @@ export default function ProductCard({
     [selectedIdx, variants]
   );
 
-  // Image (hero first; only change after variant select)
-  const primaryImage =
-    (activeVariant &&
-      (activeVariant.productGallery?.[0]?.path ||
-        activeVariant.swatchImage?.path)) ||
-    heroImage?.path ||
-    productMedia?.[0]?.path ||
-    "/placeholder.png";
+  useEffect(() => {
+    if (variants.length) {
+      if (selectedIdx < 0 || selectedIdx >= variants.length) {
+        setSelectedIdx(0);
+        onVariantChange?.(variants[0]);
+      }
+    } else if (selectedIdx !== -1) {
+      setSelectedIdx(-1);
+      onVariantChange?.(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug, variants]);
 
-  // Pricing (variant overrides only after select)
+  // --- Build gallery
+  const variantHeroPath =
+    activeVariant?.productGallery?.[0]?.path ||
+    activeVariant?.swatchImage?.path ||
+    null;
+  const heroPath =
+    variantHeroPath || heroImage?.path || productMedia?.[0]?.path || null;
+
+  const baseGalleryPaths = (productMedia || [])
+    .map((m) => m?.path)
+    .filter(Boolean);
+  const variantGalleryPaths = (activeVariant?.productGallery || [])
+    .map((m) => m?.path)
+    .filter(Boolean);
+
+  const combined = [
+    heroPath,
+    ...(variantGalleryPaths.length ? variantGalleryPaths : baseGalleryPaths),
+  ];
+  const seen = new Set();
+  const galleryPaths = combined.filter((p) => {
+    if (!p || seen.has(p)) return false;
+    seen.add(p);
+    return true;
+  });
+  const gallery = galleryPaths.length ? galleryPaths : [PLACEHOLDER_SRC];
+
+  // Pricing
   const effMrp = toNum(activeVariant?.mrp ?? mrp);
   const effSp = toNum(activeVariant?.specialPrice ?? specialPrice);
   const off = percentOff(effMrp, effSp);
@@ -120,15 +157,14 @@ export default function ProductCard({
   // Stock guards
   const hasVariants = variants.length > 0;
   const needsVariantSelection = hasVariants && !activeVariant;
-
   const productStock = readStock(product);
   const variantStock = readStock(activeVariant);
-
-  // Only mark out of stock when we positively know stock is 0 or less.
-  const variantOutOfStock = hasVariants && activeVariant && variantStock !== null && variantStock <= 0;
-  const productOutOfStock = !hasVariants && productStock !== null && productStock <= 0;
-
-  const canAdd = !needsVariantSelection && !variantOutOfStock && !productOutOfStock;
+  const variantOutOfStock =
+    hasVariants && activeVariant && variantStock !== null && variantStock <= 0;
+  const productOutOfStock =
+    !hasVariants && productStock !== null && productStock <= 0;
+  const canAdd =
+    !needsVariantSelection && !variantOutOfStock && !productOutOfStock;
 
   // Swatches
   const swatches = variants.map((v, i) => ({
@@ -165,18 +201,57 @@ export default function ProductCard({
     }
   };
 
+  // Cart helpers
+  const buildCartPayload = (qtyDelta = 1) => ({
+    productId: _id,
+    slug,
+    name,
+    qty: qtyDelta,
+    price: priceNow,
+    mrp: effMrp,
+    image: gallery[0],
+    variant: activeVariant
+      ? {
+          id: activeVariant._id,
+          sku: activeVariant.sku,
+          name: activeVariant.variantName,
+          image:
+            activeVariant.productGallery?.[0]?.path ||
+            activeVariant.swatchImage?.path ||
+            null,
+        }
+      : null,
+  });
+
+  const cartLine = useMemo(() => {
+    const match = (it) => {
+      if (it.productId !== _id) return false;
+      if (!activeVariant) return !it.variant;
+      const itVarId = it.variant?.id || it.variant?._id;
+      const itSku = it.variant?.sku;
+      return (
+        itVarId === activeVariant._id ||
+        (activeVariant.sku && itSku === activeVariant.sku)
+      );
+    };
+    return cartLines.find(match) || null;
+  }, [cartLines, _id, activeVariant?._id, activeVariant?.sku]);
+
+  const currentQty = Number(cartLine?.qty ?? 0) || 0;
+  const subtotal = Number(priceNow || 0) * currentQty;
+
   const handleAddToCart = () => {
-    // 1) Require variant selection
     if (needsVariantSelection) {
       showToast("info", "Please select a color first.");
       try {
         swatchGroupRef.current?.focus();
-        swatchGroupRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        swatchGroupRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
       } catch {}
       return;
     }
-
-    // 2) Guard stock
     if (variantOutOfStock) {
       showToast("warning", "Selected color is out of stock.");
       return;
@@ -186,33 +261,33 @@ export default function ProductCard({
       return;
     }
 
-    const payload = {
-      productId: _id,
-      slug,
-      name,
-      qty: 1,
-      price: priceNow,
-      mrp: effMrp,
-      image: primaryImage, // variant image if selected, else hero/product image
-      variant: activeVariant
-        ? {
-            id: activeVariant._id,
-            sku: activeVariant.sku,
-            name: activeVariant.variantName,
-            image:
-              activeVariant.productGallery?.[0]?.path ||
-              activeVariant.swatchImage?.path ||
-              null,
-          }
-        : null,
-    };
-
-    dispatch(addItem(payload));
+    dispatch(addItem(buildCartPayload(1)));
+    onAddToCart?.(buildCartPayload(1));
     showToast(
       "success",
-      `${name}${activeVariant ? ` — ${activeVariant.variantName}` : ""} added to cart.`
+      `${name}${
+        activeVariant ? ` — ${activeVariant.variantName}` : ""
+      } added to cart.`
     );
-    onAddToCart?.(payload);
+  };
+
+  const handleIncrement = () => {
+    if (!canAdd) return;
+    dispatch(addItem(buildCartPayload(1)));
+  };
+
+  const handleDecrement = () => {
+    if (currentQty <= 0) return;
+    const next = currentQty - 1;
+    dispatch(
+      setQty({
+        productId: _id,
+        variant: activeVariant
+          ? { id: activeVariant._id, sku: activeVariant.sku }
+          : null,
+        qty: next,
+      })
+    );
   };
 
   const buttonLabel = needsVariantSelection
@@ -221,34 +296,70 @@ export default function ProductCard({
     ? "Out of Stock"
     : "Add To Cart";
 
+  // Embla
+  const galleryKey = activeVariant?._id || slug || "base";
+  const [emblaRef, emblaApi] = useEmblaCarousel({
+    loop: gallery.length > 1,
+    align: "start",
+    dragFree: false,
+    skipSnaps: false,
+    containScroll: "trimSnaps",
+  });
+
+  const [scrollProgress, setScrollProgress] = useState(0);
+  const onScroll = useCallback(() => {
+    if (!emblaApi) return;
+    const p = emblaApi.scrollProgress();
+    setScrollProgress(Number.isFinite(p) ? Math.max(0, Math.min(1, p)) : 0);
+  }, [emblaApi]);
+
+  useEffect(() => {
+    if (!emblaApi) return;
+    onScroll();
+    emblaApi.on("scroll", onScroll);
+    emblaApi.on("reInit", onScroll);
+    return () => {
+      emblaApi.off("scroll", onScroll);
+      emblaApi.off("reInit", onScroll);
+    };
+  }, [emblaApi, onScroll]);
+
+  useEffect(() => {
+    if (emblaApi) {
+      emblaApi.reInit();
+      emblaApi.scrollTo(0, true);
+    }
+  }, [emblaApi, galleryKey, gallery.length]);
+
   return (
-    <div
+    <motion.div
+      whileHover={{ y: -2, boxShadow: "0 8px 24px rgba(0,0,0,0.08)" }}
+      transition={{ type: "spring", stiffness: 400, damping: 30 }}
       className={[
         "group relative overflow-hidden rounded-2xl bg-white",
         "border border-slate-200/70 shadow-sm transition-all",
-        "hover:-translate-y-0.5 hover:shadow-lg",
         "dark:bg-neutral-900 dark:border-neutral-800",
         className,
       ].join(" ")}
     >
-      {/* Media — top glow + subtle bottom glow */}
+      {/* Media — gradient backdrop */}
       <div
         className="relative aspect-square md:aspect-[4/5]"
         style={{
           backgroundImage: `
-            radial-gradient(640px 420px at 50% -16%, rgba(252,186,23,0.46), rgba(252,186,23,0) 72%),
-            radial-gradient(480px 300px at -10% -12%, rgba(252,186,23,0.26), rgba(252,186,23,0) 66%),
-            radial-gradient(480px 300px at 110% -12%, rgba(252,186,23,0.26), rgba(252,186,23,0) 66%),
-            radial-gradient(500px 320px at 50% 106%, rgba(252,186,23,0.16), rgba(252,186,23,0) 70%),
-            radial-gradient(320px 200px at 8% 100%, rgba(252,186,23,0.10), rgba(252,186,23,0) 58%),
-            radial-gradient(320px 200px at 92% 100%, rgba(252,186,23,0.10), rgba(252,186,23,0) 58%),
-            linear-gradient(180deg, rgba(252,186,23,0.20) 0%, rgba(252,186,23,0.10) 40%, #ffffff 80%)
+            radial-gradient(820px 520px at 50% -18%, rgba(252,186,23,0.72), rgba(252,186,23,0) 82%),
+            radial-gradient(680px 420px at -12% -14%, rgba(252,186,23,0.45), rgba(252,186,23,0) 76%),
+            radial-gradient(680px 420px at 112% -14%, rgba(252,186,23,0.45), rgba(252,186,23,0) 76%),
+            radial-gradient(640px 400px at 50% 110%, rgba(252,186,23,0.28), rgba(252,186,23,0) 78%),
+            radial-gradient(420px 260px at 6% 102%, rgba(252,186,23,0.22), rgba(252,186,23,0) 64%),
+            radial-gradient(420px 260px at 94% 102%, rgba(252,186,23,0.22), rgba(252,186,23,0) 64%),
+            linear-gradient(180deg, rgba(252,186,23,0.32) 0%, rgba(252,186,23,0.18) 44%, #ffffff 86%)
           `,
         }}
       >
         {/* Discount badge */}
         {off !== null && (
-          <div className="absolute right-3 top-3 z-10">
+          <div className="absolute right-3 top-3 z-20">
             <Badge
               variant="outline"
               className="rounded-full bg-white text-black border border-black/10 shadow-sm px-2.5 py-1 text-[11px] font-extrabold leading-none hover:bg-white focus-visible:ring-2 focus-visible:ring-[#fcba17]/40"
@@ -261,40 +372,84 @@ export default function ProductCard({
 
         {/* OOS badge */}
         {(variantOutOfStock || productOutOfStock) && (
-          <div className="absolute left-3 top-3 z-10">
+          <div className="absolute left-3 top-3 z-20">
             <span className="rounded-full bg-red-600/90 px-2.5 py-1 text-[11px] font-bold text-white shadow">
               Out of stock
             </span>
           </div>
         )}
 
-        {/* Image -> Link to product details */}
+        {/* Slider */}
         <div className="absolute inset-0">
-          {productHref ? (
-            <Link
-              href={productHref}
-              aria-label={name ? `View ${name}` : "View product"}
-              className="absolute inset-0 block"
-            >
-              <Image
-                src={primaryImage}
-                alt={name || "Product"}
-                fill
-                sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
-                className="object-contain"
-                priority={false}
-              />
-            </Link>
-          ) : (
-            <Image
-              src={primaryImage}
-              alt={name || "Product"}
-              fill
-              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
-              className="object-contain"
-              priority={false}
-            />
-          )}
+          <div className="embla h-full" aria-label="Product images">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={galleryKey}
+                className="embla__viewport h-full"
+                ref={emblaRef}
+                initial={{ opacity: 0.2, scale: 0.995 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.995 }}
+                transition={{ type: "spring", duration: 0.35, bounce: 0.2 }}
+              >
+                <div className="embla__container flex h-full">
+                  {gallery.map((src, idx) => (
+                    <div
+                      key={`${src}-${idx}`}
+                      className="embla__slide relative h-full min-w-0 flex-[0_0_100%] cursor-grab active:cursor-grabbing"
+                    >
+                      {productHref ? (
+                        <Link
+                          href={productHref}
+                          aria-label={name ? `View ${name}` : "View product"}
+                          className="absolute inset-0 block"
+                        >
+                          <Image
+                            src={src}
+                            alt={
+                              name
+                                ? `${name} — image ${idx + 1}`
+                                : `Product image ${idx + 1}`
+                            }
+                            fill
+                            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 60vw, 33vw" // bigger than 25vw
+                            className="object-contain md:scale-[1.06]" // subtle up-scale on md+
+                            priority={idx === 0}
+                          />
+                        </Link>
+                      ) : (
+                        <Image
+                          src={src}
+                          alt={
+                            name
+                              ? `${name} — image ${idx + 1}`
+                              : `Product image ${idx + 1}`
+                          }
+                          fill
+                          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+                          className="object-contain"
+                          priority={idx === 0}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            </AnimatePresence>
+
+            {gallery.length > 1 && (
+              <div className="absolute bottom-1 left-3 right-3 z-20 h-1 rounded-full bg-black/10 overflow-hidden">
+                <motion.div
+                  className="h-full rounded-full bg-black/40 origin-left"
+                  animate={{ scaleX: scrollProgress || 0.0001 }}
+                  initial={false}
+                  transition={{ type: "spring", stiffness: 220, damping: 28 }}
+                  style={{ transformOrigin: "left" }}
+                  aria-hidden
+                />
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -317,7 +472,11 @@ export default function ProductCard({
           </h3>
 
           {swatches.length > 0 && (
-            <ScrollArea className="shrink-0 max-w-[48%]">
+            <ScrollArea
+              className="shrink-0 max-w-[50%] overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] me-0.5"
+              aria-label="Choose color"
+              style={{ WebkitOverflowScrolling: "touch" }}
+            >
               <div
                 id={groupId}
                 role="radiogroup"
@@ -325,10 +484,10 @@ export default function ProductCard({
                 aria-activedescendant={
                   selectedIdx >= 0 ? `${groupId}-opt-${selectedIdx}` : undefined
                 }
-                className="flex items-center gap-2"
+                className="flex items-center gap-2 py-0.75 px-1"
                 onKeyDown={onVariantKeyDown}
                 ref={swatchGroupRef}
-                tabIndex={-1} // focusable programmatically
+                tabIndex={-1}
               >
                 <TooltipProvider delayDuration={200}>
                   {swatches.map((s) => {
@@ -336,7 +495,7 @@ export default function ProductCard({
                     return (
                       <Tooltip key={s.key}>
                         <TooltipTrigger asChild>
-                          <button
+                          <motion.button
                             id={`${groupId}-opt-${s.index}`}
                             type="button"
                             role="radio"
@@ -352,20 +511,17 @@ export default function ProductCard({
                             }
                             onClick={() => selectVariant(s.index)}
                             title={s.name}
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.97 }}
                             className={[
                               "relative h-7 w-7 shrink-0 overflow-hidden rounded-full outline-none",
-                              "transition-all focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#fcba17] focus-visible:ring-offset-white",
+                              "transition-all focus-visible:ring-1 focus-visible:ring-offset-1 focus-visible:ring-[#fcba17] focus-visible:ring-offset-white",
                               "dark:focus-visible:ring-offset-neutral-900",
+                              "bg-white dark:bg-neutral-900",
+                              selected
+                                ? "border-2 border-[#fcba17] shadow-[0_0_0_3px_rgba(252,186,23,0.20)]"
+                                : "border border-black/10",
                             ].join(" ")}
-                            style={{
-                              border: selected
-                                ? `2px solid ${BRAND}`
-                                : "1px solid rgba(0,0,0,0.08)",
-                              boxShadow: selected
-                                ? `0 0 0 3px rgba(252,186,23,0.20)`
-                                : "none",
-                              backgroundColor: "#fff",
-                            }}
                           >
                             {s.img ? (
                               <Image
@@ -374,14 +530,16 @@ export default function ProductCard({
                                 fill
                                 sizes="28px"
                                 className="object-cover"
-                                priority={false}
                               />
                             ) : (
                               <div className="h-full w-full bg-slate-200 dark:bg-neutral-700" />
                             )}
-                          </button>
+                          </motion.button>
                         </TooltipTrigger>
-                        <TooltipContent side="top" className="px-2 py-1 text-xs">
+                        <TooltipContent
+                          side="top"
+                          className="px-2 py-1 text-xs"
+                        >
                           {s.name}
                         </TooltipContent>
                       </Tooltip>
@@ -389,13 +547,18 @@ export default function ProductCard({
                   })}
                 </TooltipProvider>
               </div>
-              <ScrollBar orientation="horizontal" />
             </ScrollArea>
           )}
         </div>
 
         {/* Price row */}
-        <div className="mt-2 flex items-baseline justify-between">
+        <motion.div
+          key={`${priceNow}-${priceWas ?? "na"}`}
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ type: "spring", stiffness: 400, damping: 30 }}
+          className="mt-2 flex items-baseline justify-between"
+        >
           <div className="flex items-baseline gap-2">
             <span className="text-[18px] font-semibold tracking-tight text-slate-900 dark:text-white">
               {formatPrice(priceNow)}
@@ -410,47 +573,131 @@ export default function ProductCard({
               </span>
             )}
           </div>
-        </div>
+        </motion.div>
 
-        {/* CTA */}
-        <div className="mt-3">
-          <Button
-            type="button"
-            disabled={!canAdd}
-            className={[
-              "w-full rounded-full px-4 py-2 text-[12px] font-bold text-white transition-colors",
-              needsVariantSelection ? "ring-1 ring-amber-300" : "",
-              !canAdd ? "opacity-70 cursor-not-allowed" : "",
-            ].join(" ")}
-            style={{ backgroundColor: BRAND }}
-            onMouseEnter={(e) => {
-              if (canAdd) e.currentTarget.style.backgroundColor = BRAND_HOVER;
-            }}
-            onMouseLeave={(e) => {
-              if (canAdd) e.currentTarget.style.backgroundColor = BRAND;
-            }}
-            onClick={handleAddToCart}
-            aria-disabled={!canAdd}
-            aria-label={
-              needsVariantSelection
-                ? "Select a color first"
-                : !canAdd
-                ? "Out of stock"
-                : `Add ${name || "product"} to cart`
-            }
-            title={
-              needsVariantSelection
-                ? "Select a color first"
-                : !canAdd
-                ? "Out of stock"
-                : "Add to cart"
-            }
-          >
-            <ShoppingCart className="mr-2 h-4 w-4" />
-            {buttonLabel}
-          </Button>
+        {/* CTA — minimal stepper + subtotal */}
+        <div className="mt-2">
+          {currentQty > 0 ? (
+            <motion.div
+              key="qty-ui"
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ type: "spring", stiffness: 420, damping: 28 }}
+              className="flex items-center justify-between gap-3"
+            >
+              {/* Stepper */}
+              <div className="inline-flex items-center gap-1.5">
+                <motion.button
+                  type="button"
+                  onClick={handleDecrement}
+                  disabled={currentQty <= 0}
+                  aria-label="Decrease quantity"
+                  whileTap={{ scale: 0.95 }}
+                  className={[
+                    "h-7 w-7 rounded-md border text-[16px] leading-none",
+                    "border-slate-200 bg-white text-slate-700 shadow-sm",
+                    "hover:bg-slate-50 active:scale-[0.98]",
+                    "disabled:cursor-not-allowed disabled:opacity-50",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-0",
+                    "focus-visible:ring-[#fcba17] dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100",
+                  ].join(" ")}
+                >
+                  –
+                </motion.button>
+
+                <div
+                  aria-live="polite"
+                  className="min-w-[1.5ch] text-center text-sm font-semibold text-slate-900 dark:text-white"
+                >
+                  {currentQty}
+                </div>
+
+                <motion.button
+                  type="button"
+                  onClick={handleIncrement}
+                  disabled={!canAdd}
+                  aria-label="Increase quantity"
+                  whileTap={{ scale: 0.95 }}
+                  className={[
+                    "h-7 w-7 rounded-md border text-[16px] leading-none",
+                    "border-slate-200 bg-white text-slate-700 shadow-sm",
+                    "hover:bg-slate-50 active:scale-[0.98]",
+                    "disabled:cursor-not-allowed disabled:opacity-50",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-0",
+                    "focus-visible:ring-[#fcba17] dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100",
+                  ].join(" ")}
+                  title={canAdd ? "Increase quantity" : "Out of stock"}
+                >
+                  +
+                </motion.button>
+              </div>
+
+              {/* Subtotal */}
+              <div className="inline-flex items-baseline gap-2 leading-tight">
+                <span className="text-[10px] font-medium text-slate-500 dark:text-neutral-400">
+                  Subtotal
+                </span>
+                <motion.span
+                  key={subtotal}
+                  initial={{ opacity: 0.6, y: 2 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                  className="text-[15px] font-semibold tracking-tight text-slate-900 dark:text-white"
+                  aria-live="polite"
+                >
+                  {formatPrice(subtotal)}
+                </motion.span>
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="add-btn"
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ type: "spring", stiffness: 420, damping: 28 }}
+            >
+              <Button
+                type="button"
+                disabled={!canAdd}
+                className={[
+                  "w-full rounded-full px-3 py-1.5 text-[11px] font-bold text-white transition-colors",
+                  "min-h-[34px]",
+                  "focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#fcba17]",
+                  needsVariantSelection ? "ring-1 ring-amber-300" : "",
+                  !canAdd ? "opacity-70 cursor-not-allowed" : "",
+                ].join(" ")}
+                style={{ backgroundColor: BRAND }}
+                onMouseEnter={(e) => {
+                  if (canAdd)
+                    e.currentTarget.style.backgroundColor = BRAND_HOVER;
+                }}
+                onMouseLeave={(e) => {
+                  if (canAdd) e.currentTarget.style.backgroundColor = BRAND;
+                }}
+                onClick={handleAddToCart}
+                aria-disabled={!canAdd}
+                aria-label={
+                  needsVariantSelection
+                    ? "Select a color first"
+                    : !canAdd
+                    ? "Out of stock"
+                    : `Add ${name || "product"} to cart`
+                }
+                title={
+                  needsVariantSelection
+                    ? "Select a color first"
+                    : !canAdd
+                    ? "Out of stock"
+                    : "Add to cart"
+                }
+              >
+                <ShoppingCart className="mr-2 h-3.5 w-3.5" />
+                {buttonLabel}
+              </Button>
+            </motion.div>
+          )}
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
