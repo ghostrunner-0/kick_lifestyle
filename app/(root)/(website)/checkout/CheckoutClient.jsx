@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useMemo, useEffect, useState, useCallback, useRef } from "react";
+import React, {
+  useMemo,
+  useEffect,
+  useState,
+  useCallback,
+  useRef,
+} from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -29,7 +35,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Command,
   CommandEmpty,
@@ -74,9 +84,12 @@ const formatNpr = (v) => {
     return `Rs. ${n.toLocaleString("en-IN")}`;
   }
 };
-const sanitizePhone = (val) => (String(val || "").match(/\d+/g) || []).join("").slice(0, 10);
+const sanitizePhone = (val) =>
+  (String(val || "").match(/\d+/g) || []).join("").slice(0, 10);
 const getLabel = (options, id, fallback = "") =>
-  (options || []).find((o) => String(o.value) === String(id))?.label || fallback || "";
+  (options || []).find((o) => String(o.value) === String(id))?.label ||
+  fallback ||
+  "";
 const toNum = (v) => {
   const n = typeof v === "string" ? parseFloat(v) : Number(v);
   return Number.isFinite(n) ? n : 0;
@@ -115,7 +128,10 @@ function ComboBox({
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-60" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+      <PopoverContent
+        className="w-[--radix-popover-trigger-width] p-0"
+        align="start"
+      >
         <Command>
           <CommandInput placeholder="Search..." />
           <CommandList>
@@ -133,7 +149,9 @@ function ComboBox({
                   <Check
                     className={cn(
                       "mr-2 h-4 w-4",
-                      String(value) === String(opt.value) ? "opacity-100" : "opacity-0"
+                      String(value) === String(opt.value)
+                        ? "opacity-100"
+                        : "opacity-0"
                     )}
                   />
                   {opt.label}
@@ -197,10 +215,18 @@ export default function CheckoutClient({ initialUser = null }) {
   const [cityOptions, setCityOptions] = useState([]);
   const [zoneOptions, setZoneOptions] = useState([]);
   const [areaOptions, setAreaOptions] = useState([]);
-  const [loadingLoc, setLoadingLoc] = useState({ city: false, zone: false, area: false });
+  const [loadingLoc, setLoadingLoc] = useState({
+    city: false,
+    zone: false,
+    area: false,
+  });
 
   /* Saved labels from user profile (to show while options load) */
-  const [savedLabels, setSavedLabels] = useState({ city: "", zone: "", area: "" });
+  const [savedLabels, setSavedLabels] = useState({
+    city: "",
+    zone: "",
+    area: "",
+  });
 
   /* Shipping (Pathao price plan) */
   const [ship, setShip] = useState({ price: 0, loading: false, error: null });
@@ -222,9 +248,14 @@ export default function CheckoutClient({ initialUser = null }) {
   const [qrPendingPayload, setQrPendingPayload] = useState(null); // order payload to create after proof chosen
   const [createdOrder, setCreatedOrder] = useState(null); // after successful creation
 
+  // general "placing" guard to avoid double clicks across flows
+  const [placing, setPlacing] = useState(false);
+
   const loadQRConfig = useCallback(async () => {
     try {
-      const { data } = await axios.get("/api/website/payments/qr/config", { withCredentials: true });
+      const { data } = await axios.get("/api/website/payments/qr/config", {
+        withCredentials: true,
+      });
       if (data?.success) setQrConfig(data.data);
       else showToast("error", data?.message || "QR not configured");
     } catch {
@@ -233,7 +264,13 @@ export default function CheckoutClient({ initialUser = null }) {
   }, []);
 
   const payableFromPayload = (p) =>
-    Math.max(0, Number(p?.amounts?.total ?? Math.max(0, subtotal - (couponState?.discountApplied || 0))));
+    Math.max(
+      0,
+      Number(
+        p?.amounts?.total ??
+          Math.max(0, subtotal - (couponState?.discountApplied || 0))
+      )
+    );
 
   // Guards
   useEffect(() => {
@@ -245,7 +282,9 @@ export default function CheckoutClient({ initialUser = null }) {
     setLoadingLoc((s) => ({ ...s, city: true }));
     try {
       const res = await axios.get("/api/pathao/cities");
-      const list = Array.isArray(res.data?.data) ? res.data.data : res.data || [];
+      const list = Array.isArray(res.data?.data)
+        ? res.data.data
+        : res.data || [];
       setCityOptions(
         list.map((c) => ({
           value: String(c.city_id ?? c.id),
@@ -264,7 +303,9 @@ export default function CheckoutClient({ initialUser = null }) {
     setLoadingLoc((s) => ({ ...s, zone: true }));
     try {
       const res = await axios.get(`/api/pathao/zones?cityId=${cityId}`);
-      const list = Array.isArray(res.data?.data) ? res.data.data : res.data || [];
+      const list = Array.isArray(res.data?.data)
+        ? res.data.data
+        : res.data || [];
       setZoneOptions(
         list.map((z) => ({
           value: String(z.zone_id ?? z.id),
@@ -283,7 +324,9 @@ export default function CheckoutClient({ initialUser = null }) {
     setLoadingLoc((s) => ({ ...s, area: true }));
     try {
       const res = await axios.get(`/api/pathao/areas?zoneId=${zoneId}`);
-      const list = Array.isArray(res.data?.data) ? res.data.data : res.data || [];
+      const list = Array.isArray(res.data?.data)
+        ? res.data.data
+        : res.data || [];
       setAreaOptions(
         list.map((a) => ({
           value: String(a.area_id ?? a.id),
@@ -337,7 +380,11 @@ export default function CheckoutClient({ initialUser = null }) {
       const shipping = priceCandidates.map(toNum).find((n) => n > 0) ?? 0;
 
       if (shipping <= 0) {
-        setShip({ price: 0, loading: false, error: "Delivery price unavailable for this address" });
+        setShip({
+          price: 0,
+          loading: false,
+          error: "Delivery price unavailable for this address",
+        });
         return;
       }
 
@@ -375,12 +422,22 @@ export default function CheckoutClient({ initialUser = null }) {
       }
 
       if (name === "area") {
-        await maybeRecalc(vals.city, vals.zone, vals.area || null, vals.paymentMethod);
+        await maybeRecalc(
+          vals.city,
+          vals.zone,
+          vals.area || null,
+          vals.paymentMethod
+        );
         return;
       }
 
       if (name === "paymentMethod") {
-        await maybeRecalc(vals.city, vals.zone, vals.area || null, vals.paymentMethod);
+        await maybeRecalc(
+          vals.city,
+          vals.zone,
+          vals.area || null,
+          vals.paymentMethod
+        );
         return;
       }
     });
@@ -463,9 +520,12 @@ export default function CheckoutClient({ initialUser = null }) {
         }
         if (!authEmail) return;
 
-        const res = await axios.get(`/api/website/users/${encodeURIComponent(authEmail)}/getuser`, {
-          withCredentials: true,
-        });
+        const res = await axios.get(
+          `/api/website/users/${encodeURIComponent(authEmail)}/getuser`,
+          {
+            withCredentials: true,
+          }
+        );
         const u = res?.data?.data ?? res?.data?.user ?? res?.data ?? null;
         await prefillFromUser(u);
       } catch (e) {
@@ -501,7 +561,10 @@ export default function CheckoutClient({ initialUser = null }) {
 
       if (!d?.eligible) {
         dispatch(setCouponAction(null));
-        showToast("error", d?.reason || "Coupon is not applicable to your cart");
+        showToast(
+          "error",
+          d?.reason || "Coupon is not applicable to your cart"
+        );
         return;
       }
 
@@ -522,20 +585,28 @@ export default function CheckoutClient({ initialUser = null }) {
         const alreadyInCart = items.some(
           (it) =>
             String(it.productId) === String(d.freeItem.productId) &&
-            String(it.variant?.id || it.variantId) === String(d.freeItem.variantId)
+            String(it.variant?.id || it.variantId) ===
+              String(d.freeItem.variantId)
         );
         if (!alreadyInCart) {
           let image = "/placeholder.png";
           try {
-            const res = await axios.get(`/api/website/product-variant/${d.freeItem.variantId}`);
+            const res = await axios.get(
+              `/api/website/product-variant/${d.freeItem.variantId}`
+            );
             const v = res?.data?.data;
-            image = v?.swatchImage?.path || v?.productGallery?.[0]?.path || image;
+            image =
+              v?.swatchImage?.path || v?.productGallery?.[0]?.path || image;
           } catch {}
           dispatch({
             type: "cart/addItem",
             payload: {
               productId: d.freeItem.productId,
-              variant: { id: d.freeItem.variantId, name: d.freeItem.variantName, image },
+              variant: {
+                id: d.freeItem.variantId,
+                name: d.freeItem.variantName,
+                image,
+              },
               name: d.freeItem.productName,
               qty: Number(d.freeItem.qty || 1),
               price: 0,
@@ -589,14 +660,19 @@ export default function CheckoutClient({ initialUser = null }) {
     if (!couponState) return { discountApplied: 0, freeItemActive: false };
 
     if (couponState.mode === "freeItem" && couponState?.freeItem?.variantId) {
-      const setVariant = new Set(items.map((it) => String(it?.variant?.id || "")));
+      const setVariant = new Set(
+        items.map((it) => String(it?.variant?.id || ""))
+      );
       const active = setVariant.has(String(couponState.freeItem.variantId));
       return { discountApplied: 0, freeItemActive: active };
     }
 
     if (couponState.mode === "money") {
       return {
-        discountApplied: Math.min(subtotal, Number(couponState?.discountApplied || 0)),
+        discountApplied: Math.min(
+          subtotal,
+          Number(couponState?.discountApplied || 0)
+        ),
         freeItemActive: false,
       };
     }
@@ -615,9 +691,10 @@ export default function CheckoutClient({ initialUser = null }) {
   // Single flag to disable both buttons
   const isPlaceOrderDisabled = useMemo(() => {
     if (isCartEmpty) return true;
+    if (placing) return true;
     if (paymentMethod !== "cod") return false;
     return ship.loading || !!ship.error;
-  }, [isCartEmpty, paymentMethod, ship.loading, ship.error]);
+  }, [isCartEmpty, paymentMethod, ship.loading, ship.error, placing]);
 
   /* submit */
   const onSubmit = async (values) => {
@@ -630,7 +707,9 @@ export default function CheckoutClient({ initialUser = null }) {
       return;
     }
     if (couponState?.mode === "freeItem") {
-      const setVariant = new Set(items.map((it) => String(it?.variant?.id || "")));
+      const setVariant = new Set(
+        items.map((it) => String(it?.variant?.id || ""))
+      );
       if (!setVariant.has(String(couponState?.freeItem?.variantId))) {
         showToast("error", "Coupon requires a specific variant in your cart.");
         return;
@@ -719,30 +798,55 @@ export default function CheckoutClient({ initialUser = null }) {
     }
 
     try {
+      setPlacing(true);
+
+      // ---- KHALTI FLOW (create order first, then initiate for that order)
       if (paymentMethod === "khalti") {
-        const { data } = await axios.post(
-          "/api/website/payments/khalti/initiate",
+        // 1) Create pending-payment order
+        const { data: createRes } = await axios.post(
+          "/api/website/orders",
           payload,
           { withCredentials: true }
         );
-        if (data?.success && data?.payment_url) {
-          window.location.href = data.payment_url;
+        if (!createRes?.success || !createRes?.data?.display_order_id) {
+          showToast("error", createRes?.message || "Failed to create order");
+          setPlacing(false);
           return;
         }
-        showToast("error", data?.message || "Failed to initiate Khalti payment");
+        const displayId = createRes.data.display_order_id;
+
+        // 2) Initiate Khalti for that order
+        const { data: initRes } = await axios.post(
+          "/api/website/payments/khalti/initiate",
+          { display_order_id: displayId },
+          { withCredentials: true }
+        );
+        if (initRes?.success && initRes?.payment_url) {
+          // DO NOT clear cart here; user might return if payment fails
+          window.location.href = initRes.payment_url;
+          return;
+        }
+        showToast(
+          "error",
+          initRes?.message || "Failed to initiate Khalti payment"
+        );
+        setPlacing(false);
         return;
       }
 
+      // ---- QR FLOW: open dialog first (no order yet)
       if (paymentMethod === "qr") {
-        // 👉 OPEN DIALOG FIRST (no order creation yet)
         setQrPendingPayload(payload);
         if (!qrConfig) await loadQRConfig();
         setQrOpen(true);
+        setPlacing(false);
         return;
       }
 
-      // ---- COD (existing) ----
-      const { data } = await axios.post("/api/website/orders", payload, { withCredentials: true });
+      // ---- COD FLOW
+      const { data } = await axios.post("/api/website/orders", payload, {
+        withCredentials: true,
+      });
       if (data?.success && data?.data?._id) {
         dispatch(clearCart());
         const displayId = data?.data?.display_order_id || data?.data?._id;
@@ -752,8 +856,11 @@ export default function CheckoutClient({ initialUser = null }) {
         showToast("error", data?.message || "Failed to place order");
       }
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || "Failed to place order";
+      const msg =
+        e?.response?.data?.message || e?.message || "Failed to place order";
       showToast("error", msg);
+    } finally {
+      setPlacing(false);
     }
   };
 
@@ -770,10 +877,14 @@ export default function CheckoutClient({ initialUser = null }) {
     try {
       setQrUploading(true);
 
-      // 1) Create order (status should be 'payment not verified' on server)
-      const { data: orderRes } = await axios.post("/api/website/orders", qrPendingPayload, {
-        withCredentials: true,
-      });
+      // 1) Create order (status should be 'payment Not Verified' on server)
+      const { data: orderRes } = await axios.post(
+        "/api/website/orders",
+        qrPendingPayload,
+        {
+          withCredentials: true,
+        }
+      );
       if (!orderRes?.success || !orderRes?.data?._id) {
         showToast("error", orderRes?.message || "Failed to place order");
         return;
@@ -786,17 +897,27 @@ export default function CheckoutClient({ initialUser = null }) {
       fd.append("file", qrFile);
       fd.append("order_id", orderDoc._id);
       fd.append("display_order_id", orderDoc.display_order_id || "");
-      fd.append("amount", String(Math.max(0, Number(orderDoc?.amounts?.total ?? 0))));
+      fd.append(
+        "amount",
+        String(Math.max(0, Number(orderDoc?.amounts?.total ?? 0)))
+      );
 
-      const { data: uploadRes } = await axios.post("/api/website/payments/qr/upload", fd, {
-        withCredentials: true,
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const { data: uploadRes } = await axios.post(
+        "/api/website/payments/qr/upload",
+        fd,
+        {
+          withCredentials: true,
+          headers: { "Content-Type": "multipart/form-data" },
+        }
+      );
       if (!uploadRes?.success) {
         showToast("error", uploadRes?.message || "Upload failed");
         // optional best-effort rollback:
         try {
-          await axios.delete(`/api/website/orders/${orderDoc._id}?reason=qr_proof_failed`, { withCredentials: true });
+          await axios.delete(
+            `/api/website/orders/${orderDoc._id}?reason=qr_proof_failed`,
+            { withCredentials: true }
+          );
         } catch {}
         return;
       }
@@ -805,9 +926,12 @@ export default function CheckoutClient({ initialUser = null }) {
       dispatch(clearCart());
       setQrOpen(false);
       showToast("success", "Payment uploaded. We’ll verify it shortly.");
-      router.replace(ORDERS_THANK_YOU_ROUTE(orderDoc.display_order_id || orderDoc._id));
+      router.replace(
+        ORDERS_THANK_YOU_ROUTE(orderDoc.display_order_id || orderDoc._id)
+      );
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || "Failed to submit proof";
+      const msg =
+        e?.response?.data?.message || e?.message || "Failed to submit proof";
       showToast("error", msg);
     } finally {
       setQrUploading(false);
@@ -840,7 +964,9 @@ export default function CheckoutClient({ initialUser = null }) {
         {isCartEmpty && (
           <div className="mb-6 rounded-xl border bg-amber-50 px-4 py-3 text-amber-900 flex items-center gap-3">
             <Info className="h-4 w-4" />
-            <p className="text-sm">Your cart is empty. Add items to proceed with checkout.</p>
+            <p className="text-sm">
+              Your cart is empty. Add items to proceed with checkout.
+            </p>
           </div>
         )}
 
@@ -851,7 +977,10 @@ export default function CheckoutClient({ initialUser = null }) {
             </CardHeader>
             <CardContent>
               <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                <form
+                  onSubmit={form.handleSubmit(onSubmit)}
+                  className="space-y-6"
+                >
                   <fieldset className="space-y-6">
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <FormField
@@ -881,7 +1010,9 @@ export default function CheckoutClient({ initialUser = null }) {
                                 maxLength={10}
                                 {...field}
                                 onChange={(e) => {
-                                  const val = e.target.value.replace(/[^\d]/g, "").slice(0, 10);
+                                  const val = e.target.value
+                                    .replace(/[^\d]/g, "")
+                                    .slice(0, 10);
                                   field.onChange(val);
                                 }}
                               />
@@ -904,7 +1035,9 @@ export default function CheckoutClient({ initialUser = null }) {
                               valueLabel={savedLabels.city}
                               onChange={field.onChange}
                               options={cityOptions}
-                              placeholder={loadingLoc.city ? "Loading..." : "Select city"}
+                              placeholder={
+                                loadingLoc.city ? "Loading..." : "Select city"
+                              }
                               emptyText="No cities"
                               disabled={loadingLoc.city}
                             />
@@ -926,9 +1059,13 @@ export default function CheckoutClient({ initialUser = null }) {
                               valueLabel={savedLabels.zone}
                               onChange={field.onChange}
                               options={zoneOptions}
-                              placeholder={loadingLoc.zone ? "Loading..." : "Select zone"}
+                              placeholder={
+                                loadingLoc.zone ? "Loading..." : "Select zone"
+                              }
                               emptyText="No zones"
-                              disabled={loadingLoc.zone || !form.getValues("city")}
+                              disabled={
+                                loadingLoc.zone || !form.getValues("city")
+                              }
                             />
                           </FormControl>
                           <FormMessage />
@@ -948,9 +1085,13 @@ export default function CheckoutClient({ initialUser = null }) {
                               valueLabel={savedLabels.area}
                               onChange={field.onChange}
                               options={areaOptions}
-                              placeholder={loadingLoc.area ? "Loading..." : "Select area"}
+                              placeholder={
+                                loadingLoc.area ? "Loading..." : "Select area"
+                              }
                               emptyText="No areas"
-                              disabled={loadingLoc.area || !form.getValues("zone")}
+                              disabled={
+                                loadingLoc.area || !form.getValues("zone")
+                              }
                             />
                           </FormControl>
                           <FormMessage />
@@ -965,7 +1106,10 @@ export default function CheckoutClient({ initialUser = null }) {
                         <FormItem>
                           <FormLabel>Landmark</FormLabel>
                           <FormControl>
-                            <Input placeholder="Nearby landmark to help the rider" {...field} />
+                            <Input
+                              placeholder="Nearby landmark to help the rider"
+                              {...field}
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -991,14 +1135,18 @@ export default function CheckoutClient({ initialUser = null }) {
                                   htmlFor="pm-cod"
                                   className={cn(
                                     "flex cursor-pointer items-center gap-3 rounded-xl border p-3",
-                                    field.value === "cod" ? "border-slate-900" : "border-slate-200"
+                                    field.value === "cod"
+                                      ? "border-slate-900"
+                                      : "border-slate-200"
                                   )}
                                 >
                                   <RadioGroupItem id="pm-cod" value="cod" />
                                   <Banknote className="h-5 w-5" />
                                   <span className="text-sm font-medium">
                                     Cash on Delivery{" "}
-                                    <span className="ml-1 text-xs text-slate-500">(NPR 50 fee)</span>
+                                    <span className="ml-1 text-xs text-slate-500">
+                                      (NPR 50 fee)
+                                    </span>
                                   </span>
                                 </label>
 
@@ -1006,24 +1154,35 @@ export default function CheckoutClient({ initialUser = null }) {
                                   htmlFor="pm-khalti"
                                   className={cn(
                                     "flex cursor-pointer items-center gap-3 rounded-xl border p-3",
-                                    field.value === "khalti" ? "border-slate-900" : "border-slate-200"
+                                    field.value === "khalti"
+                                      ? "border-slate-900"
+                                      : "border-slate-200"
                                   )}
                                 >
-                                  <RadioGroupItem id="pm-khalti" value="khalti" />
+                                  <RadioGroupItem
+                                    id="pm-khalti"
+                                    value="khalti"
+                                  />
                                   <Wallet className="h-5 w-5" />
-                                  <span className="text-sm font-medium">Khalti</span>
+                                  <span className="text-sm font-medium">
+                                    Khalti
+                                  </span>
                                 </label>
 
                                 <label
                                   htmlFor="pm-qr"
                                   className={cn(
                                     "flex cursor-pointer items-center gap-3 rounded-xl border p-3",
-                                    field.value === "qr" ? "border-slate-900" : "border-slate-200"
+                                    field.value === "qr"
+                                      ? "border-slate-900"
+                                      : "border-slate-200"
                                   )}
                                 >
                                   <RadioGroupItem id="pm-qr" value="qr" />
                                   <QrCode className="h-5 w-5" />
-                                  <span className="text-sm font-medium">QR Payment</span>
+                                  <span className="text-sm font-medium">
+                                    QR Payment
+                                  </span>
                                 </label>
                               </RadioGroup>
                             </FormControl>
@@ -1045,12 +1204,26 @@ export default function CheckoutClient({ initialUser = null }) {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex gap-2">
-                  <Input placeholder="Coupon code" {...form.register("couponCode")} className="h-10" />
-                  <Button type="button" variant="secondary" className="h-10" onClick={applyCoupon}>
+                  <Input
+                    placeholder="Coupon code"
+                    {...form.register("couponCode")}
+                    className="h-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="h-10"
+                    onClick={applyCoupon}
+                  >
                     Apply
                   </Button>
                   {couponState && (
-                    <Button type="button" variant="ghost" className="h-10" onClick={removeCoupon}>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-10"
+                      onClick={removeCoupon}
+                    >
                       Remove
                     </Button>
                   )}
@@ -1060,22 +1233,37 @@ export default function CheckoutClient({ initialUser = null }) {
                   <ul className="divide-y max-h-72 overflow-auto">
                     {items.map((it) => {
                       const key = `${it.productId}|${it.variant?.id || ""}`;
-                      const title = it.variant ? `${it.name} — ${it.variant.name}` : it.name;
+                      const title = it.variant
+                        ? `${it.name} — ${it.variant.name}`
+                        : it.name;
                       const lineTotal =
-                        (it.isFreeItem ? 0 : Number(it.price) || 0) * (Number(it.qty) || 0);
-                      const img = it.image || it.variant?.image || "/placeholder.png";
+                        (it.isFreeItem ? 0 : Number(it.price) || 0) *
+                        (Number(it.qty) || 0);
+                      const img =
+                        it.image || it.variant?.image || "/placeholder.png";
                       return (
                         <li key={key} className="flex items-center gap-3 py-2">
                           <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md border bg-white">
-                            <Image src={img} alt={title} fill sizes="48px" className="object-contain" />
+                            <Image
+                              src={img}
+                              alt={title}
+                              fill
+                              sizes="48px"
+                              className="object-contain"
+                            />
                           </div>
                           <div className="min-w-0 flex-1">
-                            <div className="line-clamp-1 text-sm font-medium">{title}</div>
+                            <div className="line-clamp-1 text-sm font-medium">
+                              {title}
+                            </div>
                             <div className="text-xs text-slate-500">
-                              {it.qty} × {formatNpr(it.isFreeItem ? 0 : it.price)}
+                              {it.qty} ×{" "}
+                              {formatNpr(it.isFreeItem ? 0 : it.price)}
                             </div>
                           </div>
-                          <div className="text-sm font-semibold">{formatNpr(lineTotal)}</div>
+                          <div className="text-sm font-semibold">
+                            {formatNpr(lineTotal)}
+                          </div>
                         </li>
                       );
                     })}
@@ -1084,18 +1272,27 @@ export default function CheckoutClient({ initialUser = null }) {
                       freeItemActive &&
                       !items.some(
                         (it) =>
-                          String(it.productId) === String(couponState.freeItem.productId) &&
-                          String(it.variant?.id || it.variantId) === String(couponState.freeItem.variantId)
+                          String(it.productId) ===
+                            String(couponState.freeItem.productId) &&
+                          String(it.variant?.id || it.variantId) ===
+                            String(couponState.freeItem.variantId)
                       ) && (
                         <li className="flex items-center gap-3 py-2 text-emerald-700">
-                          <div className="h-12 w-12 shrink-0 grid place-items-center rounded-md border bg-emerald-50">🎁</div>
+                          <div className="h-12 w-12 shrink-0 grid place-items-center rounded-md border bg-emerald-50">
+                            🎁
+                          </div>
                           <div className="min-w-0 flex-1">
                             <div className="line-clamp-1 text-sm font-medium">
-                              Free item: {couponState.freeItem.productName} — {couponState.freeItem.variantName}
+                              Free item: {couponState.freeItem.productName} —{" "}
+                              {couponState.freeItem.variantName}
                             </div>
-                            <div className="text-xs">Qty: {couponState.freeItem.qty}</div>
+                            <div className="text-xs">
+                              Qty: {couponState.freeItem.qty}
+                            </div>
                           </div>
-                          <div className="text-sm font-semibold">{formatNpr(0)}</div>
+                          <div className="text-sm font-semibold">
+                            {formatNpr(0)}
+                          </div>
                         </li>
                       )}
                   </ul>
@@ -1112,9 +1309,12 @@ export default function CheckoutClient({ initialUser = null }) {
                   {couponState?.mode === "money" && discountApplied > 0 && (
                     <div className="flex items-center justify-between">
                       <span className="text-slate-600">
-                        Discount {couponState.code ? `(${couponState.code})` : ""}
+                        Discount{" "}
+                        {couponState.code ? `(${couponState.code})` : ""}
                       </span>
-                      <span className="font-medium">- {formatNpr(discountApplied)}</span>
+                      <span className="font-medium">
+                        - {formatNpr(discountApplied)}
+                      </span>
                     </div>
                   )}
 
@@ -1152,7 +1352,9 @@ export default function CheckoutClient({ initialUser = null }) {
                   className="mt-2 hidden w-full h-11 rounded-xl text-[14px] font-semibold sm:block"
                   onClick={form.handleSubmit(onSubmit)}
                   disabled={isPlaceOrderDisabled}
-                  aria-busy={paymentMethod === "cod" && ship.loading}
+                  aria-busy={
+                    (paymentMethod === "cod" && ship.loading) || placing
+                  }
                   title={
                     isCartEmpty
                       ? "Your cart is empty"
@@ -1178,7 +1380,7 @@ export default function CheckoutClient({ initialUser = null }) {
             className="w-full h-11 rounded-xl text-[14px] font-semibold"
             onClick={form.handleSubmit(onSubmit)}
             disabled={isPlaceOrderDisabled}
-            aria-busy={paymentMethod === "cod" && ship.loading}
+            aria-busy={(paymentMethod === "cod" && ship.loading) || placing}
             title={
               isCartEmpty
                 ? "Your cart is empty"
@@ -1201,7 +1403,8 @@ export default function CheckoutClient({ initialUser = null }) {
           <DialogHeader>
             <DialogTitle className="text-lg">Scan &amp; Pay</DialogTitle>
             <DialogDescription>
-              Complete the payment by scanning the QR below. Your order will be created after you submit the screenshot.
+              Complete the payment by scanning the QR below. Your order will be
+              created after you submit the screenshot.
             </DialogDescription>
           </DialogHeader>
 
@@ -1227,7 +1430,8 @@ export default function CheckoutClient({ initialUser = null }) {
               )}
               {qrConfig?.displayName && (
                 <div className="mt-2 text-sm text-slate-600">
-                  Pay to: <span className="font-medium">{qrConfig.displayName}</span>
+                  Pay to:{" "}
+                  <span className="font-medium">{qrConfig.displayName}</span>
                 </div>
               )}
             </div>
@@ -1258,7 +1462,10 @@ export default function CheckoutClient({ initialUser = null }) {
               <Button variant="ghost" onClick={() => handleQrOpenChange(false)}>
                 Close
               </Button>
-              <Button onClick={submitQRProofAndPlaceOrder} disabled={qrUploading || !qrFile}>
+              <Button
+                onClick={submitQRProofAndPlaceOrder}
+                disabled={qrUploading || !qrFile}
+              >
                 {qrUploading ? "Uploading…" : "Submit Proof & Place Order"}
               </Button>
             </div>

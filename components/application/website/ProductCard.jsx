@@ -16,7 +16,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { addItem, setQty, selectItems } from "@/store/cartSlice";
 
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area"; // no ScrollBar
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
@@ -296,16 +296,16 @@ export default function ProductCard({
     ? "Out of Stock"
     : "Add To Cart";
 
-  // Embla
+  /* ==================== EMBLA: swipe works on mobile ==================== */
   const galleryKey = activeVariant?._id || slug || "base";
   const [emblaRef, emblaApi] = useEmblaCarousel({
     loop: gallery.length > 1,
     align: "start",
-    dragFree: false,
-    skipSnaps: false,
     containScroll: "trimSnaps",
+    dragFree: false,
   });
 
+  // progress bar
   const [scrollProgress, setScrollProgress] = useState(0);
   const onScroll = useCallback(() => {
     if (!emblaApi) return;
@@ -330,6 +330,14 @@ export default function ProductCard({
       emblaApi.scrollTo(0, true);
     }
   }, [emblaApi, galleryKey, gallery.length]);
+
+  // prevent click-through after a swipe
+  const handleSlideLinkClick = (e) => {
+    if (emblaApi && !emblaApi.clickAllowed()) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  };
 
   return (
     <motion.div
@@ -387,6 +395,8 @@ export default function ProductCard({
                 key={galleryKey}
                 className="embla__viewport h-full"
                 ref={emblaRef}
+                /* ✨ important for mobile swipe */
+                style={{ touchAction: "pan-y" }}
                 initial={{ opacity: 0.2, scale: 0.995 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.995 }}
@@ -396,13 +406,15 @@ export default function ProductCard({
                   {gallery.map((src, idx) => (
                     <div
                       key={`${src}-${idx}`}
-                      className="embla__slide relative h-full min-w-0 flex-[0_0_100%] cursor-grab active:cursor-grabbing"
+                      className="embla__slide relative h-full min-w-0 flex-[0_0_100%] select-none"
                     >
                       {productHref ? (
                         <Link
                           href={productHref}
                           aria-label={name ? `View ${name}` : "View product"}
                           className="absolute inset-0 block"
+                          onClick={handleSlideLinkClick}
+                          draggable={false}
                         >
                           <Image
                             src={src}
@@ -412,9 +424,10 @@ export default function ProductCard({
                                 : `Product image ${idx + 1}`
                             }
                             fill
-                            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 60vw, 33vw" // bigger than 25vw
-                            className="object-contain md:scale-[1.06]" // subtle up-scale on md+
+                            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 60vw, 33vw"
+                            className="object-contain md:scale-[1.06]"
                             priority={idx === 0}
+                            draggable={false}
                           />
                         </Link>
                       ) : (
@@ -429,6 +442,7 @@ export default function ProductCard({
                           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
                           className="object-contain"
                           priority={idx === 0}
+                          draggable={false}
                         />
                       )}
                     </div>
@@ -530,16 +544,14 @@ export default function ProductCard({
                                 fill
                                 sizes="28px"
                                 className="object-cover"
+                                draggable={false}
                               />
                             ) : (
                               <div className="h-full w-full bg-slate-200 dark:bg-neutral-700" />
                             )}
                           </motion.button>
                         </TooltipTrigger>
-                        <TooltipContent
-                          side="top"
-                          className="px-2 py-1 text-xs"
-                        >
+                        <TooltipContent side="top" className="px-2 py-1 text-xs">
                           {s.name}
                         </TooltipContent>
                       </Tooltip>
@@ -668,8 +680,7 @@ export default function ProductCard({
                 ].join(" ")}
                 style={{ backgroundColor: BRAND }}
                 onMouseEnter={(e) => {
-                  if (canAdd)
-                    e.currentTarget.style.backgroundColor = BRAND_HOVER;
+                  if (canAdd) e.currentTarget.style.backgroundColor = BRAND_HOVER;
                 }}
                 onMouseLeave={(e) => {
                   if (canAdd) e.currentTarget.style.backgroundColor = BRAND;

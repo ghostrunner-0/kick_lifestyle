@@ -4,61 +4,47 @@ import React, { useEffect, useMemo, useState } from "react";
 import ProductCard from "./ProductCard";
 import { useProducts } from "@/components/providers/ProductProvider";
 
+/* canonical de-dup (same as BestSellers) */
+const canonicalKey = (p) => {
+  if (!p) return null;
+  const slug = p.slug || p.handle || p?.data?.slug || p.productSlug || p?.seo?.slug;
+  if (slug) return `slug:${String(slug).toLowerCase()}`;
+  const parent = p.parentId || p.productId || p.pid || p.masterId || p.groupId;
+  if (parent) return `pid:${parent}`;
+  const name = (p.name || p.title || "").trim().toLowerCase();
+  const basePrice = p.specialPrice ?? p.price ?? p.mrp ?? p?.data?.price ?? "";
+  return `name:${name}|price:${basePrice}`;
+};
+const dedupe = (arr) => {
+  const seen = new Set();
+  const out = [];
+  for (const item of arr || []) {
+    const key = canonicalKey(item);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+  }
+  return out;
+};
+
 const SkeletonCard = () => (
-  <div
-    role="status"
-    aria-live="polite"
-    className={[
-      "relative overflow-hidden rounded-2xl bg-white",
-      "border border-slate-200/60 dark:bg-neutral-900 dark:border-neutral-800",
-      "animate-pulse",
-    ].join(" ")}
-  >
-    {/* Media */}
+  <div className="relative overflow-hidden rounded-2xl bg-white border border-slate-200/60 dark:bg-neutral-900 dark:border-neutral-800 animate-pulse">
     <div className="relative aspect-square md:aspect-[4/5]">
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="h-[70%] w-[80%] rounded-md bg-slate-200 dark:bg-neutral-700" />
       </div>
     </div>
-
-    {/* Info */}
     <div className="p-3 sm:p-4">
-      {/* Title + variants */}
-      <div className="mb-2 flex items-start justify-between gap-3">
-        <div className="flex-1 space-y-2">
-          <div className="h-4 w-2/3 rounded bg-slate-200 dark:bg-neutral-700" />
-        </div>
-        <div className="shrink-0 flex items-center gap-2">
-          <div className="h-5 w-5 rounded-full bg-slate-200 dark:bg-neutral-700" />
-          <div className="h-5 w-5 rounded-full bg-slate-200 dark:bg-neutral-700" />
-          <div className="h-5 w-5 rounded-full bg-slate-200 dark:bg-neutral-700" />
-        </div>
-      </div>
-
-      {/* Price row */}
+      <div className="mb-2 h-4 w-2/3 rounded bg-slate-200 dark:bg-neutral-700" />
       <div className="flex items-center gap-2">
         <div className="h-5 w-20 rounded bg-slate-200 dark:bg-neutral-700" />
         <div className="h-3 w-16 rounded bg-slate-200 dark:bg-neutral-700" />
       </div>
-
-      {/* CTA */}
       <div className="mt-3 h-9 w-full rounded-full bg-slate-200 dark:bg-neutral-700" />
-
-      <span className="sr-only">Loading product…</span>
     </div>
   </div>
 );
 
-/**
- * Props:
- * - products?: Product[]
- * - loading?: boolean
- * - className?: string
- * - onAddToCart?: (payload) => void
- * - onVariantChange?: (variant|null, product) => void
- *
- * If props are omitted, falls back to ProductProvider (context).
- */
 export default function ProductGrid({
   products,
   loading,
@@ -66,16 +52,16 @@ export default function ProductGrid({
   onAddToCart,
   onVariantChange,
 }) {
-  // Fallback to context (so you can reuse this grid across pages without props)
   const { products: ctxProducts, isLoading: ctxLoading } = useProducts();
 
-  const items = useMemo(
+  const raw = useMemo(
     () => (Array.isArray(products) ? products : ctxProducts || []),
     [products, ctxProducts]
   );
+  const items = useMemo(() => dedupe(raw), [raw]);
   const isLoading = loading ?? ctxLoading ?? false;
 
-  // Fade in when loading flips to false
+  // fade-in
   const [fadeIn, setFadeIn] = useState(false);
   useEffect(() => {
     if (!isLoading) {
@@ -85,42 +71,56 @@ export default function ProductGrid({
     setFadeIn(false);
   }, [isLoading]);
 
+  const GridWrapper = ({ children }) => (
+    <div className="w-full max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8">
+      {children}
+    </div>
+  );
+
   if (isLoading) {
     return (
-      <div
-        className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6 p-4 ${className}`}
-      >
-        {Array.from({ length: 8 }).map((_, i) => (
-          <SkeletonCard key={i} />
-        ))}
-      </div>
+      <GridWrapper>
+        <div
+          className={`grid gap-6 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 ${className}`}
+        >
+          {Array.from({ length: 8 }).map((_, i) => (
+            <SkeletonCard key={i} />
+          ))}
+        </div>
+      </GridWrapper>
     );
-    }
+  }
 
   if (!items.length) {
     return (
-      <div className="py-10 text-center text-gray-500">No products found.</div>
+      <GridWrapper>
+        <div className="py-10 text-center text-gray-500">No products found.</div>
+      </GridWrapper>
     );
   }
 
   return (
-    <div
-      className={[
-        "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6 p-4",
-        "opacity-0 transition-opacity duration-500 ease-out",
-        "motion-reduce:transition-none motion-reduce:opacity-100",
-        fadeIn ? "opacity-100" : "opacity-0",
-        className,
-      ].join(" ")}
-    >
-      {items.map((p) => (
-        <ProductCard
-          key={p._id || p.slug}
-          product={p}
-          onAddToCart={onAddToCart}
-          onVariantChange={(v) => onVariantChange?.(v, p)}
-        />
-      ))}
-    </div>
+    <GridWrapper>
+      <div
+        className={[
+          "grid gap-6",
+          // ⬇️ restored original sizing: 1 → 2 → 3 → 4 columns
+          "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4",
+          "opacity-0 transition-opacity duration-500 ease-out",
+          "motion-reduce:transition-none motion-reduce:opacity-100",
+          fadeIn ? "opacity-100" : "opacity-0",
+          className,
+        ].join(" ")}
+      >
+        {items.map((p) => (
+          <ProductCard
+            key={canonicalKey(p)}
+            product={p}
+            onAddToCart={onAddToCart}
+            onVariantChange={(v) => onVariantChange?.(v, p)}
+          />
+        ))}
+      </div>
+    </GridWrapper>
   );
 }

@@ -1,27 +1,28 @@
-// app/api/website/payments/khalti/verify/route.js
+export const dynamic = "force-dynamic";
+
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { connectDB } from "@/lib/DB";
 import { response } from "@/lib/helperFunctions";
 import Order from "@/models/Orders.model";
 
-export const dynamic = "force-dynamic";
-
 const KHALTI_LOOKUP_URL =
   process.env.KHALTI_LOOKUP_URL || "https://a.khalti.com/api/v2/epayment/lookup/";
-const KHALTI_SECRET_KEY = process.env.KHALTI_SECRET_KEY || process.env.KHALTI_SECRET;
+const KHALTI_SECRET_KEY =
+  process.env.KHALTI_SECRET_KEY || process.env.KHALTI_SECRET;
 
 const mapKhaltiToOrderStatus = (s = "") => {
   switch (s) {
     case "Completed":
       return "processing";
+    // treat all “not successful yet” as pending payment
     case "Pending":
     case "Initiated":
       return "pending payment";
+    // explicit failures go to cancelled
     case "User canceled":
     case "Expired":
     case "Failed":
-      return "cancelled";
     case "Refunded":
     case "Partially Refunded":
       return "cancelled";
@@ -39,9 +40,10 @@ export async function POST(req) {
     const purchase_order_id = String(body?.purchase_order_id || "").trim();
 
     if (!pidx) return response(false, 400, "pidx is required");
-    if (!KHALTI_SECRET_KEY) return response(false, 500, "Khalti secret key not configured");
+    if (!KHALTI_SECRET_KEY)
+      return response(false, 500, "Khalti secret key not configured");
 
-    // 1) lookup
+    // 1) Lookup on Khalti
     const lookupRes = await fetch(KHALTI_LOOKUP_URL, {
       method: "POST",
       headers: {
@@ -54,13 +56,17 @@ export async function POST(req) {
 
     if (!lookupRes.ok) {
       const err = await lookupRes.text().catch(() => "");
-      return response(false, 502, `Khalti lookup failed (${lookupRes.status}) ${err || ""}`.trim());
+      return response(
+        false,
+        502,
+        `Khalti lookup failed (${lookupRes.status}) ${err || ""}`.trim()
+      );
     }
 
     const lookup = await lookupRes.json();
     const { status: kStatus, total_amount, transaction_id } = lookup || {};
 
-    // 2) find order (by saved pidx, or by purchase_order_id)
+    // 2) Find order (by pidx first; fallback to purchase_order_id)
     let order =
       (await Order.findOne({ "metadata.khalti.pidx": pidx })) ||
       (purchase_order_id
@@ -76,19 +82,40 @@ export async function POST(req) {
 
     if (!order) return response(false, 404, "Order not found for this pidx");
 
-    // 3) map status + amount check
-    const next = mapKhaltiToOrderStatus(kStatus);
+    // 3) Status & amount checks
+    const nextOrderStatus = mapKhaltiToOrderStatus(kStatus);
     const paidPaisa = Number(total_amount || 0);
     const orderPaisa = Math.round(Number(order?.amounts?.total || 0) * 100);
 
-    let finalStatus = next;
-    if (kStatus === "Completed" && paidPaisa !== orderPaisa) {
-      finalStatus = "payment Not Verified";
+    const amountMatches = kStatus === "Completed" && paidPaisa === orderPaisa;
+
+    // Decide final order + payment statuses
+    let finalOrderStatus = nextOrderStatus;
+    let paymentStatus = "unpaid";
+
+    if (kStatus === "Completed") {
+      if (amountMatches) {
+        finalOrderStatus = "processing";
+        paymentStatus = "paid";
+      } else {
+        finalOrderStatus = "payment Not Verified";
+        paymentStatus = "unpaid";
+      }
+    } else if (nextOrderStatus === "pending payment") {
+      paymentStatus = "unpaid";
+    } else if (nextOrderStatus === "cancelled") {
+      paymentStatus = "unpaid";
     }
 
-    // 4) save
+    // 4) Persist
     order.paymentMethod = "khalti";
-    order.status = finalStatus;
+    order.status = finalOrderStatus;
+    order.payment = {
+      ...(order.payment || {}),
+      status: paymentStatus,
+      provider: "khalti",
+      providerRef: transaction_id || order?.payment?.providerRef || null,
+    };
     order.metadata = {
       ...(order.metadata || {}),
       khalti: {
@@ -100,16 +127,22 @@ export async function POST(req) {
         verifiedAt: new Date(),
       },
     };
+
     await order.save();
 
-    const success = kStatus === "Completed" && finalStatus === "processing";
+    const success = paymentStatus === "paid" && finalOrderStatus === "processing";
     return NextResponse.json({
       success,
       status: kStatus,
+      order: {
+        _id: order._id,
+        display_order_id: order.display_order_id,
+        status: order.status,
+        payment: { status: order.payment.status },
+      },
       message: success
-        ? "Payment verified and order moved to processing."
+        ? "Payment verified — order is processing and marked paid."
         : `Payment status: ${kStatus}.`,
-      order: { _id: order._id, display_order_id: order.display_order_id, status: order.status },
     });
   } catch (e) {
     return response(false, 500, e?.message || "Server error");

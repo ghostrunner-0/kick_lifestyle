@@ -7,7 +7,7 @@ import { response } from "@/lib/helperFunctions";
 import Order from "@/models/Orders.model";
 import Counter from "@/models/Counter.model";
 
-/** Keep prefixes consistent everywhere (Khalti route uses same map) */
+/** Keep prefixes consistent everywhere */
 const ORDER_PREFIX = Object.freeze({
   cod: "AXC",
   khalti: "MNP",
@@ -15,19 +15,12 @@ const ORDER_PREFIX = Object.freeze({
   default: "ZQX",
 });
 
-/** Global atomic sequence (shared with Khalti route) */
+/** Global atomic sequence */
 async function getNextOrderSequence(session = undefined) {
   try {
     const doc = await Counter.findOneAndUpdate(
       { _id: "order_display_seq" },
-      [
-        {
-          $set: {
-            // first order = 2000
-            seq: { $add: [{ $ifNull: ["$seq", 1999] }, 1] },
-          },
-        },
-      ],
+      [{ $set: { seq: { $add: [{ $ifNull: ["$seq", 1999] }, 1] } } }],
       { new: true, upsert: true, session }
     ).lean();
     return doc.seq;
@@ -48,10 +41,7 @@ async function getNextOrderSequence(session = undefined) {
 
 /**
  * POST /api/website/orders
- * Creates orders for COD or QR.
- * - COD  -> status: "processing"
- * - QR   -> status: "payment not verified"
- * (Khalti must use /api/website/payments/khalti/initiate)
+ * Creates orders for COD, QR, and KHALTI (khalti initiation happens separately).
  */
 export async function POST(req) {
   try {
@@ -63,10 +53,6 @@ export async function POST(req) {
     const pm = String(payload?.paymentMethod || "").toLowerCase(); // "cod" | "qr" | "khalti"
     if (!["cod", "qr", "khalti"].includes(pm)) {
       return response(false, 400, "Invalid payment method");
-    }
-    if (pm === "khalti") {
-      // Client must call the Khalti initiate endpoint instead
-      return response(false, 400, "Use /api/website/payments/khalti/initiate for Khalti");
     }
 
     const userIdRaw = payload?.user?.id || payload?.userId;
@@ -82,8 +68,12 @@ export async function POST(req) {
     // ---- Amounts
     const subtotal = Number(payload?.amounts?.subtotal ?? 0);
     const discount = Math.max(0, Number(payload?.amounts?.discount ?? 0));
-    const shippingCost = pm === "cod" ? Math.max(0, Number(payload?.amounts?.shippingCost ?? 0)) : 0;
-    const codFee = pm === "cod" ? Math.max(0, Number(payload?.amounts?.codFee ?? 0)) : 0;
+    const shippingCost =
+      pm === "cod"
+        ? Math.max(0, Number(payload?.amounts?.shippingCost ?? 0))
+        : 0;
+    const codFee =
+      pm === "cod" ? Math.max(0, Number(payload?.amounts?.codFee ?? 0)) : 0;
 
     const baseTotal = Math.max(0, subtotal - discount);
     const total = pm === "cod" ? baseTotal + shippingCost + codFee : baseTotal;
@@ -98,12 +88,18 @@ export async function POST(req) {
     const display_order_id = `${prefix}-${seq}`;
 
     // ---- Status by payment method
-    const status = pm === "cod" ? "processing" : "payment Not Verified";
+    let status = "processing";
+    if (pm === "qr") status = "payment Not Verified";
+    if (pm === "khalti") status = "pending payment";
 
     // ---- Build document
     const userId = new mongoose.Types.ObjectId(userIdRaw);
     const docToCreate = {
       userId,
+      user: {
+        name: payload?.user?.name || undefined,
+        email: payload?.user?.email || undefined,
+      },
       customer: payload?.customer || {},
       address: payload?.address || {},
       items,
@@ -113,9 +109,18 @@ export async function POST(req) {
         shippingCost,
         codFee,
         total,
+        currency: payload?.amounts?.currency || "NPR",
       },
       coupon: payload?.coupon || undefined,
       paymentMethod: pm,
+      // default payment status for khalti must be unpaid; others may remain unpaid too
+      payment: {
+        status:
+          pm === "khalti" ? "unpaid" : payload?.payment?.status || "unpaid",
+        provider:
+          pm === "khalti" ? "khalti" : payload?.payment?.provider || undefined,
+        providerRef: payload?.payment?.providerRef || undefined,
+      },
       status,
 
       display_order_prefix: prefix,
@@ -134,6 +139,17 @@ export async function POST(req) {
               },
             }
           : {}),
+        ...(pm === "khalti"
+          ? {
+              khalti: {
+                purchase_order_id: display_order_id,
+                initiateAt: null, // filled after /initiate
+                pidx: null,
+                payment_url: null,
+                status: "Created", // our internal flag
+              },
+            }
+          : {}),
       },
     };
 
@@ -143,19 +159,23 @@ export async function POST(req) {
       order = await Order.create(docToCreate);
     } catch (err) {
       if (err?.code === 11000 && /display_order_id/.test(err?.message || "")) {
-        return response(false, 500, "Could not allocate a unique order id, please retry");
+        return response(
+          false,
+          500,
+          "Could not allocate a unique order id, please retry"
+        );
       }
       throw err;
     }
 
-    // Return a useful shape (includes total for QR proof step)
     return NextResponse.json({
       success: true,
       data: {
         _id: order._id,
         display_order_id: order.display_order_id,
         status: order.status,
-        amounts: order.amounts, // <-- includes total
+        payment: order.payment,
+        amounts: order.amounts,
       },
     });
   } catch (e) {

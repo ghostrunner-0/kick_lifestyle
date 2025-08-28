@@ -118,7 +118,7 @@ function SectionHeader({ title, sub }) {
   );
 }
 
-/* ------------- Small reusable Combobox (like in checkout) ------------- */
+/* ------------- Small reusable Combobox ------------- */
 function ComboBox({
   value,
   valueLabel,
@@ -189,28 +189,17 @@ function ComboBox({
 }
 
 /* =========================== Edit Address Dialog =========================== */
-function EditAddressDialog({
-  open,
-  onOpenChange,
-  initialUser, // can pass user for saved labels/ids
-  onSaved, // callback to refetch addresses
-}) {
+function EditAddressDialog({ open, onOpenChange, initialUser, onSaved }) {
   const [saving, setSaving] = useState(false);
-
-  // current form state
   const [city, setCity] = useState("");
   const [zone, setZone] = useState("");
   const [area, setArea] = useState("");
   const [landmark, setLandmark] = useState("");
-
-  // labels to show while options load (from user)
   const [savedLabels, setSavedLabels] = useState({
     city: "",
     zone: "",
     area: "",
   });
-
-  // options
   const [cityOptions, setCityOptions] = useState([]);
   const [zoneOptions, setZoneOptions] = useState([]);
   const [areaOptions, setAreaOptions] = useState([]);
@@ -220,7 +209,6 @@ function EditAddressDialog({
     area: false,
   });
 
-  // hydrate from user when opening
   useEffect(() => {
     if (!open) return;
     const u = initialUser || {};
@@ -235,7 +223,6 @@ function EditAddressDialog({
     setLandmark(u.address || "");
   }, [open, initialUser]);
 
-  // fetchers
   const fetchCities = useCallback(async () => {
     setLoadingLoc((s) => ({ ...s, city: true }));
     try {
@@ -298,13 +285,9 @@ function EditAddressDialog({
     }
   }, []);
 
-  // load cities on open
   useEffect(() => {
-    if (!open) return;
-    fetchCities();
+    if (open) fetchCities();
   }, [open, fetchCities]);
-
-  // cascade
   useEffect(() => {
     if (!city) {
       setZone("");
@@ -315,7 +298,6 @@ function EditAddressDialog({
     }
     fetchZones(city);
   }, [city, fetchZones]);
-
   useEffect(() => {
     if (!zone) {
       setArea("");
@@ -436,7 +418,6 @@ export default function AccountPage() {
   const [user, setUser] = useState(null);
   const [activeTab, setActiveTab] = useState("overview");
 
-  // mobile sidebar state
   const [navOpen, setNavOpen] = useState(false);
 
   // Orders
@@ -506,7 +487,7 @@ export default function AccountPage() {
   useEffect(() => {
     if (!user) return;
 
-    // Orders (NEW: match the payload you shared)
+    // Orders
     (async () => {
       setOrdersLoading(true);
       try {
@@ -524,7 +505,7 @@ export default function AccountPage() {
       }
     })();
 
-    // Service Requests (placeholder)
+    // Service Requests
     (async () => {
       setServiceLoading(true);
       try {
@@ -543,7 +524,7 @@ export default function AccountPage() {
     // Addresses
     reloadAddresses();
 
-    // Warranties via public lookup (by phone)
+    // Warranties (by phone)
     (async () => {
       setWarrantyLoading(true);
       try {
@@ -594,7 +575,6 @@ export default function AccountPage() {
   const goTab = (val) => {
     setActiveTab(val);
     setNavOpen(false);
-    // UX: ensure content header is visible
     try {
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch {}
@@ -613,7 +593,7 @@ export default function AccountPage() {
 
   return (
     <div className="max-w-6xl mx-auto p-4 sm:p-8 space-y-8">
-      {/* Header / identity */}
+      {/* Header */}
       <motion.header
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
@@ -738,12 +718,13 @@ export default function AccountPage() {
         </Button>
       </motion.div>
 
-      {/* Mobile: Sidebar (drawer) trigger */}
+      {/* Mobile: sidebar trigger */}
       <div className="sm:hidden">
         <Sheet open={navOpen} onOpenChange={setNavOpen}>
           <div className="flex items-center justify-between">
             <div className="text-sm text-muted-foreground">
-              Section: <span className="font-medium text-foreground">{currentNav}</span>
+              Section:{" "}
+              <span className="font-medium text-foreground">{currentNav}</span>
             </div>
             <SheetTrigger asChild>
               <Button variant="outline" className="gap-2">
@@ -769,12 +750,16 @@ export default function AccountPage() {
                   >
                     <SheetClose asChild>
                       <button
-                        onClick={() => goTab(value)}
+                        onClick={() => {
+                          setActiveTab(value);
+                          setNavOpen(false);
+                          try {
+                            window.scrollTo({ top: 0, behavior: "smooth" });
+                          } catch {}
+                        }}
                         className={cn(
                           "w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left",
-                          value === activeTab
-                            ? "bg-muted"
-                            : "hover:bg-muted/60"
+                          value === activeTab ? "bg-muted" : "hover:bg-muted/60"
                         )}
                       >
                         <Icon className="h-4 w-4" />
@@ -791,7 +776,7 @@ export default function AccountPage() {
 
       {/* Content tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        {/* Desktop/Tablet Tabs list */}
+        {/* Desktop tabs */}
         <TabsList className="hidden sm:inline-flex">
           {NAV.map((n) => (
             <TabsTrigger key={n.value} value={n.value}>
@@ -825,7 +810,12 @@ export default function AccountPage() {
                   <Button
                     variant="outline"
                     className="w-full justify-between"
-                    onClick={() => goTab("orders")}
+                    onClick={() => {
+                      setActiveTab("orders");
+                      try {
+                        window.scrollTo({ top: 0, behavior: "smooth" });
+                      } catch {}
+                    }}
                   >
                     <span className="inline-flex items-center gap-2">
                       <Package className="h-4 w-4" />
@@ -854,7 +844,12 @@ export default function AccountPage() {
                   <Button
                     variant="outline"
                     className="w-full justify-between"
-                    onClick={() => goTab("warranty")}
+                    onClick={() => {
+                      setActiveTab("warranty");
+                      try {
+                        window.scrollTo({ top: 0, behavior: "smooth" });
+                      } catch {}
+                    }}
                   >
                     <span className="inline-flex items-center gap-2">
                       <ShieldCheck className="h-4 w-4" />
@@ -879,7 +874,11 @@ export default function AccountPage() {
                   </div>
                 )}
                 <div className="mt-3">
-                  <Button asChild variant="outline" className="w-full justify-between">
+                  <Button
+                    asChild
+                    variant="outline"
+                    className="w-full justify-between"
+                  >
                     <Link href="/support">
                       <span className="inline-flex items-center gap-2">
                         <Wrench className="h-4 w-4" />
@@ -913,48 +912,76 @@ export default function AccountPage() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {orders.map((o) => (
-                      <motion.div
-                        key={o._id || o.id}
-                        initial={{ opacity: 0, y: 6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0 }}
-                        className="rounded border p-3 hover:bg-muted/30 transition-colors"
-                      >
-                        <div className="flex flex-wrap items-center gap-2">
-                          {o.displayOrderId ? (
-                            <Chip icon={Hash}>{o.displayOrderId}</Chip>
-                          ) : null}
-                          <Badge
-                            variant="outline"
-                            className="capitalize"
-                            title="Status"
-                          >
-                            {o.status || "—"}
-                          </Badge>
-                          <div className="text-xs text-muted-foreground inline-flex items-center gap-1.5 ml-auto">
-                            <CalendarDays className="h-4 w-4" />
-                            {niceDate(o.createdAt)}
-                          </div>
-                        </div>
+                    {orders.map((o) => {
+                      const viewHref = o?.displayOrderId
+                        ? `/view-order/${encodeURIComponent(o.displayOrderId)}`
+                        : undefined;
 
-                        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm">
-                          <span className="font-medium">
-                            {o.summary || `${o.itemsCount || 0} item(s)`}
-                          </span>
-                          <Separator
-                            orientation="vertical"
-                            className="h-4 hidden sm:block"
-                          />
-                          <span className="text-muted-foreground">
-                            {o.itemsCount} item{o.itemsCount === 1 ? "" : "s"}
-                          </span>
-                          <span className="ml-auto font-semibold">
-                            {formatNpr(o.total)} {o.currency || ""}
-                          </span>
-                        </div>
-                      </motion.div>
-                    ))}
+                      return (
+                        <motion.div
+                          key={o._id || o.id}
+                          initial={{ opacity: 0, y: 6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0 }}
+                          className="rounded border p-3 hover:bg-muted/30 transition-colors"
+                        >
+                          {/* Top row: ID + status + date */}
+                          <div className="flex flex-wrap items-center gap-2">
+                            {o.displayOrderId ? (
+                              <Link
+                                href={viewHref}
+                                className="hover:opacity-90"
+                                title="View order"
+                              >
+                                <Chip icon={Hash}>{o.displayOrderId}</Chip>
+                              </Link>
+                            ) : null}
+                            <Badge
+                              variant="outline"
+                              className="capitalize"
+                              title="Status"
+                            >
+                              {o.status || "—"}
+                            </Badge>
+                            <div className="text-xs text-muted-foreground inline-flex items-center gap-1.5 ml-auto">
+                              <CalendarDays className="h-4 w-4" />
+                              {niceDate(o.createdAt)}
+                            </div>
+                          </div>
+
+                          {/* Second row: summary + count + total + view button */}
+                          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm">
+                            <span className="font-medium">
+                              {o.summary || `${o.itemsCount || 0} item(s)`}
+                            </span>
+                            <Separator
+                              orientation="vertical"
+                              className="h-4 hidden sm:block"
+                            />
+                            <span className="text-muted-foreground">
+                              {o.itemsCount} item{o.itemsCount === 1 ? "" : "s"}
+                            </span>
+
+                            <div className="ml-auto flex items-center gap-2">
+                              <span className="font-semibold">
+                                {formatNpr(o.total)} {o.currency || ""}
+                              </span>
+
+                              {viewHref ? (
+                                <Button
+                                  asChild
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8"
+                                >
+                                  <Link href={viewHref}>View details</Link>
+                                </Button>
+                              ) : null}
+                            </div>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
                   </div>
                 )}
               </AnimatePresence>

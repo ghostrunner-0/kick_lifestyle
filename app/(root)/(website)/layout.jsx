@@ -1,4 +1,4 @@
-// app/(site)/layout.jsx  (server component)
+// app/(website)/layout.jsx (or your layout file shown)
 import Footer from "@/components/application/website/Footer";
 import Header from "@/components/application/website/Header";
 import React from "react";
@@ -8,6 +8,8 @@ import ReactQueryProvider from "@/components/providers/ReactQueryProvider";
 import { CategoriesProvider } from "@/components/providers/CategoriesProvider";
 import { ProductProvider } from "@/components/providers/ProductProvider";
 import BottomNav from "@/components/application/website/BottomNav";
+import { deriveKey } from "@/components/providers/ProductProvider";
+import AuthHydrator from "@/components/providers/AuthHydrator"; // <-- add this
 
 const poppins = Poppins({
   subsets: ["latin"],
@@ -15,12 +17,16 @@ const poppins = Poppins({
   weight: ["400", "500", "600", "700"],
 });
 
-// Prefer explicit base URL for production/dev, otherwise fallback to relative paths
-const SITE_URL = process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || "";
+const SITE_URL =
+  process.env.NEXT_PUBLIC_BASE_URL ||
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  "";
 
 export default async function Layout({ children }) {
-  // ✅ server-fetch once so Header + pages render instantly
   let initialCategories = [];
+  let initialActiveKey = null;
+  let initialProducts = [];
+
   try {
     const res = await fetch(`${SITE_URL}/api/website/category`, {
       next: { revalidate: 300 },
@@ -31,15 +37,32 @@ export default async function Layout({ children }) {
     }
   } catch {}
 
+  try {
+    if (initialCategories.length) {
+      initialActiveKey = deriveKey(initialCategories[0]);
+      const prodRes = await fetch(
+        `${SITE_URL}/api/website/products?category=${encodeURIComponent(initialActiveKey)}`,
+        { next: { revalidate: 120 } }
+      );
+      const prodJson = await prodRes.json();
+      if (Array.isArray(prodJson?.data)) initialProducts = prodJson.data;
+    }
+  } catch {}
+
   return (
     <html lang="en">
       <body className={poppins.className}>
         <ReactQueryProvider>
-          {/* ⬇️ pass the server data here */}
+          {/* <-- Hydrate Redux from NextAuth session if needed */}
+          <AuthHydrator />
+
           <CategoriesProvider initialCategories={initialCategories}>
-            <ProductProvider>
+            <ProductProvider
+              initialActiveKey={initialActiveKey}
+              initialProducts={initialProducts}
+            >
               <Header />
-              <main>{children}</main>
+              <main className="pb-16 md:pb-0">{children}</main>
               <Footer />
               <BottomNav />
             </ProductProvider>

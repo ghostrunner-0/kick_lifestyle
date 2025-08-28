@@ -1,8 +1,10 @@
 "use client";
-import React, { useEffect, useState } from "react";
-import axios from "axios";
+
+import React, { useMemo } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useCategories } from "@/components/providers/CategoriesProvider";
+import { CATEGORY_VIEW_ROUTE } from "@/routes/WebsiteRoutes";
 
 /** Light bg colors (no gradients) */
 const BG_COLORS = [
@@ -22,35 +24,60 @@ const pickBg = (key) => {
   return BG_COLORS[Math.abs(h) % BG_COLORS.length];
 };
 
-export default function CategoryBanner({ loading, setloading, categories }) {
-  if (loading)
+function CategoryBanner() {
+  const { categories, isLoading } = useCategories();
+
+  const list = useMemo(() => {
+    const arr = Array.isArray(categories) ? categories : [];
+    // If your provider already filters showOnWebsite, you can drop the filter below
+    return arr.filter((c) => c?.showOnWebsite);
+  }, [categories]);
+
+  if (isLoading) {
     return (
-      <div className="py-10 text-center text-sm text-neutral-500">Loading…</div>
+      <section className="w-full py-5">
+        <div className="mx-auto max-w-screen-2xl px-5 sm:px-5 md:px-6 lg:px-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-10">
+            {[0, 1].map((i) => (
+              <div
+                key={i}
+                className="relative isolate flex items-center rounded-2xl bg-zinc-100 overflow-visible pl-5 pr-28 md:pl-6 md:pr-36 py-6 md:py-8 animate-pulse"
+              >
+                <div className="z-10 w-[80%] h-8 bg-zinc-200 rounded" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
     );
-  if (!categories.length)
+  }
+
+  if (!list.length) {
     return (
       <div className="py-10 text-center text-sm text-neutral-500">
         No categories found
       </div>
     );
+  }
 
   return (
     <section className="w-full py-5">
       <div className="mx-auto max-w-screen-2xl px-5 sm:px-5 md:px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-10">
-          {categories.map((cat) => {
-            const href = `/category/${cat.slug || ""}`;
-            const src = cat?.image?.path || "";
-            const alt = cat?.image?.alt || cat?.name || "Category";
+          {list.map((cat, idx) => {
+            const href = CATEGORY_VIEW_ROUTE(cat.slug || "");
+            const src = cat?.image?.path || cat?.banner?.path || "";
+            const alt = cat?.image?.alt || cat?.banner?.alt || cat?.name || "Category";
             const bg = pickBg(cat._id || cat.slug || cat.name);
 
             return (
               <Link
+                prefetch
                 key={cat._id || cat.slug || cat.name}
                 href={href}
                 className={`relative isolate flex items-center rounded-2xl ${bg} overflow-visible group
-                            transition
-                            pl-5 pr-28 md:pl-6 md:pr-36 py-6 md:py-8`}
+                            transition pl-5 pr-28 md:pl-6 md:pr-36 py-6 md:py-8`}
+                aria-label={cat?.name || "Category"}
               >
                 {/* TEXT */}
                 <div className="z-10 w-[80%] md:w-[80%]">
@@ -88,7 +115,7 @@ export default function CategoryBanner({ loading, setloading, categories }) {
                         fill
                         className="object-contain"
                         sizes="(min-width:1280px) 14rem, (min-width:768px) 12rem, 9rem"
-                        priority={false}
+                        priority={idx < 2}         /* boost LCP for first two */
                       />
                     </div>
                   </div>
@@ -101,3 +128,5 @@ export default function CategoryBanner({ loading, setloading, categories }) {
     </section>
   );
 }
+
+export default React.memo(CategoryBanner);
