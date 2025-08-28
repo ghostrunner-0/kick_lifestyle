@@ -7,6 +7,7 @@ import { Poppins } from "next/font/google";
 import ReactQueryProvider from "@/components/providers/ReactQueryProvider";
 import { CategoriesProvider } from "@/components/providers/CategoriesProvider";
 import { ProductProvider } from "@/components/providers/ProductProvider";
+import BottomNav from "@/components/application/website/BottomNav";
 
 const poppins = Poppins({
   subsets: ["latin"],
@@ -40,6 +41,7 @@ export default async function Layout({ children }) {
               <Header />
               <main>{children}</main>
               <Footer />
+              <BottomNav />
             </ProductProvider>
           </CategoriesProvider>
         </ReactQueryProvider>

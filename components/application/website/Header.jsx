@@ -4,28 +4,32 @@ import React, { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+
+/* Sidebars */
 import CartSidebar from "./CartSidebar";
 import SearchSidebar from "@/components/application/SearchSidebar";
 
+/* Redux */
 import { useSelector } from "react-redux";
 import { selectCartCount } from "@/store/cartSlice";
 
-// Logos
+/* Assets */
 import LOGO_BLACK from "@/public/assets/images/logo-black.png";
 import LOGO_WHITE from "@/public/assets/images/logo-white.png";
 
+/* Routes + Icons */
 import { CATEGORY_VIEW_ROUTE, WEBSITE_HOME } from "@/routes/WebsiteRoutes";
 import { Menu, Search, User, ShoppingCart, ChevronDown } from "lucide-react";
 
-// shadcn/ui
+/* shadcn/ui */
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from "@/components/ui/sheet";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 
-// Categories (from single global fetch)
+/* Categories */
 import { useCategories } from "@/components/providers/CategoriesProvider";
 
-/* ------------------ Static (non-category) items ------------------ */
+/* -------- Static (non-category) items -------- */
 const STATIC_NAV = [
   {
     label: "Support & warranty",
@@ -51,24 +55,29 @@ const toTitle = (s) =>
 
 export default function Header() {
   const router = useRouter();
+  const pathname = usePathname();
+  const isHome = pathname === "/" || pathname === WEBSITE_HOME;
+
+  /* Cart count (badge) */
   const cartCount = useSelector(selectCartCount);
+
+  /* UI state */
   const [isSticky, setIsSticky] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [products, setProducts] = useState([]);
-  const pathname = usePathname();
-  const isHome = pathname === "/" || pathname === WEBSITE_HOME;
 
-  // categories (single fetch globally)
+  /* Categories (single fetch via provider) */
   const { categories, isLoading } = useCategories();
 
-  // -------- auth-based account destination --------
+  /* Account link label/route */
   const [accountHref, setAccountHref] = useState("/auth/login");
   const [accountLabel, setAccountLabel] = useState("Login / Register");
 
+  /* Resolve account (admin vs user vs guest) */
   useEffect(() => {
     let cancelled = false;
-    async function resolveAccount() {
+    (async () => {
       try {
         const res = await fetch("/api/auth/me", { credentials: "include" });
         if (!res.ok) throw new Error("not logged in");
@@ -89,12 +98,13 @@ export default function Header() {
           setAccountLabel("Login / Register");
         }
       }
-    }
-    resolveAccount();
-    return () => { cancelled = true; };
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // Sticky only on home
+  /* Sticky/transparent header behavior (home only) */
   useEffect(() => {
     if (!isHome) return;
     const onScroll = () => setIsSticky(window.scrollY > 8);
@@ -110,25 +120,24 @@ export default function Header() {
       .map((c) => ({ label: toTitle(c?.name), href: CATEGORY_VIEW_ROUTE(c?.slug) }));
   }, [categories]);
 
-  // ---------- Load product list for search (update index whenever this changes) ----------
+  /* Prefetch search index (used by SearchSidebar) */
   useEffect(() => {
     let cancel = false;
-    async function load() {
+    (async () => {
       try {
-        // Replace with your real API. Expecting: { products: [...] }
         const res = await fetch("/api/website/search-index");
         const json = await res.json();
         if (!cancel) setProducts(json?.products || []);
       } catch {
-        // fallback: try another endpoint or leave empty
         if (!cancel) setProducts([]);
       }
-    }
-    load();
-    return () => { cancel = true; };
+    })();
+    return () => {
+      cancel = true;
+    };
   }, []);
 
-  // Navigate when a product is selected from search
+  /* Navigate when a product is selected from search */
   const handleSelectProduct = (p) => {
     const slug = p?.slug || p?.data?.slug;
     const id = p?.id || p?.product_id || p?._id;
@@ -136,11 +145,11 @@ export default function Header() {
     router.push(href);
   };
 
-  /* ------------------ Same width/padding everywhere ------------------ */
+  /* Layout constraints */
   const containerMaxW = "max-w-[1600px]";
   const containerPad = "[padding-inline:clamp(1rem,5vw,6rem)]";
 
-  /* ------------------ Header styles ------------------ */
+  /* Header surface styles */
   const headerCls = isHome
     ? [
         "fixed inset-x-0 top-0 z-50 transition-colors",
@@ -151,19 +160,37 @@ export default function Header() {
     : "sticky top-0 inset-x-0 z-50 bg-white/70 supports-[backdrop-filter]:bg-white/60 backdrop-blur";
 
   const textCls = isHome ? (isSticky ? "text-gray-900" : "text-white") : "text-gray-900";
-  const iconCls = textCls;
   const currentLogo = isHome && !isSticky ? LOGO_WHITE : LOGO_BLACK;
-  const hoverUnderlineColor = "var(--primary)";
+
+  /* Event bus -> open sidebars from BottomNav */
+  useEffect(() => {
+    const openSearch = () => setSearchOpen(true);
+    const openCart = () => setCartOpen(true);
+    window.addEventListener("openSearch", openSearch);
+    window.addEventListener("openCart", openCart);
+    return () => {
+      window.removeEventListener("openSearch", openSearch);
+      window.removeEventListener("openCart", openCart);
+    };
+  }, []);
 
   return (
     <>
       <header className={headerCls}>
-        <div className={`mx-auto ${containerMaxW} ${containerPad} flex items-center justify-between lg:py-5 py-3 px-3`}>
-          {/* Left: mobile trigger + (desktop logo) */}
+        <div
+          className={`mx-auto ${containerMaxW} ${containerPad} flex items-center justify-between lg:py-5 py-3 px-3`}
+        >
+          {/* Left: Mobile menu trigger + Desktop logo */}
           <div className="flex items-center gap-2">
+            {/* Mobile: hamburger opens drawer */}
             <Sheet>
               <SheetTrigger asChild className="lg:hidden">
-                <Button variant="ghost" size="icon" aria-label="Open menu" className={iconCls + " hover:bg-transparent"}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Open menu"
+                  className={textCls + " hover:bg-transparent"}
+                >
                   <Menu className="h-5 w-5" />
                 </Button>
               </SheetTrigger>
@@ -174,7 +201,14 @@ export default function Header() {
               >
                 {/* Drawer header */}
                 <div className="flex items-center justify-between px-4 py-3 border-b bg-white">
-                  <Image src={LOGO_BLACK} alt="KICK" width={110} height={40} className="object-contain" priority />
+                  <Image
+                    src={LOGO_BLACK}
+                    alt="KICK"
+                    width={110}
+                    height={40}
+                    className="object-contain"
+                    priority
+                  />
                   <SheetClose asChild>
                     <button className="h-9 w-9 rounded-full bg-black/5 hover:bg-black/10">
                       <span className="sr-only">Close</span>✕
@@ -182,7 +216,7 @@ export default function Header() {
                   </SheetClose>
                 </div>
 
-                {/* Quick search button in the drawer */}
+                {/* Quick search entry */}
                 <div className="p-3 border-b">
                   <Button
                     onClick={() => setSearchOpen(true)}
@@ -194,16 +228,21 @@ export default function Header() {
                   </Button>
                 </div>
 
-                {/* Sidebar nav */}
+                {/* Drawer nav */}
                 <nav className="p-3">
                   <ul className="space-y-2">
-                    {isLoading && <li className="px-4 py-2 text-sm text-muted-foreground">Loading…</li>}
+                    {isLoading && (
+                      <li className="px-4 py-2 text-sm text-muted-foreground">Loading…</li>
+                    )}
 
                     {!isLoading &&
                       catLinks.map((item) => (
                         <li key={item.label}>
                           <SheetClose asChild>
-                            <Link href={item.href} className="block rounded-lg px-4 h-12 leading-[48px] text-[15px] font-medium hover:bg-muted">
+                            <Link
+                              href={item.href}
+                              className="block rounded-lg px-4 h-12 leading-[48px] text-[15px] font-medium hover:bg-muted"
+                            >
                               {item.label}
                             </Link>
                           </SheetClose>
@@ -223,7 +262,10 @@ export default function Header() {
                                   {item.items.map((child) => (
                                     <li key={child.label}>
                                       <SheetClose asChild>
-                                        <Link href={child.href} className="flex items-center justify-between rounded-lg px-3 py-2 text-sm hover:bg-muted">
+                                        <Link
+                                          href={child.href}
+                                          className="flex items-center justify-between rounded-lg px-3 py-2 text-sm hover:bg-muted"
+                                        >
                                           <span>{child.label}</span>
                                         </Link>
                                       </SheetClose>
@@ -237,7 +279,10 @@ export default function Header() {
                       ) : (
                         <li key={item.label}>
                           <SheetClose asChild>
-                            <Link href={item.href} className="block rounded-lg px-4 h-12 leading-[48px] text-[15px] font-medium hover:bg-muted">
+                            <Link
+                              href={item.href}
+                              className="block rounded-lg px-4 h-12 leading-[48px] text-[15px] font-medium hover:bg-muted"
+                            >
                               {item.label}
                             </Link>
                           </SheetClose>
@@ -267,8 +312,15 @@ export default function Header() {
 
             {/* Desktop: Logo */}
             <div className="hidden lg:block">
-              <Link href={WEBSITE_HOME} className="block">
-                <Image src={currentLogo} height={146} width={383} alt="KICK" className="w-32" priority />
+              <Link href={WEBSITE_HOME} className="block" aria-label="Go to home">
+                <Image
+                  src={currentLogo}
+                  height={146}
+                  width={383}
+                  alt="KICK"
+                  className="w-32"
+                  priority
+                />
               </Link>
             </div>
           </div>
@@ -276,8 +328,15 @@ export default function Header() {
           {/* Center: mobile logo OR desktop nav */}
           <div className="flex-1 flex justify-center min-w-0">
             {/* Mobile centered logo */}
-            <Link href={WEBSITE_HOME} className="lg:hidden block">
-              <Image src={currentLogo} height={146} width={383} alt="KICK" className="w-24" priority />
+            <Link href={WEBSITE_HOME} className="lg:hidden block" aria-label="Go to home">
+              <Image
+                src={currentLogo}
+                height={146}
+                width={383}
+                alt="KICK"
+                className="w-24"
+                priority
+              />
             </Link>
 
             {/* Desktop nav */}
@@ -298,16 +357,22 @@ export default function Header() {
                     <button
                       className={`nav-link-underline inline-flex items-center gap-1 text-sm font-medium tracking-wide h-10 px-1 whitespace-nowrap ${textCls}`}
                       aria-haspopup="menu"
+                      aria-expanded="false"
                     >
                       <span className="whitespace-nowrap">{item.label}</span>
-                      <ChevronDown className={`h-4 w-4 transition-transform duration-500 group-hover:rotate-180 ${textCls}`} />
+                      <ChevronDown
+                        className={`h-4 w-4 transition-transform duration-500 group-hover:rotate-180 ${textCls}`}
+                      />
                     </button>
 
                     <div className="invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all duration-150 absolute left-1/2 -translate-x-1/2 mt-3 min-w-[240px] rounded-md border bg-white shadow-lg">
                       <ul className="py-2">
                         {item.items.map((child) => (
                           <li key={child.label}>
-                            <Link href={child.href} className="block px-4 py-2.5 text-sm hover:bg-gray-50 whitespace-nowrap text-gray-900">
+                            <Link
+                              href={child.href}
+                              className="block px-4 py-2.5 text-sm hover:bg-gray-50 whitespace-nowrap text-gray-900"
+                            >
                               {child.label}
                             </Link>
                           </li>
@@ -328,9 +393,9 @@ export default function Header() {
             </nav>
           </div>
 
-          {/* Right icons */}
+          {/* Right: icons/actions */}
           <div className="flex items-center gap-1">
-            {/* Desktop search opens the sidebar (the sidebar includes the input) */}
+            {/* Desktop-only Search */}
             <Button
               variant="ghost"
               size="icon"
@@ -342,7 +407,7 @@ export default function Header() {
               <Search className="h-5 w-5" />
             </Button>
 
-            {/* Account */}
+            {/* Desktop-only Account */}
             <Button
               asChild
               variant="ghost"
@@ -356,7 +421,7 @@ export default function Header() {
               </Link>
             </Button>
 
-            {/* Cart opens the sidebar */}
+            {/* Cart: visible on mobile + desktop */}
             <button
               type="button"
               onClick={() => setCartOpen(true)}
@@ -367,7 +432,7 @@ export default function Header() {
               <ShoppingCart className="h-5 w-5" />
               {cartCount > 0 && (
                 <span className="absolute -top-1 -right-1 grid place-items-center rounded-full bg-black text-white text-[10px] h-4 min-w-4 px-1 leading-[16px]">
-                  {cartCount}
+                  {cartCount > 99 ? "99+" : cartCount}
                 </span>
               )}
             </button>
@@ -375,12 +440,12 @@ export default function Header() {
         </div>
       </header>
 
-      {/* Sidebars mounted once for control */}
+      {/* Sidebars mounted once */}
       <CartSidebar open={cartOpen} onOpenChange={setCartOpen} />
       <SearchSidebar
         open={searchOpen}
         onOpenChange={setSearchOpen}
-        products={products}                  // 🔁 Fuse.js index rebuilds when this changes
+        products={products}
         onSelectProduct={handleSelectProduct}
         accent="#fcba17"
       />
@@ -399,7 +464,10 @@ export default function Header() {
           background: var(--primary);
           transition: width 500ms ease;
         }
-        .nav-link-underline:hover::after, .group:hover .nav-link-underline::after { width: 100%; }
+        .nav-link-underline:hover::after,
+        .group:hover .nav-link-underline::after {
+          width: 100%;
+        }
       `}</style>
     </>
   );
