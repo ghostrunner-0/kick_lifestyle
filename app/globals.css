@@ -120,6 +120,14 @@
   }
 }
 
+/* Ensure the app root fills full height to prevent extra whitespace below full-screen layouts */
+html, body, #__next {
+  height: 100%;
+}
+body {
+  margin: 0;
+}
+
 /* smooth scroll + hide scrollbars utility */
 html {
   scroll-behavior: smooth;

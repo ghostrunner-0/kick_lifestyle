@@ -1,4 +1,6 @@
+// components/providers/CategoriesProvider.jsx
 "use client";
+
 import { createContext, useContext, useMemo } from "react";
 import useFetch from "@/hooks/useFetch";
 
@@ -8,32 +10,36 @@ const CategoriesContext = createContext({
   error: null,
 });
 
-export function CategoriesProvider({ children }) {
+export function CategoriesProvider({ children, initialCategories = [] }) {
+  const hasInitial = Array.isArray(initialCategories) && initialCategories.length > 0;
+
   const { data, isLoading, error } = useFetch(
-    "website-categories",                 // cache key (stable across app)
-    "/api/website/category",              // single endpoint
+    "website-categories",
+    "/api/website/category",
     {
-      select: (res) =>
-        Array.isArray(res?.data)
-          ? res.data.filter((c) => c?.showOnWebsite)
-          : [],
-      // optional overrides, but ReactQueryProvider already sets good defaults
+      // hydrate cache so background refetch still works
+      initialData: hasInitial ? initialCategories : undefined,
+      // ❤️ make select handle BOTH { data: [...] } and [...] shapes
+      select: (res) => {
+        const arr = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+        return arr.filter((c) => c?.showOnWebsite);
+      },
       staleTime: 5 * 60 * 1000,
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
     }
   );
 
+  // If we have initial, show it immediately and don't show loading on first paint
+  const categories = hasInitial ? initialCategories : (data ?? []);
+  const loading = hasInitial ? false : isLoading;
+
   const value = useMemo(
-    () => ({ categories: data ?? [], isLoading, error }),
-    [data, isLoading, error]
+    () => ({ categories, isLoading: loading, error }),
+    [categories, loading, error]
   );
 
-  return (
-    <CategoriesContext.Provider value={value}>
-      {children}
-    </CategoriesContext.Provider>
-  );
+  return <CategoriesContext.Provider value={value}>{children}</CategoriesContext.Provider>;
 }
 
 export function useCategories() {

@@ -1,269 +1,272 @@
 "use client";
-import { Card, CardContent } from "@/components/ui/card";
+
 import React, { useState } from "react";
-import Logo from "@/public/assets/images/logo-black.png";
-import Image from "next/image";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import axios from "axios";
+import Link from "next/link";
+import { FcGoogle } from "react-icons/fc";
 import { FaRegEyeSlash } from "react-icons/fa";
 import { FaRegEye } from "react-icons/fa6";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { HiOutlineUser, HiOutlineMail, HiOutlinePhone } from "react-icons/hi";
+import { LuLock } from "react-icons/lu";
+
 import { zSchema } from "@/lib/zodSchema";
-import { Button } from "@/components/ui/button";
 import { WEBSITE_LOGIN } from "@/routes/WebsiteRoutes";
+import { Button } from "@/components/ui/button";
 import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
+  Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import ButtonLoading from "@/components/application/ButtonLoading";
-import Link from "next/link";
-import { FcGoogle } from "react-icons/fc";
 import { signIn } from "next-auth/react";
-import axios from "axios";
 import { showToast } from "@/lib/ShowToast";
+import AuthShell from "@/components/application/AuthShell";
 
-const RegisterPage = () => {
+const GOLD = "#fcba17";
+
+export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isConPasswordVisible, setIsConPasswordVisible] = useState(false);
 
-  // Updated schema with phone number
   const formSchema = zSchema
-    .pick({
-      email: true,
-      password: true,
-      name: true,
-    })
+    .pick({ email: true, password: true, name: true })
     .extend({
-      phone: z
-        .string()
+      phone: z.string()
         .min(10, "Phone number must be at least 10 digits")
         .max(15, "Phone number must be no more than 15 digits")
         .regex(/^[0-9]+$/, "Phone number must contain only digits"),
       confirmPassword: z.string(),
     })
-    .refine((data) => data.password === data.confirmPassword, {
-      message: `Passwords don't match`,
+    .refine((d) => d.password === d.confirmPassword, {
+      message: "Passwords don't match",
       path: ["confirmPassword"],
     });
 
   const form = useForm({
     resolver: zodResolver(formSchema),
-    defaultValues: {
-      name: "",
-      email: "",
-      phone: "",
-      password: "",
-      confirmPassword: "",
-    },
+    defaultValues: { name: "", email: "", phone: "", password: "", confirmPassword: "" },
   });
 
   const handleRegisterSubmit = async (values) => {
     try {
       setLoading(true);
-      const { data: registerResponse } = await axios.post(
-        "/api/auth/register",
-        values
-      );
-      if (!registerResponse.success) {
-        throw new Error(registerResponse.message);
-      }
+      const { data } = await axios.post("/api/auth/register", values);
+      if (!data?.success) throw new Error(data?.message || "Registration failed");
       form.reset();
-      showToast("success", registerResponse.message);
+      showToast("success", data.message);
     } catch (error) {
-      showToast("error", error.message || "Registration failed");
+      showToast("error", error?.message || "Registration failed");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Card className="w-[400px]">
-      <CardContent>
-        <div className="flex justify-center mb-4">
-          <Image
-            src={Logo}
-            alt="Logo"
-            width={Logo.width}
-            height={Logo.height}
-            className="max-w-[150px]"
-            priority
-          />
-        </div>
+    <AuthShell>
+      <div className="text-center mb-6">
+        <h1 className="text-2xl sm:text-[28px] font-extrabold tracking-tight">Create your account</h1>
+        <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
+          Join Kick Lifestyle and unlock member benefits
+        </p>
+      </div>
 
-        <div className="text-center mb-6">
-          <h1 className="lg:text-3xl font-bold md:text-xl mt-3">
-            Create An Account
-          </h1>
-        </div>
-
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleRegisterSubmit)}>
-            {/* Name */}
-            <div className="mb-5">
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Full Name</FormLabel>
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(handleRegisterSubmit)} className="space-y-5">
+          {/* Name + Phone */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Full Name</FormLabel>
+                  <div className="relative">
+                    <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                      <HiOutlineUser size={18} />
+                    </div>
                     <FormControl>
                       <Input
                         type="text"
                         placeholder="Kick Lifestyle"
+                        className="h-11 rounded-xl pl-10 focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
+                        style={{ ["--gold"]: GOLD }}
                         {...field}
                       />
                     </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-            {/* Email */}
-            <div className="mb-5">
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="email"
-                        placeholder="example@gmail.com"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            {/* Phone */}
-            <div className="mb-5">
-              <FormField
-                control={form.control}
-                name="phone"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Phone Number</FormLabel>
+            <FormField
+              control={form.control}
+              name="phone"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Phone Number</FormLabel>
+                  <div className="relative">
+                    <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                      <HiOutlinePhone size={18} />
+                    </div>
                     <FormControl>
                       <Input
                         type="tel"
-                        placeholder="1234567890"
+                        inputMode="numeric"
+                        placeholder="98XXXXXXXX"
+                        className="h-11 rounded-xl pl-10 focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
+                        style={{ ["--gold"]: GOLD }}
                         {...field}
+                        onChange={(e) => field.onChange(e.target.value.replace(/\D/g, ""))}
                       />
                     </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
 
-            {/* Password */}
-            <div className="mb-5">
-              <FormField
-                control={form.control}
-                name="password"
-                render={({ field }) => (
-                  <FormItem className="relative">
-                    <FormLabel>Password</FormLabel>
+          {/* Email */}
+          <FormField
+            control={form.control}
+            name="email"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Email</FormLabel>
+                <div className="relative">
+                  <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                    <HiOutlineMail size={18} />
+                  </div>
+                  <FormControl>
+                    <Input
+                      type="email"
+                      placeholder="example@gmail.com"
+                      autoComplete="email"
+                      className="h-11 rounded-xl pl-10 focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
+                      style={{ ["--gold"]: GOLD }}
+                      {...field}
+                    />
+                  </FormControl>
+                </div>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {/* Password + Confirm */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <FormField
+              control={form.control}
+              name="password"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Password</FormLabel>
+                  <div className="relative">
+                    <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                      <LuLock size={18} />
+                    </div>
                     <FormControl>
                       <Input
                         type={isPasswordVisible ? "text" : "password"}
-                        placeholder="*******"
+                        placeholder="••••••••"
+                        autoComplete="new-password"
+                        className="h-11 rounded-xl pl-10 pr-10 focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
+                        style={{ ["--gold"]: GOLD }}
                         {...field}
-                        className="pr-10"
                       />
                     </FormControl>
                     <button
                       type="button"
-                      className="absolute right-3 top-[38px] transform -translate-y-1/2 text-gray-500"
-                      onClick={() => setIsPasswordVisible(!isPasswordVisible)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+                      onClick={() => setIsPasswordVisible((p) => !p)}
                     >
                       {isPasswordVisible ? <FaRegEye /> : <FaRegEyeSlash />}
                     </button>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-            {/* Confirm Password */}
-            <div className="mb-5">
-              <FormField
-                control={form.control}
-                name="confirmPassword"
-                render={({ field }) => (
-                  <FormItem className="relative">
-                    <FormLabel>Confirm Password</FormLabel>
+            <FormField
+              control={form.control}
+              name="confirmPassword"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Confirm Password</FormLabel>
+                  <div className="relative">
+                    <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                      <LuLock size={18} />
+                    </div>
                     <FormControl>
                       <Input
                         type={isConPasswordVisible ? "text" : "password"}
-                        placeholder="*******"
+                        placeholder="••••••••"
+                        autoComplete="new-password"
+                        className="h-11 rounded-xl pl-10 pr-10 focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
+                        style={{ ["--gold"]: GOLD }}
                         {...field}
-                        className="pr-10"
                       />
                     </FormControl>
                     <button
                       type="button"
-                      className="absolute right-3 top-[38px] transform -translate-y-1/2 text-gray-500"
-                      onClick={() =>
-                        setIsConPasswordVisible(!isConPasswordVisible)
-                      }
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+                      onClick={() => setIsConPasswordVisible((p) => !p)}
                     >
                       {isConPasswordVisible ? <FaRegEye /> : <FaRegEyeSlash />}
                     </button>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
 
-            {/* Submit */}
-            <div className="mb-5">
-              <ButtonLoading
-                type="submit"
-                text="Register"
-                loading={loading}
-                className="w-full cursor-pointer"
-              />
-            </div>
+          {/* Submit */}
+          <ButtonLoading
+            type="submit"
+            text="Create account"
+            loading={loading}
+            className="w-full h-11 rounded-xl bg-[var(--gold)] hover:bg-[#e0a915] text-black font-semibold border border-black/5"
+            style={{ ["--gold"]: GOLD }}
+          />
 
-            {/* Google Sign In */}
-            <div className="mb-5">
-              <Button
-                variant="outline"
-                className="w-full flex items-center gap-2 justify-center"
-                onClick={() => signIn("google", { callbackUrl: "/" })}
-                type="button"
-              >
-                <FcGoogle size={20} />
-                Continue with Google
-              </Button>
+          {/* Divider */}
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
             </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-white/90 dark:bg-slate-900/70 backdrop-blur px-2 text-slate-500 dark:text-slate-400">
+                or
+              </span>
+            </div>
+          </div>
 
-            {/* Login Link */}
-            <div className="text-center text-xs">
-              <p className="mb-2">
-                Already have an account?{" "}
-                <Link href={WEBSITE_LOGIN} className="text-primary underline">
-                  Login
-                </Link>
-              </p>
-            </div>
-          </form>
-        </Form>
-      </CardContent>
-    </Card>
+          {/* Google */}
+          <Button
+            variant="outline"
+            className="w-full h-11 rounded-xl flex items-center gap-2 justify-center border-slate-300 hover:bg-slate-50"
+            onClick={() => signIn("google", { callbackUrl: "/" })}
+            type="button"
+          >
+            <FcGoogle size={20} />
+            Continue with Google
+          </Button>
+
+          {/* Login Link */}
+          <p className="text-center text-sm text-slate-600 dark:text-slate-300">
+            Already have an account?{" "}
+            <Link href={WEBSITE_LOGIN} className="text-[#b88a00] hover:underline">
+              Log in
+            </Link>
+          </p>
+        </form>
+      </Form>
+    </AuthShell>
   );
-};
-
-export default RegisterPage;
+}
