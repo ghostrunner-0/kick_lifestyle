@@ -18,10 +18,9 @@ import {
   SheetTrigger,
   SheetClose,
 } from "@/components/ui/sheet";
-import { ScrollArea } from "@/components/ui/scroll-area";
 
 /* icons */
-import { Home, Grid3X3, User, ImageOff } from "lucide-react";
+import { Store, User, ImageOff, ShieldCheck, MessageCircle } from "lucide-react";
 
 /* helpers */
 function cn(...a) {
@@ -37,13 +36,6 @@ export default function BottomNav() {
     return pathname?.startsWith(href);
   };
 
-  // Drawer sizing: header + 2 rows
-  const HEADER_H = 64; // px (Sheet header approx)
-  const ROW_H = 64;    // px (row height ~ py-3, icon etc.)
-  const rows = Math.min(categories?.length || 0, 2) || 2; // show space for 2 even if <2
-  const sheetHeight = HEADER_H + rows * ROW_H;
-  const listHeight = rows * ROW_H;
-
   return (
     <nav
       className={cn(
@@ -54,99 +46,74 @@ export default function BottomNav() {
       aria-label="Mobile Navigation"
     >
       <div className="mx-auto max-w-screen-md">
-        {/* 3 items: Home / Browse / Account */}
-        <ul className="grid grid-cols-3 text-xs">
-          {/* Home */}
-          <li>
-            <Link
-              href="/"
-              className={cn(
-                "flex flex-col items-center justify-center py-2 gap-1 transition-colors",
-                isActive("/") ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-              )}
-              aria-label="Home"
-            >
-              <Home className="h-5 w-5" />
-              <span>Home</span>
-            </Link>
-          </li>
-
-          {/* Browse (Categories) */}
+        {/* 4 items: Shop / Account / Warranty / Chat */}
+        <ul className="grid grid-cols-4 text-xs">
+          {/* Shop (Categories) */}
           <li>
             <Sheet>
               <SheetTrigger
                 className={cn(
-                  "w-full flex flex-col items-center justify-center py-2 gap-1",
-                  "text-muted-foreground hover:text-foreground transition-colors"
+                  "w-full flex flex-col items-center justify-center py-2 gap-1 transition-colors",
+                  pathname?.startsWith("/category")
+                    ? "text-primary"
+                    : "text-muted-foreground hover:text-foreground"
                 )}
-                aria-label="Browse Categories"
+                aria-label="Shop"
               >
-                <Grid3X3 className="h-5 w-5" />
-                <span>Browse</span>
+                <Store className="h-5 w-5" />
+                <span>Shop</span>
               </SheetTrigger>
 
-              <SheetContent
-                side="bottom"
-                className="p-0"
-                style={{ height: `${sheetHeight}px` }}
-              >
+              {/* Auto height up to 75vh; grows with categories */}
+              <SheetContent side="bottom" className="p-0" style={{ maxHeight: "75vh", height: "auto" }}>
                 <SheetHeader className="px-4 pt-4 pb-2">
                   <SheetTitle>Browse Categories</SheetTitle>
                 </SheetHeader>
 
-                {/* List area = exactly 2 rows tall; scrolls if more */}
-                <ScrollArea style={{ height: `${listHeight}px` }}>
-                  <div className="divide-y">
-                    {categories?.length ? (
-                      categories.map((c) => {
-                        const img = c?.image?.path || null;
-                        const alt = c?.image?.alt || c?.name || "Category";
-                        return (
-                          <SheetClose asChild key={c?._id || c?.slug}>
-                            <Link
-                              href={CATEGORY_VIEW_ROUTE(c?.slug)}
-                              className={cn(
-                                "flex items-center gap-3 px-4",
-                                "hover:bg-muted/60 transition-colors",
-                                "min-h-16" // 64px = ROW_H
+                {/* List naturally sizes; scrolls only if it would exceed 75vh minus header */}
+                <div className="divide-y overflow-y-auto" style={{ maxHeight: "calc(75vh - 72px)" }}>
+                  {categories?.length ? (
+                    categories.map((c) => {
+                      const img = c?.image?.path || null;
+                      const alt = c?.image?.alt || c?.name || "Category";
+                      return (
+                        <SheetClose asChild key={c?._id || c?.slug}>
+                          <Link
+                            href={CATEGORY_VIEW_ROUTE(c?.slug)}
+                            className={cn(
+                              "flex items-center gap-3 px-4 py-3",
+                              "hover:bg-muted/60 transition-colors"
+                            )}
+                            aria-label={c?.name || "Category"}
+                          >
+                            <div className="size-11 rounded-lg bg-muted shrink-0 grid place-items-center overflow-hidden">
+                              {img ? (
+                                <Image
+                                  src={img}
+                                  alt={alt}
+                                  width={44}
+                                  height={44}
+                                  className="h-11 w-11 object-contain"
+                                  sizes="44px"
+                                />
+                              ) : (
+                                <ImageOff className="h-5 w-5 text-muted-foreground" />
                               )}
-                              aria-label={c?.name || "Category"}
-                            >
-                              <div className="size-11 rounded-lg bg-muted shrink-0 grid place-items-center overflow-hidden">
-                                {img ? (
-                                  <Image
-                                    src={img}
-                                    alt={alt}
-                                    width={44}
-                                    height={44}
-                                    className="h-11 w-11 object-contain"
-                                    sizes="44px"
-                                  />
-                                ) : (
-                                  <ImageOff className="h-5 w-5 text-muted-foreground" />
-                                )}
-                              </div>
-                              <div className="min-w-0">
-                                <div className="font-medium truncate">
-                                  {c?.name || "Category"}
-                                </div>
-                                {c?.shortDesc ? (
-                                  <div className="text-xs text-muted-foreground truncate">
-                                    {c.shortDesc}
-                                  </div>
-                                ) : null}
-                              </div>
-                            </Link>
-                          </SheetClose>
-                        );
-                      })
-                    ) : (
-                      <div className="text-center text-sm text-muted-foreground py-8">
-                        No categories found.
-                      </div>
-                    )}
-                  </div>
-                </ScrollArea>
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-medium truncate">{c?.name || "Category"}</div>
+                              {c?.shortDesc ? (
+                                <div className="text-xs text-muted-foreground truncate">{c.shortDesc}</div>
+                              ) : null}
+                            </div>
+                          </Link>
+                        </SheetClose>
+                      );
+                    })
+                  ) : (
+                    <div className="text-center text-sm text-muted-foreground py-8">No categories found.</div>
+                  )}
+                </div>
               </SheetContent>
             </Sheet>
           </li>
@@ -156,16 +123,46 @@ export default function BottomNav() {
             <Link
               href="/account"
               className={cn(
-                "flex flex-col items-center justify-center py-2 gap-1",
-                isActive("/account")
-                  ? "text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
+                "flex flex-col items-center justify-center py-2 gap-1 transition-colors",
+                isActive("/account") ? "text-primary" : "text-muted-foreground hover:text-foreground"
               )}
               aria-label="Account"
             >
               <User className="h-5 w-5" />
               <span>Account</span>
             </Link>
+          </li>
+
+          {/* Warranty */}
+          <li>
+            <Link
+              href="/warranty"
+              className={cn(
+                "flex flex-col items-center justify-center py-2 gap-1 transition-colors",
+                isActive("/warranty") ? "text-primary" : "text-muted-foreground hover:text-foreground"
+              )}
+              aria-label="Warranty"
+            >
+              <ShieldCheck className="h-5 w-5" />
+              <span>Warranty</span>
+            </Link>
+          </li>
+
+          {/* Chat (WhatsApp) */}
+          <li>
+            <a
+              href="https://wa.me/9779820810020"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={cn(
+                "flex flex-col items-center justify-center py-2 gap-1 transition-colors",
+                "text-muted-foreground hover:text-foreground"
+              )}
+              aria-label="Chat on WhatsApp"
+            >
+              <MessageCircle className="h-5 w-5" />
+              <span>Chat</span>
+            </a>
           </li>
         </ul>
       </div>
