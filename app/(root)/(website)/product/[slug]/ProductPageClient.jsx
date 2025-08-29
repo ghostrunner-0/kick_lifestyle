@@ -452,7 +452,7 @@ function ReviewsTab({ productId, animateUI }) {
         {items.map((r) => (
           <motion.div
             key={r._id}
-            className="rounded-xl border p-4"
+            className="rounded-2xl border p-4"
             variants={item}
             layout
           >
@@ -640,32 +640,19 @@ export default function ProductPage() {
   const galleryWrapRef = useRef(null);
   const [showStickyBar, setShowStickyBar] = useState(false);
   const [headerOffset, setHeaderOffset] = useState(0);
+  const [mobileNavHeight, setMobileNavHeight] = useState(0); // <-- measure BottomNav height
+
   useEffect(() => {
-    const measure = () => {
+    const measureHeader = () => {
       const hdr = document.querySelector("header");
       setHeaderOffset(hdr ? hdr.getBoundingClientRect().height : 0);
     };
-    measure();
-    window.addEventListener("resize", measure, { passive: true });
-    return () => window.removeEventListener("resize", measure);
+    measureHeader();
+    window.addEventListener("resize", measureHeader, { passive: true });
+    return () => window.removeEventListener("resize", measureHeader);
   }, []);
-  useEffect(() => {
-    const el = galleryWrapRef.current;
-    if (!el) return;
-    const obs = new IntersectionObserver(
-      ([entry]) => setShowStickyBar(!entry.isIntersecting),
-      {
-        root: null,
-        threshold: 0,
-        rootMargin: `-${headerOffset + 8}px 0px 0px 0px`,
-      }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [galleryKey, headerOffset]);
 
-  /* ====== NEW: measure BottomNav height for mobile offset ====== */
-  const [mobileNavHeight, setMobileNavHeight] = useState(0);
+  // measure bottom nav
   useEffect(() => {
     const el = document.querySelector('nav[aria-label="Mobile Navigation"]');
     if (!el) {
@@ -683,7 +670,21 @@ export default function ProductPage() {
       window.removeEventListener("resize", measure);
     };
   }, []);
-  /* ============================================================ */
+
+  useEffect(() => {
+    const el = galleryWrapRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => setShowStickyBar(!entry.isIntersecting),
+      {
+        root: null,
+        threshold: 0,
+        rootMargin: `-${headerOffset + 8}px 0px 0px 0px`,
+      }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [galleryKey, headerOffset]);
 
   /* skeleton */
   const Skeleton = () => (
@@ -913,138 +914,33 @@ export default function ProductPage() {
         )}
       </AnimatePresence>
 
-      {/* Mobile bottom sticky — offset above BottomNav & styled like desktop */}
+      {/* Mobile bottom sticky — floating pill above BottomNav (price + add only) */}
       <AnimatePresence>
         {animateUI && showStickyBar && (
           <motion.div
-            className="fixed inset-x-0 z-40 md:hidden"
-            style={{ bottom: `${mobileNavHeight}px` }}
-            {...slideUp}
+            className="fixed inset-x-0 z-40 md:hidden pointer-events-none"
+            style={{
+              bottom: `calc(${Math.max(mobileNavHeight || 20, 0)}px + env(safe-area-inset-bottom) + 12px)`,
+            }}
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 16 }}
+            transition={{ duration: 0.22 }}
           >
-            <div className="mx-auto max-w-[1200px] px-3">
-              <div className="bg-white/95 dark:bg-neutral-900/95 supports-[backdrop-filter]:backdrop-blur rounded-t-2xl shadow-lg border-t px-3 py-2">
+            <div className="mx-auto max-w-screen-sm px-3 flex justify-center">
+              <div className="pointer-events-auto w-full max-w-[min(560px,90vw)] rounded-full border shadow-xl bg-white/90 dark:bg-neutral-900/90 supports-[backdrop-filter]:backdrop-blur backdrop-blur px-3 py-2.5">
                 <div className="flex items-center justify-between gap-3">
-                  {/* left: thumb + name + price + rating */}
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="relative w-10 h-10 rounded-md overflow-hidden bg-muted shrink-0">
-                      {heroSrc ? (
-                        <Image
-                          src={heroSrc}
-                          alt="hero"
-                          fill
-                          sizes="40px"
-                          className="object-cover"
-                        />
-                      ) : null}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium truncate max-w-[46vw]">
-                        {product?.name || "Product"}
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>
-                          <AnimatedPrice value={formatPrice(priceNow)} />{" "}
-                          {priceWas ? (
-                            <span className="ml-1 line-through">
-                              {formatPrice(priceWas)}
-                            </span>
-                          ) : null}
-                        </span>
-                        {ratingSummary.loaded && ratingSummary.total > 0 && (
-                          <span className="inline-flex items-center gap-1">
-                            <Stars value={ratingSummary.average} size={12} />
-                            <span className="tabular-nums">
-                              {ratingSummary.average.toFixed(1)}
-                            </span>
-                            <span>({ratingSummary.total})</span>
-                          </span>
-                        )}
-                      </div>
-                    </div>
+                  <div className="pl-1 pr-2 text-base font-semibold tabular-nums">
+                    <AnimatedPrice value={formatPrice(priceNow)} />
                   </div>
-
-                  {/* right: qty stepper + add button */}
-                  <div className="flex items-center gap-2 shrink-0">
-                    <div className="inline-flex items-center rounded-md border bg-background h-9">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        className="px-3 h-9"
-                        onClick={() => {
-                          if (!inCartLine) return;
-                          const next = Math.max(0, (inCartLine.qty || 1) - 1);
-                          if (next === 0)
-                            dispatch(
-                              removeItem({
-                                productId: product?._id,
-                                variant: activeVariant
-                                  ? { id: activeVariant._id }
-                                  : null,
-                              })
-                            );
-                          else
-                            dispatch(
-                              setQty({
-                                productId: product?._id,
-                                variant: activeVariant
-                                  ? { id: activeVariant._id }
-                                  : null,
-                                qty: next,
-                              })
-                            );
-                        }}
-                        aria-label="Decrease quantity"
-                      >
-                        -
-                      </Button>
-                      <div className="px-3 py-1 text-sm font-medium w-10 text-center select-none">
-                        {inCartLine ? inCartLine.qty || 0 : 0}
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        className="px-3 h-9"
-                        onClick={() => {
-                          if (!inCartLine)
-                            return dispatch(
-                              addItem({
-                                productId: product?._id,
-                                slug,
-                                name: product?.name,
-                                qty: 1,
-                                price: priceNow,
-                                mrp: effMrp,
-                                image: heroSrc || gallery?.[activeImg]?.path,
-                                variant: activeVariant
-                                  ? { id: activeVariant._id }
-                                  : null,
-                              })
-                            );
-                          dispatch(
-                            setQty({
-                              productId: product?._id,
-                              variant: activeVariant
-                                ? { id: activeVariant._id }
-                                : null,
-                              qty: (inCartLine.qty || 0) + 1,
-                            })
-                          );
-                        }}
-                        aria-label="Increase quantity"
-                      >
-                        +
-                      </Button>
-                    </div>
-
-                    <Button
-                      className="rounded-full h-9 px-4 text-sm"
-                      onClick={handleAddToCart}
-                      disabled={!inStock || isLoading || !product}
-                    >
-                      <ShoppingCart className="mr-2 h-4 w-4" />
-                      {inCartLine ? "In cart" : "Add"}
-                    </Button>
-                  </div>
+                  <Button
+                    className="rounded-full h-10 px-5 text-sm"
+                    onClick={handleAddToCart}
+                    disabled={!inStock || isLoading || !product}
+                  >
+                    <ShoppingCart className="mr-2 h-4 w-4" />
+                    {inCartLine ? "In cart" : "Add to cart"}
+                  </Button>
                 </div>
               </div>
             </div>
@@ -1120,7 +1016,7 @@ export default function ProductPage() {
                               priority={idx === 0}
                             />
                           ) : (
-                            <div className="w/full h/full bg-muted" />
+                            <div className="w-full h-full bg-muted" />
                           )}
                           <div className="absolute top-3 right-3">
                             <Button
@@ -1477,7 +1373,7 @@ export default function ProductPage() {
         </motion.div>
       ) : null}
 
-      {/* spacer for mobile sticky */}
+      {/* spacer for mobile sticky (kept minimal; floating pill already clears BottomNav) */}
       <div className="h-16 md:h-0" />
 
       {/* LIGHTBOX */}
