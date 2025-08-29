@@ -15,7 +15,7 @@ export default function Banner({ banners = [], loading = false }) {
   );
   const sliderRef = useRef(null);
 
-  // light gradient based on bgColor
+  // soft gradient bg from provided hex
   const hexToRgb = (hex) => {
     const v = hex?.replace("#", "") || "ffffff";
     const n =
@@ -107,7 +107,7 @@ export default function Banner({ banners = [], loading = false }) {
 
   return (
     <div className="relative w-full bg-white isolate">
-      {/* soft background wash */}
+      {/* background wash behind the media */}
       <div
         className="absolute left-0 right-0 top-0 -z-10 overflow-hidden h-[45vh] min-h-[260px] max-h-[520px]"
         style={{ backgroundImage: mkGradient(currentBg) }}
@@ -121,11 +121,9 @@ export default function Banner({ banners = [], loading = false }) {
         ) : (
           <Slider ref={sliderRef} {...settings}>
             {banners.map(({ _id, desktopImage, mobileImage, href }, i) => {
-              const desktopSrc = desktopImage?.path || mobileImage?.path || "";
-              const mobileSrc = mobileImage?.path || desktopImage?.path || "";
+              // Use ONE URL for LCP discoverability; prefer desktop (the LCP on desktop).
+              const src = desktopImage?.path || mobileImage?.path || "";
               const alt = desktopImage?.alt || mobileImage?.alt || "Banner";
-
-              // LCP: make *first* slide eager + high fetch priority
               const isLCP = i === 0;
 
               return (
@@ -136,23 +134,18 @@ export default function Banner({ banners = [], loading = false }) {
                     rel="noreferrer"
                     className="block rounded-2xl overflow-hidden shadow-lg"
                   >
-                    <picture>
-                      {/* Use the same asset both places if you don’t maintain two versions;
-                         this <source> just lets you swap a heavier desktop PNG if you have it. */}
-                      <source media="(min-width: 768px)" srcSet={desktopSrc} />
-                      <Image
-                        src={mobileSrc}
-                        alt={alt}
-                        width={1600}
-                        height={900}
-                        // ✅ Critical bits for LCP:
-                        priority={isLCP}
-                        fetchPriority={isLCP ? "high" : undefined}
-                        // Don’t set loading=lazy on LCP image; Next removes it when priority=true
-                        sizes="(min-width: 1024px) 1263px, (min-width: 768px) 100vw, 100vw"
-                        className="w-full h-auto object-cover rounded-2xl"
-                      />
-                    </picture>
+                    <Image
+                      src={src}
+                      alt={alt}
+                      width={1600}
+                      height={900}
+                      // ✅ LCP: eager + high fetch priority
+                      priority={isLCP}
+                      fetchPriority={isLCP ? "high" : undefined}
+                      // realistic sizes for your layout (≈1263px on desktop hero)
+                      sizes="(min-width: 1280px) 1263px, (min-width: 768px) 100vw, 100vw"
+                      className="w-full h-auto object-cover rounded-2xl"
+                    />
                   </a>
                 </div>
               );
