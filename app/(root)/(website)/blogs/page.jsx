@@ -132,6 +132,7 @@ function ArticleCard({ post, idx }) {
               className="object-cover"
               sizes="(max-width: 640px) 120px"
               priority={idx < 3}
+              unoptimized
             />
           </div>
           <div className="min-w-0 flex-1">
@@ -169,6 +170,7 @@ function ArticleCard({ post, idx }) {
                 className="object-cover"
                 sizes="(max-width:1024px) 50vw, 33vw"
                 priority={idx < 3}
+                unoptimized
               />
             </motion.div>
 
@@ -297,8 +299,8 @@ export default function Page() {
         subtitle="Quick reads, real insights—no clutter. New drops, product deep-dives, and behind-the-scenes from the team."
         badge="Latest"
         accent={PRIMARY}
-        variant="solid"      /* try: "solid" | "glass" | "image" */
-        pattern="grid"      /* try: "dots" | "none" */
+        variant="solid"
+        pattern="grid"
         align="center"
         size="md"
         className="mb-6"
