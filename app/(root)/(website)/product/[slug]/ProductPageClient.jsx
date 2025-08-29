@@ -13,15 +13,51 @@ import { useDispatch, useSelector } from "react-redux";
 import axios from "axios";
 
 /* store */
-import { addItem, setQty, removeItem, selectItemsMap } from "@/store/cartSlice";
+import {
+  addItem,
+  setQty,
+  removeItem,
+  selectItemsMap,
+} from "@/store/cartSlice";
 
 /* shadcn/ui */
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "@/components/ui/tabs";
+import {
+  Table,
+  TableHeader,
+  TableRow,
+  TableHead,
+  TableBody,
+  TableCell,
+} from "@/components/ui/table";
+import { Progress } from "@/components/ui/progress";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectValue,
+  SelectItem,
+} from "@/components/ui/select";
 
 /* icons */
-import { ShoppingCart } from "lucide-react";
+import { ShoppingCart, Star } from "lucide-react";
 
 /* --- helpers --- */
 const api = axios.create({ baseURL: "/", withCredentials: true });
@@ -70,6 +106,44 @@ const getVariantHero = (v, fallback) =>
   fallback ||
   "";
 
+/* stars */
+function Stars({ value = 0, size = 16, className = "" }) {
+  const full = Math.floor(value);
+  const half = value - full >= 0.5;
+  return (
+    <div className={`inline-flex items-center ${className}`}>
+      {Array.from({ length: 5 }).map((_, i) => {
+        const filled = i < full;
+        const showHalf = !filled && i === full && half;
+        return (
+          <Star
+            key={i}
+            size={size}
+            className={`mr-1 ${
+              filled
+                ? "fill-yellow-400 stroke-yellow-400"
+                : showHalf
+                ? "fill-yellow-400/60 stroke-yellow-400/60"
+                : "stroke-muted-foreground"
+            }`}
+          />
+        );
+      })}
+    </div>
+  );
+}
+const fmtDate = (d) => {
+  try {
+    return new Date(d).toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  } catch {
+    return "";
+  }
+};
+
 /* Qty control used in card + sticky */
 const QtyControl = ({
   qty = 0,
@@ -80,10 +154,12 @@ const QtyControl = ({
 }) => {
   const h = size === "sm" ? "h-9" : "h-12";
   const cols =
-    size === "sm" ? "grid-cols-[38px_1fr_38px]" : "grid-cols-[48px_1fr_48px]";
+    size === "sm"
+      ? "grid-cols-[38px_1fr_38px]"
+      : "grid-cols-[48px_1fr_48px]";
   return (
     <div
-      className={`grid ${cols} w-full rounded-xl border bg-background overflow-hidden ${className}`}
+      className={`grid ${cols} w-full rounded-xl border bg-background overflow-visible ${className}`}
     >
       <button
         type="button"
@@ -110,7 +186,284 @@ const QtyControl = ({
   );
 };
 
-/* ===================== PAGE ===================== */
+/* ===================== ReviewsTab ===================== */
+function ReviewsTab({ productId }) {
+  const [summary, setSummary] = useState(null);
+  const [items, setItems] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(6);
+  const [sort, setSort] = useState("newest");
+  const [ratingFilter, setRatingFilter] = useState("all");
+  const [isLoadingList, setIsLoadingList] = useState(false);
+
+  const loadSummary = useCallback(async () => {
+    if (!productId) return;
+    try {
+      const { data } = await api.get("/api/website/reviews/summary", {
+        params: { productId },
+      });
+      if (data?.success) setSummary(data.data);
+    } catch {}
+  }, [productId]);
+
+  const loadPage = useCallback(
+    async (reset = false) => {
+      if (!productId) return;
+      setIsLoadingList(true);
+      try {
+        const params = {
+          productId,
+          page: String(reset ? 1 : page),
+          limit: String(pageSize),
+          sort,
+        };
+        if (ratingFilter !== "all") params.rating = ratingFilter;
+
+        const { data } = await api.get("/api/website/reviews", { params });
+        if (data?.success) {
+          setTotal(data.data.total || 0);
+          if (reset) setItems(data.data.items || []);
+          else setItems((prev) => [...prev, ...(data.data.items || [])]);
+          if (reset) setPage(1);
+        }
+      } finally {
+        setIsLoadingList(false);
+      }
+    },
+    [productId, page, pageSize, sort, ratingFilter]
+  );
+
+  useEffect(() => {
+    loadSummary();
+  }, [loadSummary]);
+  useEffect(() => {
+    setPage(1);
+    loadPage(true);
+  }, [sort, ratingFilter]); // eslint-disable-line
+
+  const hasMore = items.length < total;
+
+  /* write review */
+  const [open, setOpen] = useState(false);
+  const [formRating, setFormRating] = useState(5);
+  const [formTitle, setFormTitle] = useState("");
+  const [formBody, setFormBody] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const submitReview = async () => {
+    if (!productId || !formTitle.trim() || !formBody.trim() || !formRating)
+      return;
+    setSubmitting(true);
+    try {
+      const { data } = await api.post("/api/website/reviews", {
+        product: productId,
+        rating: Number(formRating),
+        title: formTitle.trim(),
+        review: formBody.trim(),
+      });
+      if (data?.success) {
+        setOpen(false);
+        setFormRating(5);
+        setFormTitle("");
+        setFormBody("");
+        await loadSummary(); // appears after moderation
+      }
+    } catch (err) {
+      if (err?.response?.status === 401)
+        alert("Please login to write a review.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const totalCount = summary?.total || 0;
+  const avg = summary?.average || 0;
+  const buckets = summary?.breakdown || { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+
+  return (
+    <div className="rounded-2xl border p-5 md:p-6 space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+        <div className="md:col-span-4 rounded-xl border p-4">
+          <div className="text-sm text-muted-foreground">Average rating</div>
+          <div className="mt-1 flex items-end gap-2">
+            <div className="text-4xl font-semibold">{avg.toFixed(1)}</div>
+            <Stars value={avg} size={18} />
+          </div>
+          <div className="text-sm text-muted-foreground mt-1">
+            {totalCount} review{totalCount === 1 ? "" : "s"}
+          </div>
+
+          <Dialog open={open} onOpenChange={setOpen}>
+            <Button className="mt-4 w-full rounded-full" onClick={() => setOpen(true)}>
+              Write a review
+            </Button>
+            <DialogContent className="sm:max-w-[520px]">
+              <DialogHeader>
+                <DialogTitle>Write a review</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                <div>
+                  <div className="text-sm font-medium mb-1.5">Your rating</div>
+                  <div className="flex items-center gap-2">
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => setFormRating(n)}
+                        aria-label={`${n} star`}
+                        className="p-1"
+                      >
+                        <Star
+                          className={`${
+                            n <= formRating
+                              ? "fill-yellow-400 stroke-yellow-400"
+                              : "stroke-muted-foreground"
+                          }`}
+                        />
+                      </button>
+                    ))}
+                    <span className="text-xs text-muted-foreground ml-1">
+                      {formRating} / 5
+                    </span>
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium">Title</label>
+                  <Input
+                    value={formTitle}
+                    onChange={(e) => setFormTitle(e.target.value)}
+                    placeholder="Great value and build quality"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium">Your review</label>
+                  <Textarea
+                    rows={5}
+                    value={formBody}
+                    onChange={(e) => setFormBody(e.target.value)}
+                    placeholder="What did you like? Any downsides?"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Your review will appear after moderation.
+                  </p>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="ghost" onClick={() => setOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={submitReview}
+                  disabled={submitting || !formTitle.trim() || !formBody.trim()}
+                >
+                  {submitting ? "Submitting…" : "Submit"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        <div className="md:col-span-8 rounded-xl border p-4">
+          <div className="text-sm font-medium mb-3">Rating breakdown</div>
+          <div className="space-y-2">
+            {[5, 4, 3, 2, 1].map((star) => {
+              const count = buckets?.[star] || 0;
+              const pct = totalCount ? Math.round((count / totalCount) * 100) : 0;
+              return (
+                <div key={star} className="flex items-center gap-3">
+                  <div className="w-10 text-xs tabular-nums">{star}★</div>
+                  <Progress value={pct} className="h-2 flex-1" />
+                  <div className="w-12 text-right text-xs text-muted-foreground">
+                    {pct}%
+                  </div>
+                  <div className="w-10 text-right text-xs text-muted-foreground">
+                    {count}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* controls */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="text-sm text-muted-foreground">
+          {total} review{total === 1 ? "" : "s"}
+        </div>
+        <Select value={ratingFilter} onValueChange={(v) => setRatingFilter(v)}>
+          <SelectTrigger className="h-9 w-[160px]">
+            <SelectValue placeholder="All ratings" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All ratings</SelectItem>
+            <SelectItem value="5">5 stars</SelectItem>
+            <SelectItem value="4">4 stars</SelectItem>
+            <SelectItem value="3">3 stars</SelectItem>
+            <SelectItem value="2">2 stars</SelectItem>
+            <SelectItem value="1">1 star</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={sort} onValueChange={(v) => setSort(v)}>
+          <SelectTrigger className="h-9 w-[160px]">
+            <SelectValue placeholder="Newest" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="newest">Newest</SelectItem>
+            <SelectItem value="highest">Highest rated</SelectItem>
+            <SelectItem value="lowest">Lowest rated</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* list */}
+      <div className="space-y-4">
+        {items.map((r) => (
+          <div key={r._id} className="rounded-xl border p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Stars value={r.rating} />
+                  <span className="text-sm font-medium">{r.title}</span>
+                </div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  {fmtDate(r.createdAt)} • {r.userName || "Verified buyer"}
+                </div>
+              </div>
+            </div>
+            <p className="text-sm mt-3 leading-6">{r.review}</p>
+          </div>
+        ))}
+
+        {isLoadingList && items.length === 0 && (
+          <div className="text-sm text-muted-foreground">Loading reviews…</div>
+        )}
+        {!isLoadingList && items.length === 0 && (
+          <div className="text-sm text-muted-foreground">No reviews yet.</div>
+        )}
+
+        {hasMore && (
+          <div className="pt-2">
+            <Button
+              variant="outline"
+              className="w-full"
+              disabled={isLoadingList}
+              onClick={() => {
+                setPage((p) => p + 1);
+                loadPage(false);
+              }}
+            >
+              {isLoadingList ? "Loading…" : "Load more"}
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ===================== Product Page ===================== */
 export default function ProductPageClient({ initialProduct }) {
   const router = useRouter();
   const dispatch = useDispatch();
@@ -118,7 +471,7 @@ export default function ProductPageClient({ initialProduct }) {
   const product = initialProduct || null;
   const slug = product?.slug || product?.data?.slug || "";
 
-  // rating summary
+  // rating summary for quick display in header/card
   const [ratingSummary, setRatingSummary] = useState({
     average: 0,
     total: 0,
@@ -148,12 +501,11 @@ export default function ProductPageClient({ initialProduct }) {
 
   // variants & pricing
   const variants = Array.isArray(product?.variants) ? product.variants : [];
-  const [selectedIdx, setSelectedIdx] = useState(variants.length > 0 ? 0 : -1);
+  const [selectedIdx, setSelectedIdx] = useState(
+    variants.length > 0 ? 0 : -1
+  );
   useEffect(() => {
-    if (
-      variants.length > 0 &&
-      (selectedIdx < 0 || selectedIdx >= variants.length)
-    ) {
+    if (variants.length > 0 && (selectedIdx < 0 || selectedIdx >= variants.length)) {
       setSelectedIdx(0);
     }
   }, [variants, selectedIdx]);
@@ -167,8 +519,7 @@ export default function ProductPageClient({ initialProduct }) {
       return activeVariant.productGallery;
     const base = [];
     if (product?.heroImage?.path) base.push(product.heroImage);
-    if (Array.isArray(product?.productMedia))
-      base.push(...product.productMedia);
+    if (Array.isArray(product?.productMedia)) base.push(...product.productMedia);
     return base;
   }, [product, activeVariant]);
 
@@ -216,18 +567,9 @@ export default function ProductPageClient({ initialProduct }) {
           : null,
       })
     );
-  }, [
-    dispatch,
-    product,
-    activeVariant,
-    priceNow,
-    effMrp,
-    heroSrc,
-    gallery,
-    slug,
-  ]);
+  }, [dispatch, product, activeVariant, priceNow, effMrp, heroSrc, gallery, slug]);
 
-  // sticky bars (desktop top; mobile bottom above BottomNav)
+  // sticky bars
   const [headerOffset, setHeaderOffset] = useState(0);
   useEffect(() => {
     const measure = () => {
@@ -256,7 +598,7 @@ export default function ProductPageClient({ initialProduct }) {
 
   return (
     <main>
-      {/* DESKTOP sticky (sits under header; header has z-50) */}
+      {/* DESKTOP sticky under header */}
       {showSticky && (
         <div
           className="fixed inset-x-0 hidden md:block z-40"
@@ -369,7 +711,7 @@ export default function ProductPageClient({ initialProduct }) {
         </div>
       )}
 
-      {/* MOBILE sticky (above BottomNav) */}
+      {/* MOBILE sticky above BottomNav */}
       {showSticky && (
         <div
           className="fixed inset-x-0 md:hidden z-40"
@@ -438,8 +780,14 @@ export default function ProductPageClient({ initialProduct }) {
                 {product?.name}
               </h1>
               {ratingSummary.loaded && ratingSummary.total > 0 && (
-                <div className="text-sm text-muted-foreground">
-                  ★ {ratingSummary.average.toFixed(1)} ({ratingSummary.total})
+                <div className="flex items-center gap-2 text-sm">
+                  <Stars value={ratingSummary.average} />
+                  <span className="font-medium tabular-nums">
+                    {ratingSummary.average.toFixed(1)}
+                  </span>
+                  <span className="text-muted-foreground">
+                    ({ratingSummary.total})
+                  </span>
                 </div>
               )}
             </div>
@@ -471,7 +819,7 @@ export default function ProductPageClient({ initialProduct }) {
               </span>
             </div>
 
-            {/* Variants – ring visible (not clipped) and on the same line */}
+            {/* Variants (ring visible, same line) */}
             {variants.length > 0 && (
               <div className="space-y-2">
                 <div className="text-sm font-medium">Variants</div>
@@ -525,18 +873,14 @@ export default function ProductPageClient({ initialProduct }) {
                     dispatch(
                       removeItem({
                         productId: product?._id,
-                        variant: activeVariant
-                          ? { id: activeVariant._id }
-                          : null,
+                        variant: activeVariant ? { id: activeVariant._id } : null,
                       })
                     );
                   else
                     dispatch(
                       setQty({
                         productId: product?._id,
-                        variant: activeVariant
-                          ? { id: activeVariant._id }
-                          : null,
+                        variant: activeVariant ? { id: activeVariant._id } : null,
                         qty: next,
                       })
                     );
@@ -581,6 +925,92 @@ export default function ProductPageClient({ initialProduct }) {
             ) : null}
           </div>
         </aside>
+      </div>
+
+      {/* TABS: Overview / Specs / Reviews */}
+      <div className="mx-auto max-w-[1200px] px-4 sm:px-6 pb-16">
+        <Tabs defaultValue="overview">
+          <TabsList className="grid w-full grid-cols-3 md:w-auto">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="specs">Specs</TabsTrigger>
+            <TabsTrigger value="reviews">Reviews</TabsTrigger>
+          </TabsList>
+
+          {/* OVERVIEW */}
+          <TabsContent value="overview" className="mt-6 space-y-6">
+            {product?.longDescription ? (
+              <div className="prose dark:prose-invert max-w-none text-sm leading-7">
+                <p>{product.longDescription}</p>
+              </div>
+            ) : null}
+
+            {Array.isArray(product?.descImages) &&
+              product.descImages.length > 0 && (
+                <section className="relative left-1/2 right-1/2 -mx-[50vw] w-screen">
+                  <div className="px-3 sm:px-6">
+                    <div className="space-y-3">
+                      {product.descImages.map((img, i) => (
+                        <div key={img?._id || i}>
+                          {img?.path ? (
+                            <img
+                              src={img.path}
+                              alt={img?.alt || `desc-${i}`}
+                              className="block w-full h-auto object-contain"
+                              loading="lazy"
+                              draggable={false}
+                            />
+                          ) : (
+                            <div className="h-[40vh] bg-muted" />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+              )}
+          </TabsContent>
+
+          {/* SPECS */}
+          <TabsContent value="specs" className="mt-6">
+            {Array.isArray(product?.additionalInfo) &&
+            product.additionalInfo.length > 0 ? (
+              <div className="rounded-2xl border overflow-hidden overflow-x-auto">
+                <Table className="text-sm min-w-[560px]">
+                  <TableHeader className="bg-muted/40">
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="w-[40%]">Specification</TableHead>
+                      <TableHead>Details</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {product.additionalInfo.map((row, idx) => (
+                      <TableRow
+                        key={`${row?.label}-${idx}`}
+                        className="odd:bg-muted/10 hover:bg-muted/20 transition-colors"
+                      >
+                        <TableCell className="text-muted-foreground">
+                          {row?.label}
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {row?.value}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">
+                No specifications added.
+              </div>
+            )}
+          </TabsContent>
+
+          {/* REVIEWS */}
+          <TabsContent value="reviews" className="mt-6">
+            <ReviewsTab productId={product?._id} />
+          </TabsContent>
+        </Tabs>
       </div>
 
       {/* spacer so mobile sticky doesn’t overlap the end */}
