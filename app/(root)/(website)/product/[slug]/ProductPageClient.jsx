@@ -664,6 +664,27 @@ export default function ProductPage() {
     return () => obs.disconnect();
   }, [galleryKey, headerOffset]);
 
+  /* ====== NEW: measure BottomNav height for mobile offset ====== */
+  const [mobileNavHeight, setMobileNavHeight] = useState(0);
+  useEffect(() => {
+    const el = document.querySelector('nav[aria-label="Mobile Navigation"]');
+    if (!el) {
+      setMobileNavHeight(0);
+      return;
+    }
+    const measure = () =>
+      setMobileNavHeight(Math.ceil(el.getBoundingClientRect().height));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    window.addEventListener("resize", measure, { passive: true });
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
+  /* ============================================================ */
+
   /* skeleton */
   const Skeleton = () => (
     <div className="mx-auto max-w-[1200px] px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-10">
@@ -732,7 +753,6 @@ export default function ProductPage() {
                             </span>
                           ) : null}
                         </span>
-                        {/* NEW: sticky bar rating */}
                         {ratingSummary.loaded && ratingSummary.total > 0 && (
                           <span className="inline-flex items-center gap-1">
                             <Stars value={ratingSummary.average} size={14} />
@@ -893,26 +913,138 @@ export default function ProductPage() {
         )}
       </AnimatePresence>
 
-      {/* Mobile bottom sticky */}
+      {/* Mobile bottom sticky — offset above BottomNav & styled like desktop */}
       <AnimatePresence>
         {animateUI && showStickyBar && (
           <motion.div
-            className="fixed inset-x-0 bottom-0 z-40 md:hidden"
+            className="fixed inset-x-0 z-40 md:hidden"
+            style={{ bottom: `${mobileNavHeight}px` }}
             {...slideUp}
           >
             <div className="mx-auto max-w-[1200px] px-3">
-              <div className="bg-white/95 dark:bg-neutral-900/95 supports-[backdrop-filter]:backdrop-blur rounded-t-lg shadow-lg border-t px-3 py-2">
+              <div className="bg-white/95 dark:bg-neutral-900/95 supports-[backdrop-filter]:backdrop-blur rounded-t-2xl shadow-lg border-t px-3 py-2">
                 <div className="flex items-center justify-between gap-3">
-                  <div className="text-base font-semibold">
-                    <AnimatedPrice value={formatPrice(priceNow)} />
+                  {/* left: thumb + name + price + rating */}
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="relative w-10 h-10 rounded-md overflow-hidden bg-muted shrink-0">
+                      {heroSrc ? (
+                        <Image
+                          src={heroSrc}
+                          alt="hero"
+                          fill
+                          sizes="40px"
+                          className="object-cover"
+                        />
+                      ) : null}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate max-w-[46vw]">
+                        {product?.name || "Product"}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>
+                          <AnimatedPrice value={formatPrice(priceNow)} />{" "}
+                          {priceWas ? (
+                            <span className="ml-1 line-through">
+                              {formatPrice(priceWas)}
+                            </span>
+                          ) : null}
+                        </span>
+                        {ratingSummary.loaded && ratingSummary.total > 0 && (
+                          <span className="inline-flex items-center gap-1">
+                            <Stars value={ratingSummary.average} size={12} />
+                            <span className="tabular-nums">
+                              {ratingSummary.average.toFixed(1)}
+                            </span>
+                            <span>({ratingSummary.total})</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <Button
-                    className="rounded-full h-9 px-4 text-sm"
-                    onClick={handleAddToCart}
-                    disabled={!inStock || isLoading || !product}
-                  >
-                    Add to cart
-                  </Button>
+
+                  {/* right: qty stepper + add button */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="inline-flex items-center rounded-md border bg-background h-9">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="px-3 h-9"
+                        onClick={() => {
+                          if (!inCartLine) return;
+                          const next = Math.max(0, (inCartLine.qty || 1) - 1);
+                          if (next === 0)
+                            dispatch(
+                              removeItem({
+                                productId: product?._id,
+                                variant: activeVariant
+                                  ? { id: activeVariant._id }
+                                  : null,
+                              })
+                            );
+                          else
+                            dispatch(
+                              setQty({
+                                productId: product?._id,
+                                variant: activeVariant
+                                  ? { id: activeVariant._id }
+                                  : null,
+                                qty: next,
+                              })
+                            );
+                        }}
+                        aria-label="Decrease quantity"
+                      >
+                        -
+                      </Button>
+                      <div className="px-3 py-1 text-sm font-medium w-10 text-center select-none">
+                        {inCartLine ? inCartLine.qty || 0 : 0}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="px-3 h-9"
+                        onClick={() => {
+                          if (!inCartLine)
+                            return dispatch(
+                              addItem({
+                                productId: product?._id,
+                                slug,
+                                name: product?.name,
+                                qty: 1,
+                                price: priceNow,
+                                mrp: effMrp,
+                                image: heroSrc || gallery?.[activeImg]?.path,
+                                variant: activeVariant
+                                  ? { id: activeVariant._id }
+                                  : null,
+                              })
+                            );
+                          dispatch(
+                            setQty({
+                              productId: product?._id,
+                              variant: activeVariant
+                                ? { id: activeVariant._id }
+                                : null,
+                              qty: (inCartLine.qty || 0) + 1,
+                            })
+                          );
+                        }}
+                        aria-label="Increase quantity"
+                      >
+                        +
+                      </Button>
+                    </div>
+
+                    <Button
+                      className="rounded-full h-9 px-4 text-sm"
+                      onClick={handleAddToCart}
+                      disabled={!inStock || isLoading || !product}
+                    >
+                      <ShoppingCart className="mr-2 h-4 w-4" />
+                      {inCartLine ? "In cart" : "Add"}
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -988,7 +1120,7 @@ export default function ProductPage() {
                               priority={idx === 0}
                             />
                           ) : (
-                            <div className="w-full h-full bg-muted" />
+                            <div className="w/full h/full bg-muted" />
                           )}
                           <div className="absolute top-3 right-3">
                             <Button
@@ -1076,7 +1208,6 @@ export default function ProductPage() {
                 <p className="text-sm text-muted-foreground">
                   {product?.shortDescription}
                 </p>
-                {/* NEW: rating beside the card header */}
                 {ratingSummary.loaded && ratingSummary.total > 0 && (
                   <div className="flex items-center gap-2 text-sm">
                     <Stars value={ratingSummary.average} />
