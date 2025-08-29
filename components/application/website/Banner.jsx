@@ -1,20 +1,30 @@
+// components/application/website/Banner.jsx
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Slider from "react-slick";
 import Image from "next/image";
-import { Skeleton } from "@/components/ui/skeleton"; // Shadcn skeleton
+import { Skeleton } from "@/components/ui/skeleton";
 import "slick-carousel/slick/slick.css";
 import "slick-carousel/slick/slick-theme.css";
 
 export default function Banner({ banners = [], loading = false }) {
   const [active, setActive] = useState(0);
-  const [currentBg, setCurrentBg] = useState(banners?.[0]?.bgColor || "#ffffff");
+  const [currentBg, setCurrentBg] = useState(
+    banners?.[0]?.bgColor || "#ffffff"
+  );
   const sliderRef = useRef(null);
 
+  // light gradient based on bgColor
   const hexToRgb = (hex) => {
     const v = hex?.replace("#", "") || "ffffff";
-    const n = v.length === 3 ? v.split("").map((c) => c + c).join("") : v;
+    const n =
+      v.length === 3
+        ? v
+            .split("")
+            .map((c) => c + c)
+            .join("")
+        : v;
     const num = parseInt(n, 16);
     return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
   };
@@ -97,6 +107,7 @@ export default function Banner({ banners = [], loading = false }) {
 
   return (
     <div className="relative w-full bg-white isolate">
+      {/* soft background wash */}
       <div
         className="absolute left-0 right-0 top-0 -z-10 overflow-hidden h-[45vh] min-h-[260px] max-h-[520px]"
         style={{ backgroundImage: mkGradient(currentBg) }}
@@ -104,7 +115,6 @@ export default function Banner({ banners = [], loading = false }) {
 
       <div className="relative z-10 max-w-[1980px] mx-auto px-4 pt-20 pb-12">
         {loading || banners.length === 0 ? (
-          // Skeleton Loader
           <div className="px-5">
             <Skeleton className="w-full h-[200px] md:h-[400px] rounded-2xl" />
           </div>
@@ -115,6 +125,9 @@ export default function Banner({ banners = [], loading = false }) {
               const mobileSrc = mobileImage?.path || desktopImage?.path || "";
               const alt = desktopImage?.alt || mobileImage?.alt || "Banner";
 
+              // LCP: make *first* slide eager + high fetch priority
+              const isLCP = i === 0;
+
               return (
                 <div key={_id || i} className="px-5">
                   <a
@@ -124,14 +137,19 @@ export default function Banner({ banners = [], loading = false }) {
                     className="block rounded-2xl overflow-hidden shadow-lg"
                   >
                     <picture>
+                      {/* Use the same asset both places if you don’t maintain two versions;
+                         this <source> just lets you swap a heavier desktop PNG if you have it. */}
                       <source media="(min-width: 768px)" srcSet={desktopSrc} />
                       <Image
                         src={mobileSrc}
                         alt={alt}
                         width={1600}
                         height={900}
-                        priority={i === 0}
-                        sizes="(min-width: 768px) 1200px, 100vw"
+                        // ✅ Critical bits for LCP:
+                        priority={isLCP}
+                        fetchPriority={isLCP ? "high" : undefined}
+                        // Don’t set loading=lazy on LCP image; Next removes it when priority=true
+                        sizes="(min-width: 1024px) 1263px, (min-width: 768px) 100vw, 100vw"
                         className="w-full h-auto object-cover rounded-2xl"
                       />
                     </picture>
