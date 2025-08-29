@@ -1,10 +1,13 @@
 // app/(site)/page.jsx
 import HomeClient from "./HomeClient";
 import Script from "next/script";
-
+export const dynamic = "force-dynamic"; // ✅ ensure runtime fetch in prod (no build-time SSG)
+export const revalidate = 0;
 const BRAND = "KICK";
 const BRAND_LONG = "Kick Lifestyle";
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://kick.com.np";
+const SITE_URL = (
+  process.env.NEXT_PUBLIC_SITE_URL || "https://kick.com.np"
+).replace(/\/$/, "");
 
 export const metadata = {
   metadataBase: new URL(SITE_URL),
@@ -17,7 +20,14 @@ export const metadata = {
     url: "/",
     type: "website",
     siteName: BRAND_LONG,
-    images: [{ url: "/og/home.jpg", width: 1200, height: 630, alt: `${BRAND_LONG} – Best Earbuds in Nepal` }],
+    images: [
+      {
+        url: "/og/home.jpg",
+        width: 1200,
+        height: 630,
+        alt: `${BRAND_LONG} – Best Earbuds in Nepal`,
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
@@ -25,7 +35,11 @@ export const metadata = {
     description: `Shop premium TWS earbuds and smartwatches from ${BRAND_LONG}. “Tune into Zen.” #ProudlyNepali`,
     images: ["/og/home.jpg"],
   },
-  robots: { index: true, follow: true, googleBot: { index: true, follow: true } },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true },
+  },
   category: "technology",
 };
 
@@ -33,18 +47,26 @@ export default async function Page() {
   // --- Server fetch banners ---
   let initialBanners = [];
   try {
-    const url = SITE_URL ? `${SITE_URL}/api/website/banners?active=true` : `/api/website/banners?active=true`;
+    const url = SITE_URL
+      ? `${SITE_URL}/api/website/banners?active=true`
+      : `/api/website/banners?active=true`;
     const res = await fetch(url, { next: { revalidate: 300 } });
     const json = await res.json();
     if (json?.success && Array.isArray(json.data)) {
-      initialBanners = [...json.data].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      initialBanners = [...json.data].sort(
+        (a, b) => (a.order ?? 0) - (b.order ?? 0)
+      );
     }
-  } catch {}
+  } catch (err) {
+    console.log(err.message);
+  }
 
   // --- Server fetch categories ---
   let initialCategories = [];
   try {
-    const url = SITE_URL ? `${SITE_URL}/api/website/category` : `/api/website/category`;
+    const url = SITE_URL
+      ? `${SITE_URL}/api/website/category`
+      : `/api/website/category`;
     const res = await fetch(url, { next: { revalidate: 300 } });
     const json = await res.json();
     if (json?.success && Array.isArray(json.data)) {
@@ -78,9 +100,20 @@ export default async function Page() {
 
   return (
     <>
-      <Script id="ld-website" type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ldWebsite) }} />
-      <Script id="ld-organization" type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ldOrg) }} />
-      <HomeClient initialBanners={initialBanners} initialCategories={initialCategories} />
+      <Script
+        id="ld-website"
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(ldWebsite) }}
+      />
+      <Script
+        id="ld-organization"
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(ldOrg) }}
+      />
+      <HomeClient
+        initialBanners={initialBanners}
+        initialCategories={initialCategories}
+      />
     </>
   );
 }
