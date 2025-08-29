@@ -1,18 +1,18 @@
 "use client";
 
 import React, {
-  useMemo,
-  useState,
   useCallback,
-  useRef,
   useEffect,
+  useMemo,
+  useRef,
+  useState,
 } from "react";
-import { useDispatch, useSelector } from "react-redux";
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import axios from "axios";
 
-/* cart */
+/* redux cart */
+import { useDispatch, useSelector } from "react-redux";
 import {
   addItem,
   setQty,
@@ -20,19 +20,10 @@ import {
   selectItemsMap,
 } from "@/store/cartSlice";
 
-/* shadcn/ui */
+/* ui */
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import {
-  Table,
-  TableHeader,
-  TableRow,
-  TableHead,
-  TableBody,
-  TableCell,
-} from "@/components/ui/table";
+import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectTrigger,
@@ -40,23 +31,13 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Dialog,
-  DialogTrigger,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 /* icons */
 import { ChevronLeft, ShoppingCart, Star } from "lucide-react";
 
-/* media */
+/* gallery lightbox */
 import Lightbox from "yet-another-react-lightbox";
 import Thumbnails from "yet-another-react-lightbox/plugins/thumbnails";
 import "yet-another-react-lightbox/styles.css";
@@ -66,10 +47,11 @@ import "yet-another-react-lightbox/plugins/thumbnails.css";
 import { Swiper, SwiperSlide } from "swiper/react";
 import "swiper/css";
 
-/* animation */
+/* motion */
 import { motion, AnimatePresence } from "framer-motion";
 
-/* ------------ helpers ------------ */
+/* ---------------- helpers ---------------- */
+
 const api = axios.create({ baseURL: "/", withCredentials: true });
 
 const toNum = (v) => (typeof v === "string" ? Number(v) : v);
@@ -116,14 +98,10 @@ const getVariantHero = (v, fallback) =>
   fallback ||
   "";
 
-/* small animation helpers */
+/* animations */
 const fadeUp = {
   initial: { opacity: 0, y: 12 },
-  animate: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.35, ease: "easeOut" },
-  },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" } },
 };
 const fadeIn = {
   initial: { opacity: 0 },
@@ -139,13 +117,9 @@ const slideUp = {
   animate: { opacity: 1, y: 0, transition: { duration: 0.25 } },
   exit: { opacity: 0, y: 12, transition: { duration: 0.2 } },
 };
-
 const listStagger = {
   hidden: { opacity: 0 },
-  show: {
-    opacity: 1,
-    transition: { when: "beforeChildren", staggerChildren: 0.06 },
-  },
+  show: { opacity: 1, transition: { when: "beforeChildren", staggerChildren: 0.06 } },
 };
 const item = {
   hidden: { opacity: 0, y: 10 },
@@ -185,7 +159,7 @@ function Stars({ value = 0, size = 16, className = "" }) {
                 : showHalf
                 ? "fill-yellow-400/60 stroke-yellow-400/60"
                 : "stroke-muted-foreground"
-            } `}
+            }`}
           />
         );
       })}
@@ -202,20 +176,21 @@ const fmtDate = (d) => {
   } catch {
     return "";
   }
-}
+};
 
-/* ===================== ReviewsTab ===================== */
-function ReviewsTab({ productId, animateUI, initialSummary, initialPage }) {
-  const [summary, setSummary] = useState(initialSummary || null);
-  const [items, setItems] = useState(initialPage?.items || []);
-  const [total, setTotal] = useState(initialPage?.total || 0);
-  const [page, setPage] = useState(initialPage?.page || 1);
-  const [pageSize] = useState(initialPage?.limit || 6);
-  const [sort, setSort] = useState("newest");
-  const [ratingFilter, setRatingFilter] = useState("all");
-  const [isLoadingList, setIsLoadingList] = useState(false);
+/* ---------------- reviews tab ---------------- */
 
-  const loadSummary = useCallback(async () => {
+function ReviewsTab({ productId, animateUI }) {
+  const [summary, setSummary] = React.useState(null);
+  const [itemsList, setItemsList] = React.useState([]);
+  const [total, setTotal] = React.useState(0);
+  const [page, setPage] = React.useState(1);
+  const [pageSize] = React.useState(6);
+  const [sort, setSort] = React.useState("newest");
+  const [ratingFilter, setRatingFilter] = React.useState("all");
+  const [isLoadingList, setIsLoadingList] = React.useState(false);
+
+  const loadSummary = React.useCallback(async () => {
     if (!productId) return;
     try {
       const { data } = await api.get("/api/website/reviews/summary", {
@@ -225,11 +200,7 @@ function ReviewsTab({ productId, animateUI, initialSummary, initialPage }) {
     } catch {}
   }, [productId]);
 
-  useEffect(() => {
-    if (!summary) loadSummary();
-  }, [summary, loadSummary]);
-
-  const loadPage = useCallback(
+  const loadPage = React.useCallback(
     async (reset = false) => {
       if (!productId) return;
       setIsLoadingList(true);
@@ -245,8 +216,8 @@ function ReviewsTab({ productId, animateUI, initialSummary, initialPage }) {
         const { data } = await api.get("/api/website/reviews", { params });
         if (data?.success) {
           setTotal(data.data.total || 0);
-          if (reset) setItems(data.data.items || []);
-          else setItems((prev) => [...prev, ...(data.data.items || [])]);
+          if (reset) setItemsList(data.data.items || []);
+          else setItemsList((prev) => [...prev, ...(data.data.items || [])]);
           if (reset) setPage(1);
         }
       } finally {
@@ -257,125 +228,48 @@ function ReviewsTab({ productId, animateUI, initialSummary, initialPage }) {
   );
 
   useEffect(() => {
-    const isInitialCombo =
-      initialPage && sort === "newest" && ratingFilter === "all";
+    loadSummary();
+  }, [loadSummary]);
+
+  useEffect(() => {
     setPage(1);
-    if (!isInitialCombo) loadPage(true);
+    loadPage(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sort, ratingFilter]);
 
-  const hasMore = items.length < total;
-
-  const totalCount = summary?.total || 0;
-  const avg = summary?.average || 0;
-  const buckets = summary?.breakdown || { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+  const hasMore = itemsList.length < total;
 
   return (
-    <motion.div
-      className="rounded-2xl border p-5 md:p-6 space-y-6"
-      {...(animateUI ? fadeIn : {})}
-    >
+    <motion.div className="rounded-2xl border p-5 md:p-6 space-y-6" {...(animateUI ? fadeIn : {})}>
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
         <div className="md:col-span-4 rounded-xl border p-4">
           <div className="text-sm text-muted-foreground">Average rating</div>
           <div className="mt-1 flex items-end gap-2">
-            <div className="text-4xl font-semibold">{avg.toFixed(1)}</div>
-            <Stars value={avg} size={18} />
+            <div className="text-4xl font-semibold">{(summary?.average || 0).toFixed(1)}</div>
+            <Stars value={summary?.average || 0} size={18} />
           </div>
           <div className="text-sm text-muted-foreground mt-1">
-            {totalCount} review{totalCount === 1 ? "" : "s"}
+            {(summary?.total || 0)} review{(summary?.total || 0) === 1 ? "" : "s"}
           </div>
-
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button className="mt-4 w-full rounded-full">
-                Write a review
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[520px]">
-              <DialogHeader>
-                <DialogTitle>Write a review</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 py-2">
-                <div>
-                  <div className="text-sm font-medium mb-1.5">Your rating</div>
-                  <div className="flex items-center gap-2">
-                    {[1, 2, 3, 4, 5].map((n) => (
-                      <button key={n} type="button" className="p-1" aria-label={`${n} star`}>
-                        <Star className="stroke-muted-foreground" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium">Title</label>
-                  <Input placeholder="Great value and build quality" />
-                </div>
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium">Your review</label>
-                  <Textarea rows={5} placeholder="What did you like?" />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="ghost">Cancel</Button>
-                <Button>Submit</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
         </div>
 
         <div className="md:col-span-8 rounded-xl border p-4">
           <div className="text-sm font-medium mb-3">Rating breakdown</div>
           <div className="space-y-2">
             {[5, 4, 3, 2, 1].map((star) => {
-              const count = buckets?.[star] || 0;
-              const pct = totalCount ? Math.round((count / totalCount) * 100) : 0;
+              const count = summary?.breakdown?.[star] || 0;
+              const pct = summary?.total ? Math.round((count / summary.total) * 100) : 0;
               return (
                 <div key={star} className="flex items-center gap-3">
                   <div className="w-10 text-xs tabular-nums">{star}★</div>
                   <Progress value={pct} className="h-2 flex-1" />
-                  <div className="w-12 text-right text-xs text-muted-foreground">
-                    {pct}%
-                  </div>
-                  <div className="w-10 text-right text-xs text-muted-foreground">
-                    {count}
-                  </div>
+                  <div className="w-12 text-right text-xs text-muted-foreground">{pct}%</div>
+                  <div className="w-10 text-right text-xs text-muted-foreground">{count}</div>
                 </div>
               );
             })}
           </div>
         </div>
-      </div>
-
-      {/* Controls */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="text-sm text-muted-foreground">
-          {total} review{total === 1 ? "" : "s"}
-        </div>
-        <Separator orientation="vertical" className="hidden sm:block h-6" />
-        <Select value={ratingFilter} onValueChange={(v) => setRatingFilter(v)}>
-          <SelectTrigger className="h-9 w-[160px]">
-            <SelectValue placeholder="All ratings" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All ratings</SelectItem>
-            <SelectItem value="5">5 stars</SelectItem>
-            <SelectItem value="4">4 stars</SelectItem>
-            <SelectItem value="3">3 stars</SelectItem>
-            <SelectItem value="2">2 stars</SelectItem>
-            <SelectItem value="1">1 star</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={sort} onValueChange={(v) => setSort(v)}>
-          <SelectTrigger className="h-9 w-[160px]">
-            <SelectValue placeholder="Newest" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="newest">Newest</SelectItem>
-            <SelectItem value="highest">Highest rated</SelectItem>
-            <SelectItem value="lowest">Lowest rated</SelectItem>
-          </SelectContent>
-        </Select>
       </div>
 
       {/* List */}
@@ -385,13 +279,8 @@ function ReviewsTab({ productId, animateUI, initialSummary, initialPage }) {
         initial={animateUI ? "hidden" : false}
         animate={animateUI ? "show" : false}
       >
-        {items.map((r) => (
-          <motion.div
-            key={r._id}
-            className="rounded-xl border p-4"
-            variants={item}
-            layout
-          >
+        {itemsList.map((r) => (
+          <motion.div key={r._id} className="rounded-xl border p-4" variants={item} layout>
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
@@ -407,10 +296,10 @@ function ReviewsTab({ productId, animateUI, initialSummary, initialPage }) {
           </motion.div>
         ))}
 
-        {isLoadingList && items.length === 0 && (
+        {isLoadingList && itemsList.length === 0 && (
           <div className="text-sm text-muted-foreground">Loading reviews…</div>
         )}
-        {!isLoadingList && items.length === 0 && (
+        {!isLoadingList && itemsList.length === 0 && (
           <div className="text-sm text-muted-foreground">No reviews yet.</div>
         )}
 
@@ -434,39 +323,76 @@ function ReviewsTab({ productId, animateUI, initialSummary, initialPage }) {
   );
 }
 
-/* ===================== Product Page ===================== */
-export default function ProductPageClient({
-  initialProduct,
-  initialReviewsSummary,
-  initialReviews,
-}) {
+/* ---------------- main product page ---------------- */
+
+export default function ProductPageClient({ initialProduct = null }) {
   const { slug } = useParams();
   const router = useRouter();
   const dispatch = useDispatch();
 
-  // product ready from SSR
-  const product = initialProduct;
-  const dataReady = !!product;
+  /* SSR or CSR */
+  const [product, setProduct] = useState(initialProduct);
+  const [isLoading, setIsLoading] = useState(!initialProduct);
 
-  const [animateUI, setAnimateUI] = useState(false);
   useEffect(() => {
-    if (dataReady) {
-      const id = requestAnimationFrame(() => setAnimateUI(true));
-      return () => cancelAnimationFrame(id);
-    } else {
-      setAnimateUI(false);
-    }
-  }, [dataReady]);
+    if (initialProduct) return;
+    let cancel = false;
+    (async () => {
+      if (!slug) return;
+      try {
+        setIsLoading(true);
+        const { data } = await api.get(`/api/website/products/get-by-slug/${slug}`);
+        if (!cancel) setProduct(data?.success ? data.data : null);
+      } finally {
+        if (!cancel) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [slug, initialProduct]);
 
-  const [ratingSummary] = useState({
-    average: Number(initialReviewsSummary?.average || 0),
-    total: Number(initialReviewsSummary?.total || 0),
-    loaded: true,
+  const dataReady = !!product && !isLoading;
+
+  /* rating summary for sticky UIs */
+  const [ratingSummary, setRatingSummary] = useState({
+    average: 0,
+    total: 0,
+    loaded: false,
   });
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!product?._id) return;
+      try {
+        const { data } = await api.get("/api/website/reviews/summary", {
+          params: { productId: product._id },
+        });
+        if (!cancelled && data?.success) {
+          setRatingSummary({
+            average: Number(data.data?.average || 0),
+            total: Number(data.data?.total || 0),
+            loaded: true,
+          });
+        }
+      } catch {
+        if (!cancelled) setRatingSummary((s) => ({ ...s, loaded: true }));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [product?._id]);
 
   /* variants */
-  const variants = Array.isArray(product?.variants) ? product.variants : [];
-  const [selectedIdx, setSelectedIdx] = useState(variants.length ? 0 : -1);
+  const variants = useMemo(
+    () => (Array.isArray(product?.variants) ? product.variants : []),
+    [product?.variants]
+  );
+  const [selectedIdx, setSelectedIdx] = useState(-1);
+  useEffect(() => {
+    if (variants.length > 0 && selectedIdx === -1) setSelectedIdx(0);
+  }, [variants, selectedIdx]);
   const activeVariant = useMemo(
     () => (selectedIdx >= 0 ? variants[selectedIdx] : null),
     [selectedIdx, variants]
@@ -474,8 +400,7 @@ export default function ProductPageClient({
 
   /* gallery */
   const gallery = useMemo(() => {
-    if (activeVariant?.productGallery?.length)
-      return activeVariant.productGallery;
+    if (activeVariant?.productGallery?.length) return activeVariant.productGallery;
     const base = [];
     if (product?.heroImage?.path) base.push(product.heroImage);
     if (Array.isArray(product?.productMedia)) base.push(...product.productMedia);
@@ -490,9 +415,7 @@ export default function ProductPageClient({
   );
   const heroSrc =
     product?.heroImage?.path ||
-    (Array.isArray(product?.productMedia)
-      ? product.productMedia[0]?.path
-      : "") ||
+    (Array.isArray(product?.productMedia) ? product.productMedia[0]?.path : "") ||
     gallery?.[0]?.path ||
     "";
 
@@ -507,7 +430,7 @@ export default function ProductPageClient({
   const lineKey = `${product?._id || ""}|${activeVariant?._id || ""}`;
   const inCartLine = itemsMap[lineKey];
 
-  /* media */
+  /* media state */
   const mainSwiperRef = useRef(null);
   const [activeImg, setActiveImg] = useState(0);
   const [openLightbox, setOpenLightbox] = useState(false);
@@ -550,21 +473,24 @@ export default function ProductPageClient({
   /* sticky bars */
   const galleryWrapRef = useRef(null);
   const [showStickyBar, setShowStickyBar] = useState(false);
-  const [headerOffset, setHeaderOffset] = useState(0);
-  const [bottomOffset, setBottomOffset] = useState(64); // above BottomNav
+  const [headerOffset, setHeaderOffset] = useState(64);
 
+  // read CSS var --site-header-h (set by Header)
   useEffect(() => {
-    const measure = () => {
-      const hdr = document.querySelector("header");
-      setHeaderOffset(hdr ? hdr.getBoundingClientRect().height : 0);
-
-      const nav = document.querySelector('nav[aria-label="Mobile Navigation"]');
-      const h = nav ? nav.getBoundingClientRect().height : 56;
-      setBottomOffset(h + 10);
+    const read = () => {
+      const v = getComputedStyle(document.documentElement)
+        .getPropertyValue("--site-header-h")
+        .trim();
+      const n = parseInt(v || "64", 10);
+      setHeaderOffset(Number.isFinite(n) ? n : 64);
     };
-    measure();
-    window.addEventListener("resize", measure, { passive: true });
-    return () => window.removeEventListener("resize", measure);
+    read();
+    window.addEventListener("resize", read);
+    window.addEventListener("header:resize", read); // fired by Header
+    return () => {
+      window.removeEventListener("resize", read);
+      window.removeEventListener("header:resize", read);
+    };
   }, []);
 
   useEffect(() => {
@@ -578,7 +504,7 @@ export default function ProductPageClient({
     return () => obs.disconnect();
   }, [galleryKey, headerOffset]);
 
-  /* safety skeleton (SSR should make it rare) */
+  /* skeleton */
   const Skeleton = () => (
     <div className="mx-auto max-w-[1200px] px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-10">
       <div className="lg:col-span-7">
@@ -602,53 +528,38 @@ export default function ProductPageClient({
     </div>
   );
 
+  /* --------- render --------- */
+
   return (
     <main>
-      {/* Desktop top sticky */}
+      {/* Desktop sticky header bar (below site header) */}
       <AnimatePresence>
-        {animateUI && showStickyBar && (
+        {dataReady && showStickyBar && (
           <motion.div
             className="fixed inset-x-0 z-40 hidden md:block"
-            style={{ top: headerOffset + 8 }}
+            style={{ top: "calc(var(--site-header-h, 64px) + 8px)" }}
             {...slideDown}
           >
             <div className="mx-auto max-w-[1200px] px-4 sm:px-6">
               <div className="bg-white/95 dark:bg-neutral-900/95 supports-[backdrop-filter]:backdrop-blur rounded-lg shadow-md border px-3 py-2">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0">
-                    <motion.div
-                      className="relative w-10 h-10 rounded-md overflow-hidden bg-muted shrink-0"
-                      {...fadeIn}
-                    >
+                    <motion.div className="relative w-10 h-10 rounded-md overflow-hidden bg-muted shrink-0" {...fadeIn}>
                       {heroSrc ? (
-                        <Image
-                          src={heroSrc}
-                          alt="hero"
-                          fill
-                          sizes="40px"
-                          className="object-cover"
-                        />
+                        <Image src={heroSrc} alt="hero" fill sizes="40px" className="object-cover" />
                       ) : null}
                     </motion.div>
                     <div className="truncate">
-                      <div className="text-sm font-medium truncate">
-                        {product?.name || "Product"}
-                      </div>
+                      <div className="text-sm font-medium truncate">{product?.name || "Product"}</div>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <span>
                           <AnimatedPrice value={formatPrice(priceNow)} />{" "}
-                          {priceWas ? (
-                            <span className="ml-1 line-through">
-                              {formatPrice(priceWas)}
-                            </span>
-                          ) : null}
+                          {priceWas ? <span className="ml-1 line-through">{formatPrice(priceWas)}</span> : null}
                         </span>
                         {ratingSummary.loaded && ratingSummary.total > 0 && (
                           <span className="inline-flex items-center gap-1">
                             <Stars value={ratingSummary.average} size={14} />
-                            <span className="tabular-nums">
-                              {ratingSummary.average.toFixed(1)}
-                            </span>
+                            <span className="tabular-nums">{ratingSummary.average.toFixed(1)}</span>
                             <span>({ratingSummary.total})</span>
                           </span>
                         )}
@@ -659,10 +570,7 @@ export default function ProductPageClient({
                   <div className="flex items-center gap-2">
                     {variants.length > 0 && (
                       <div className="w-[220px]">
-                        <Select
-                          value={String(selectedIdx)}
-                          onValueChange={(val) => onVariantClick(Number(val))}
-                        >
+                        <Select value={String(selectedIdx)} onValueChange={(val) => onVariantClick(Number(val))}>
                           <SelectTrigger className="h-9 text-sm">
                             {activeVariant ? (
                               <div className="flex items-center gap-2 truncate">
@@ -676,9 +584,7 @@ export default function ProductPageClient({
                                   />
                                 </span>
                                 <span className="truncate">
-                                  {activeVariant?.variantName ||
-                                    activeVariant?.sku ||
-                                    "Variant"}
+                                  {activeVariant?.variantName || activeVariant?.sku || "Variant"}
                                 </span>
                               </div>
                             ) : (
@@ -703,9 +609,7 @@ export default function ProductPageClient({
                                       ) : null}
                                     </span>
                                     <span className="truncate">
-                                      {v?.variantName ||
-                                        v?.sku ||
-                                        `Option ${i + 1}`}
+                                      {v?.variantName || v?.sku || `Option ${i + 1}`}
                                     </span>
                                   </div>
                                 </SelectItem>
@@ -716,91 +620,13 @@ export default function ProductPageClient({
                       </div>
                     )}
 
-                    {/* wider number cell */}
-                    <div className="inline-flex items-center rounded-md border bg-background h-9">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        className="px-3 h-9"
-                        onClick={() => {
-                          if (!inCartLine) return;
-                          const next = Math.max(0, (inCartLine.qty || 1) - 1);
-                          if (next === 0)
-                            dispatch(
-                              removeItem({
-                                productId: product?._id,
-                                variant: activeVariant
-                                  ? { id: activeVariant._id }
-                                  : null,
-                              })
-                            );
-                          else
-                            dispatch(
-                              setQty({
-                                productId: product?._id,
-                                variant: activeVariant
-                                  ? { id: activeVariant._id }
-                                  : null,
-                                qty: next,
-                              })
-                            );
-                        }}
-                        aria-label="Decrease quantity"
-                      >
-                        -
-                      </Button>
-                      <div className="px-3 py-1 text-sm font-medium w-12 text-center select-none tabular-nums">
-                        {inCartLine ? inCartLine.qty || 0 : 0}
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        className="px-3 h-9"
-                        onClick={() => {
-                          if (!inCartLine)
-                            return dispatch(
-                              addItem({
-                                productId: product?._id,
-                                slug,
-                                name: product?.name,
-                                qty: 1,
-                                price: priceNow,
-                                mrp: effMrp,
-                                image: heroSrc,
-                                variant: activeVariant
-                                  ? { id: activeVariant._id }
-                                  : null,
-                              })
-                            );
-                          dispatch(
-                            setQty({
-                              productId: product?._id,
-                              variant: activeVariant
-                                ? { id: activeVariant._id }
-                                : null,
-                              qty: (inCartLine.qty || 0) + 1,
-                            })
-                          );
-                        }}
-                        aria-label="Increase quantity"
-                      >
-                        +
-                      </Button>
-                    </div>
-
+                    {/* Primary action */}
                     {inCartLine ? (
-                      <Button
-                        className="rounded-full h-9 px-4"
-                        onClick={() => router.push("/checkout")}
-                      >
+                      <Button className="rounded-full h-9 px-4" onClick={() => router.push("/checkout")}>
                         Go to checkout
                       </Button>
                     ) : (
-                      <Button
-                        className="rounded-full h-9 px-4"
-                        onClick={handleAddToCart}
-                        disabled={!inStock || !product}
-                      >
+                      <Button className="rounded-full h-9 px-4" onClick={handleAddToCart} disabled={!inStock || isLoading || !product}>
                         <ShoppingCart className="mr-2 h-4 w-4" />
                         Add to cart
                       </Button>
@@ -813,41 +639,26 @@ export default function ProductPageClient({
         )}
       </AnimatePresence>
 
-      {/* Mobile floating sticky (price + add/checkout) above BottomNav */}
+      {/* Mobile floating pill (above BottomNav) */}
       <AnimatePresence>
-        {animateUI && showStickyBar && (
+        {dataReady && showStickyBar && (
           <motion.div
-            className="fixed left-0 right-0 z-40 md:hidden pointer-events-none"
-            style={{ bottom: bottomOffset }}
+            className="fixed inset-x-0 z-40 md:hidden pointer-events-none"
+            style={{ bottom: "calc(56px + env(safe-area-inset-bottom) + 12px)" }}
             {...slideUp}
           >
-            <div className="mx-auto max-w-[1200px] px-3 pointer-events-auto">
-              <div className="mx-auto w-full sm:w-[480px] bg-white/95 dark:bg-neutral-900/95 supports-[backdrop-filter]:backdrop-blur rounded-full shadow-lg border px-3 py-2">
+            <div className="mx-auto max-w-[1200px] px-3">
+              <div className="pointer-events-auto mx-auto max-w-sm rounded-full shadow-lg border bg-white/95 dark:bg-neutral-900/95 supports-[backdrop-filter]:backdrop-blur px-3 py-2">
                 <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="text-base font-semibold">
-                      <AnimatedPrice value={formatPrice(priceNow)} />
-                    </div>
-                    {priceWas ? (
-                      <div className="text-xs text-muted-foreground line-through">
-                        {formatPrice(priceWas)}
-                      </div>
-                    ) : null}
+                  <div className="text-base font-semibold">
+                    <AnimatedPrice value={formatPrice(priceNow)} />
                   </div>
-
                   {inCartLine ? (
-                    <Button
-                      className="rounded-full h-9 px-4 text-sm"
-                      onClick={() => router.push("/checkout")}
-                    >
-                      Go to checkout
+                    <Button className="rounded-full h-9 px-4 text-sm" onClick={() => router.push("/checkout")}>
+                      Checkout
                     </Button>
                   ) : (
-                    <Button
-                      className="rounded-full h-9 px-4 text-sm"
-                      onClick={handleAddToCart}
-                      disabled={!inStock || !product}
-                    >
+                    <Button className="rounded-full h-9 px-4 text-sm" onClick={handleAddToCart} disabled={!inStock || isLoading || !product}>
                       Add to cart
                     </Button>
                   )}
@@ -860,27 +671,16 @@ export default function ProductPageClient({
 
       {/* HEADER ROW */}
       {dataReady ? (
-        <motion.div
-          className="mx-auto max-w-[1200px] px-4 sm:px-6 pt-8 pb-2"
-          {...(animateUI ? fadeUp : {})}
-        >
+        <motion.div className="mx-auto max-w-[1200px] px-4 sm:px-6 pt-8 pb-2" {...(fadeUp)}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => router.back()}
-                className="h-8 px-2"
-              >
+              <Button variant="ghost" size="sm" onClick={() => router.back()} className="h-8 px-2">
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <div className="text-sm text-muted-foreground">
-                {product?.category?.name || "Category"}
-              </div>
+              <div className="text-sm text-muted-foreground">{product?.category?.name || "Category"}</div>
             </div>
             <div className="text-sm text-muted-foreground">
-              SKU:{" "}
-              <span className="font-medium">{product?.modelNumber || "-"}</span>
+              SKU: <span className="font-medium">{product?.modelNumber || "-"}</span>
             </div>
           </div>
         </motion.div>
@@ -892,15 +692,11 @@ export default function ProductPageClient({
 
       {/* MAIN GRID */}
       {dataReady ? (
-        <motion.div
-          className="mx-auto max-w-[1200px] px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-10"
-          {...(animateUI ? fadeUp : {})}
-        >
+        <motion.div className="mx-auto max-w-[1200px] px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-10" {...fadeUp}>
           {/* LEFT: GALLERY (sentinel) */}
           <section className="lg:col-span-7" ref={galleryWrapRef}>
             <div className="bg-white dark:bg-neutral-900 rounded-2xl border overflow-hidden">
-              {/* main image */}
-              <motion.div className="relative" {...(animateUI ? fadeIn : {})}>
+              <motion.div className="relative" {...fadeIn}>
                 {Array.isArray(gallery) && gallery.length ? (
                   <Swiper
                     key={galleryKey}
@@ -956,108 +752,76 @@ export default function ProductPageClient({
                 )}
               </motion.div>
 
-              {/* horizontal thumbs */}
+              {/* thumbs */}
               {Array.isArray(gallery) && gallery.length > 1 && (
                 <div className="p-3">
-                  <ScrollArea className="w-full">
-                    <motion.div
-                      className="flex gap-2.5 md:gap-3 pb-1"
-                      {...(animateUI ? fadeIn : {})}
-                    >
-                      {gallery.map((g, i) => (
-                        <motion.button
-                          key={g?._id || g?.path || i}
-                          onClick={() => {
-                            mainSwiperRef.current?.slideTo(i);
-                            setActiveImg(i);
-                          }}
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.98 }}
-                          className={`relative w-14 h-14 md:w-16 md:h-16 rounded-md border overflow-hidden transition ${
-                            i === activeImg
-                              ? "ring-2 ring-yellow-300"
-                              : "hover:opacity-90"
-                          }`}
-                          aria-label={`View image ${i + 1}`}
-                        >
-                          {g?.path ? (
-                            <Image
-                              src={g.path}
-                              alt={g?.alt || `thumb-${i}`}
-                              fill
-                              sizes="64px"
-                              className="object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full bg-muted" />
-                          )}
-                        </motion.button>
-                      ))}
-                    </motion.div>
-                    <ScrollBar orientation="horizontal" />
-                  </ScrollArea>
+                  <div className="flex gap-2.5 md:gap-3 pb-1 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+                    {gallery.map((g, i) => (
+                      <motion.button
+                        key={g?._id || g?.path || i}
+                        onClick={() => {
+                          mainSwiperRef.current?.slideTo(i);
+                          setActiveImg(i);
+                        }}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.98 }}
+                        className={`relative w-14 h-14 md:w-16 md:h-16 rounded-md border overflow-hidden transition ${
+                          i === activeImg ? "ring-2 ring-yellow-300" : "hover:opacity-90"
+                        }`}
+                        aria-label={`View image ${i + 1}`}
+                      >
+                        {g?.path ? (
+                          <Image src={g.path} alt={g?.alt || `thumb-${i}`} fill sizes="64px" className="object-cover" />
+                        ) : (
+                          <div className="w-full h-full bg-muted" />
+                        )}
+                      </motion.button>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
           </section>
 
           {/* RIGHT: SUMMARY */}
-          <motion.aside className="lg:col-span-5" {...(animateUI ? fadeUp : {})}>
+          <motion.aside className="lg:col-span-5" {...fadeUp}>
             <div className="bg-white dark:bg-neutral-900 rounded-2xl border p-5 md:p-6 space-y-5">
               <div className="space-y-2">
-                <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">
-                  {product?.name}
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                  {product?.shortDescription}
-                </p>
+                <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">{product?.name}</h1>
+                <p className="text-sm text-muted-foreground">{product?.shortDescription}</p>
+
                 {ratingSummary.loaded && ratingSummary.total > 0 && (
                   <div className="flex items-center gap-2 text-sm">
                     <Stars value={ratingSummary.average} />
-                    <span className="font-medium tabular-nums">
-                      {ratingSummary.average.toFixed(1)}
-                    </span>
-                    <span className="text-muted-foreground">
-                      ({ratingSummary.total})
-                    </span>
+                    <span className="font-medium tabular-nums">{ratingSummary.average.toFixed(1)}</span>
+                    <span className="text-muted-foreground">({ratingSummary.total})</span>
                   </div>
                 )}
               </div>
 
-              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <div className="flex items-baseline gap-x-3 gap-y-1 flex-wrap">
                 <div className="text-2xl font-bold">
                   <AnimatedPrice value={formatPrice(priceNow)} />
                 </div>
-                {priceWas && (
-                  <div className="text-sm text-muted-foreground line-through">
-                    {formatPrice(priceWas)}
-                  </div>
-                )}
-                {off !== null && (
-                  <div className="text-sm text-emerald-600">{off}% OFF</div>
-                )}
+                {priceWas && <div className="text-sm text-muted-foreground line-through">{formatPrice(priceWas)}</div>}
+                {off !== null && <div className="text-sm text-emerald-600">{off}% OFF</div>}
               </div>
 
               <div className="flex items-center gap-3">
-                <span
-                  className={`h-2 w-2 rounded-full ${
-                    inStock ? "bg-emerald-400" : "bg-rose-400"
-                  }`}
-                />
-                <span
-                  className={`text-sm font-medium ${
-                    inStock ? "text-emerald-600" : "text-rose-600"
-                  }`}
-                >
+                <span className={`h-2 w-2 rounded-full ${inStock ? "bg-emerald-400" : "bg-rose-400"}`} />
+                <span className={`text-sm font-medium ${inStock ? "text-emerald-600" : "text-rose-600"}`}>
                   {inStock ? "In stock" : "Out of stock"}
                 </span>
               </div>
 
-              {/* desktop variant thumbnails */}
+              {/* variants: single line, scrollable if many */}
               {variants.length > 0 && (
-                <div className="space-y-2 hidden sm:block">
+                <div className="space-y-2">
                   <div className="text-sm font-medium">Variants</div>
-                  <div className="flex items-center gap-3 flex-wrap">
+                  <div
+                    className="flex items-center gap-3 overflow-x-auto flex-nowrap"
+                    style={{ scrollbarWidth: "none" }}
+                  >
                     {variants.map((v, i) => {
                       const img = getVariantHero(v, heroSrc);
                       const selected = i === selectedIdx;
@@ -1069,21 +833,13 @@ export default function ProductPageClient({
                           whileHover={{ scale: 1.06 }}
                           whileTap={{ scale: 0.97 }}
                           className={`relative h-10 w-10 rounded-full overflow-hidden border ${
-                            selected
-                              ? "ring-2 ring-offset-2 ring-yellow-300"
-                              : ""
+                            selected ? "ring-2 ring-offset-2 ring-yellow-300" : ""
                           }`}
                           aria-pressed={selected}
                           title={v?.variantName || v?.sku || `Option ${i + 1}`}
                         >
                           {img ? (
-                            <Image
-                              src={img}
-                              alt={v?.variantName || `variant-${i}`}
-                              fill
-                              sizes="40px"
-                              className="object-cover"
-                            />
+                            <Image src={img} alt={v?.variantName || `variant-${i}`} fill sizes="40px" className="object-cover" />
                           ) : (
                             <div className="h-full w-full bg-muted" />
                           )}
@@ -1094,33 +850,13 @@ export default function ProductPageClient({
                 </div>
               )}
 
-              {/* ACTIONS — mobile: variant select + counter on the SAME row */}
+              {/* actions (mobile counter width fixed) */}
               <div className="flex flex-col sm:flex-row gap-3 items-stretch">
-                {variants.length > 0 && (
-                  <div className="sm:hidden">
-                    <Select
-                      value={String(selectedIdx)}
-                      onValueChange={(v) => onVariantClick(Number(v))}
-                    >
-                      <SelectTrigger className="h-10">
-                        <SelectValue placeholder="Choose variant" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {variants.map((v, i) => (
-                          <SelectItem key={v?._id || i} value={String(i)}>
-                            {v?.variantName || v?.sku || `Option ${i + 1}`}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                <div className="inline-flex items-center rounded-md border bg-background h-10">
+                <div className="inline-flex items-center rounded-md border bg-background">
                   <Button
                     type="button"
                     variant="ghost"
-                    className="px-3 h-10"
+                    className="px-0 w-9 h-10 min-w-[36px]"
                     onClick={() => {
                       if (!inCartLine) return;
                       const next = Math.max(0, (inCartLine.qty || 1) - 1);
@@ -1128,33 +864,27 @@ export default function ProductPageClient({
                         dispatch(
                           removeItem({
                             productId: product?._id,
-                            variant: activeVariant
-                              ? { id: activeVariant._id }
-                              : null,
+                            variant: activeVariant ? { id: activeVariant._id } : null,
                           })
                         );
                       else
                         dispatch(
                           setQty({
                             productId: product?._id,
-                            variant: activeVariant
-                              ? { id: activeVariant._id }
-                              : null,
+                            variant: activeVariant ? { id: activeVariant._id } : null,
                             qty: next,
                           })
                         );
                     }}
                     aria-label="Decrease quantity"
                   >
-                    -
+                    −
                   </Button>
-                  <div className="px-3 py-2 text-sm font-medium w-12 text-center select-none tabular-nums">
-                    {inCartLine ? inCartLine.qty || 0 : 0}
-                  </div>
+                  <div className="px-2 text-sm font-medium select-none w-10 text-center"> {inCartLine ? inCartLine.qty || 0 : 0} </div>
                   <Button
                     type="button"
                     variant="ghost"
-                    className="px-3 h-10"
+                    className="px-0 w-9 h-10 min-w-[36px]"
                     onClick={() => {
                       if (!inCartLine)
                         return dispatch(
@@ -1166,9 +896,7 @@ export default function ProductPageClient({
                             price: priceNow,
                             mrp: effMrp,
                             image: heroSrc || gallery?.[activeImg]?.path,
-                            variant: activeVariant
-                              ? { id: activeVariant._id }
-                              : null,
+                            variant: activeVariant ? { id: activeVariant._id } : null,
                           })
                         );
                       dispatch(
@@ -1186,18 +914,11 @@ export default function ProductPageClient({
                 </div>
 
                 {inCartLine ? (
-                  <Button
-                    className="rounded-full flex-1"
-                    onClick={() => router.push("/checkout")}
-                  >
+                  <Button className="rounded-full flex-1" onClick={() => router.push("/checkout")}>
                     Go to checkout
                   </Button>
                 ) : (
-                  <Button
-                    className="rounded-full flex-1"
-                    onClick={handleAddToCart}
-                    disabled={!inStock || !product}
-                  >
+                  <Button className="rounded-full flex-1" onClick={handleAddToCart} disabled={!inStock || isLoading || !product}>
                     <ShoppingCart className="mr-2 h-4 w-4" /> Add to cart
                   </Button>
                 )}
@@ -1211,10 +932,7 @@ export default function ProductPageClient({
 
       {/* TABS */}
       {dataReady ? (
-        <motion.div
-          className="mx-auto max-w-[1200px] px-4 sm:px-6 pb-16"
-          {...(animateUI ? fadeUp : {})}
-        >
+        <motion.div className="mx-auto max-w-[1200px] px-4 sm:px-6 pb-16" {...fadeUp}>
           <Tabs defaultValue="overview">
             <TabsList className="grid w-full grid-cols-3 md:w-auto">
               <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -1222,96 +940,71 @@ export default function ProductPageClient({
               <TabsTrigger value="reviews">Reviews</TabsTrigger>
             </TabsList>
 
-            {/* OVERVIEW */}
             <TabsContent value="overview" className="mt-6 space-y-6">
               {product?.longDescription ? (
-                <motion.div
-                  className="prose dark:prose-invert max-w-none text-sm leading-7"
-                  {...(animateUI ? fadeIn : {})}
-                >
+                <motion.div className="prose dark:prose-invert max-w-none text-sm leading-7" {...fadeIn}>
                   <p>{product.longDescription}</p>
                 </motion.div>
               ) : null}
 
-              {Array.isArray(product?.descImages) &&
-                product.descImages.length > 0 && (
-                  <section className="relative left-1/2 right-1/2 -mx-[50vw] w-screen">
-                    <div className="px-3 sm:px-6">
-                      <div className="space-y-3">
-                        {product.descImages.map((img, i) => (
-                          <motion.div key={img?._id || i} {...(animateUI ? fadeIn : {})}>
-                            {img?.path ? (
-                              <img
-                                src={img.path}
-                                alt={img?.alt || `desc-${i}`}
-                                className="block w-full h-auto object-contain"
-                                loading="lazy"
-                                draggable={false}
-                              />
-                            ) : (
-                              <div className="h-[40vh] bg-muted" />
-                            )}
-                          </motion.div>
-                        ))}
-                      </div>
-                    </div>
-                  </section>
-                )}
-            </TabsContent>
-
-            {/* SPECS */}
-            <TabsContent value="specs" className="mt-6">
-              {Array.isArray(product?.additionalInfo) &&
-              product.additionalInfo.length > 0 ? (
-                <motion.div
-                  className="rounded-2xl border overflow-hidden overflow-x-auto"
-                  {...(animateUI ? fadeIn : {})}
-                >
-                  <Table className="text-sm min-w-[560px]">
-                    <TableHeader className="bg-muted/40">
-                      <TableRow className="hover:bg-transparent">
-                        <TableHead className="w-[40%]">Specification</TableHead>
-                        <TableHead>Details</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {product.additionalInfo.map((row, idx) => (
-                        <TableRow
-                          key={`${row?.label}-${idx}`}
-                          className="odd:bg-muted/10 hover:bg-muted/20 transition-colors"
-                        >
-                          <TableCell className="text-muted-foreground">
-                            {row?.label}
-                          </TableCell>
-                          <TableCell className="font-medium">
-                            {row?.value}
-                          </TableCell>
-                        </TableRow>
+              {Array.isArray(product?.descImages) && product.descImages.length > 0 && (
+                <section className="relative left-1/2 right-1/2 -mx-[50vw] w-screen">
+                  <div className="px-3 sm:px-6">
+                    <div className="space-y-3">
+                      {product.descImages.map((img, i) => (
+                        <motion.div key={img?._id || i} {...fadeIn}>
+                          {img?.path ? (
+                            <img
+                              src={img.path}
+                              alt={img?.alt || `desc-${i}`}
+                              className="block w-full h-auto object-contain"
+                              loading="lazy"
+                              draggable={false}
+                            />
+                          ) : (
+                            <div className="h-[40vh] bg-muted" />
+                          )}
+                        </motion.div>
                       ))}
-                    </TableBody>
-                  </Table>
-                </motion.div>
-              ) : (
-                <div className="text-sm text-muted-foreground">
-                  No specifications added.
-                </div>
+                    </div>
+                  </div>
+                </section>
               )}
             </TabsContent>
 
-            {/* REVIEWS */}
+            <TabsContent value="specs" className="mt-6">
+              {Array.isArray(product?.additionalInfo) && product.additionalInfo.length > 0 ? (
+                <motion.div className="rounded-2xl border overflow-hidden overflow-x-auto" {...fadeIn}>
+                  <table className="text-sm min-w-[560px] w-full">
+                    <thead className="bg-muted/40">
+                      <tr>
+                        <th className="text-left p-3 w-[40%]">Specification</th>
+                        <th className="text-left p-3">Details</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {product.additionalInfo.map((row, idx) => (
+                        <tr key={`${row?.label}-${idx}`} className="odd:bg-muted/10">
+                          <td className="p-3 text-muted-foreground">{row?.label}</td>
+                          <td className="p-3 font-medium">{row?.value}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </motion.div>
+              ) : (
+                <div className="text-sm text-muted-foreground">No specifications added.</div>
+              )}
+            </TabsContent>
+
             <TabsContent value="reviews" className="mt-6">
-              <ReviewsTab
-                productId={product?._id}
-                animateUI={animateUI}
-                initialSummary={initialReviewsSummary}
-                initialPage={initialReviews}
-              />
+              <ReviewsTab productId={product?._id} animateUI />
             </TabsContent>
           </Tabs>
         </motion.div>
       ) : null}
 
-      {/* spacer for mobile sticky */}
+      {/* spacer for mobile BottomNav overlap scenarios */}
       <div className="h-16 md:h-0" />
 
       {/* LIGHTBOX */}
@@ -1321,21 +1014,16 @@ export default function ProductPageClient({
         close={() => {
           setOpenLightbox(false);
           setActiveImg(lightboxIndex);
-          if (mainSwiperRef.current?.slideTo)
-            mainSwiperRef.current.slideTo(lightboxIndex);
+          if (mainSwiperRef.current?.slideTo) mainSwiperRef.current.slideTo(lightboxIndex);
         }}
-        slides={(gallery || []).map((g) => ({
-          src: g?.path || "",
-          alt: g?.alt || product?.name,
-        }))}
+        slides={(gallery || []).map((g) => ({ src: g?.path || "", alt: g?.alt || product?.name }))}
         plugins={[Thumbnails]}
         thumbnails={{ position: "bottom" }}
         on={{
           view: ({ index }) => {
             setLightboxIndex(index);
             setActiveImg(index);
-            if (mainSwiperRef.current?.slideTo)
-              mainSwiperRef.current.slideTo(index);
+            if (mainSwiperRef.current?.slideTo) mainSwiperRef.current.slideTo(index);
           },
         }}
       />

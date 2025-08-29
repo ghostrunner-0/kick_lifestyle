@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -58,23 +58,25 @@ export default function Header() {
   const pathname = usePathname();
   const isHome = pathname === "/" || pathname === WEBSITE_HOME;
 
-  /* Cart count (badge) */
+  /* Cart badge */
   const cartCount = useSelector(selectCartCount);
 
-  /* UI state */
-  const [isSticky, setIsSticky] = useState(false);
+  /* UI */
+  const [isScrolled, setIsScrolled] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [products, setProducts] = useState([]);
 
-  /* Categories (single fetch via provider) */
+  /* height measurement */
+  const headerRef = useRef(null);
+
+  /* Categories */
   const { categories, isLoading } = useCategories();
 
-  /* Account link label/route */
+  /* Account link */
   const [accountHref, setAccountHref] = useState("/auth/login");
   const [accountLabel, setAccountLabel] = useState("Login / Register");
 
-  /* Resolve account (admin vs user vs guest) */
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -104,10 +106,9 @@ export default function Header() {
     };
   }, []);
 
-  /* Sticky/transparent header behavior (home only) */
+  /* Home: only toggles transparency, header stays fixed everywhere */
   useEffect(() => {
-    if (!isHome) return;
-    const onScroll = () => setIsSticky(window.scrollY > 8);
+    const onScroll = () => setIsScrolled(window.scrollY > 8);
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
@@ -120,7 +121,7 @@ export default function Header() {
       .map((c) => ({ label: toTitle(c?.name), href: CATEGORY_VIEW_ROUTE(c?.slug) }));
   }, [categories]);
 
-  /* Prefetch search index (used by SearchSidebar) */
+  /* Prefetch for search */
   useEffect(() => {
     let cancel = false;
     (async () => {
@@ -137,31 +138,31 @@ export default function Header() {
     };
   }, []);
 
-  /* Navigate when a product is selected from search */
-  const handleSelectProduct = (p) => {
-    const slug = p?.slug || p?.data?.slug;
-    const id = p?.id || p?.product_id || p?._id;
-    const href = slug ? `/product/${slug}` : id ? `/product/${id}` : "/";
-    router.push(href);
-  };
+  /* Expose header height to CSS var (and to other components) */
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
 
-  /* Layout constraints */
-  const containerMaxW = "max-w-[1600px]";
+    const setVar = () => {
+      const h = Math.round(el.getBoundingClientRect().height || 64);
+      document.documentElement.style.setProperty("--site-header-h", `${h}px`);
+      // let listeners adjust their offsets if needed
+      window.dispatchEvent(new CustomEvent("header:resize", { detail: { height: h } }));
+    };
 
-  /* Header surface styles */
-  const headerCls = isHome
-    ? [
-        "fixed inset-x-0 top-0 z-50 transition-colors",
-        isSticky
-          ? "bg-white/70 supports-[backdrop-filter]:bg-white/60 backdrop-blur border-b"
-          : "bg-transparent",
-      ].join(" ")
-    : "sticky top-0 inset-x-0 z-50 bg-white/70 supports-[backdrop-filter]:bg-white/60 backdrop-blur";
+    setVar();
 
-  const textCls = isHome ? (isSticky ? "text-gray-900" : "text-white") : "text-gray-900";
-  const currentLogo = isHome && !isSticky ? LOGO_WHITE : LOGO_BLACK;
+    // Update on resize / font load / layout change
+    const ro = new ResizeObserver(setVar);
+    ro.observe(el);
+    window.addEventListener("resize", setVar);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", setVar);
+    };
+  }, []);
 
-  /* Event bus -> open sidebars from BottomNav */
+  /* Event bus to open sidebars from BottomNav */
   useEffect(() => {
     const openSearch = () => setSearchOpen(true);
     const openCart = () => setCartOpen(true);
@@ -173,42 +174,39 @@ export default function Header() {
     };
   }, []);
 
+  const containerMaxW = "max-w-[1600px]";
+
+  /* Always fixed; only color changes on home top */
+  const headerSurface =
+    "fixed inset-x-0 top-0 z-[70] transition-colors supports-[backdrop-filter]:backdrop-blur";
+  const surfaceColor = isHome
+    ? isScrolled
+      ? "bg-white/70 border-b"
+      : "bg-transparent"
+    : "bg-white/70 border-b";
+  const headerCls = `${headerSurface} ${surfaceColor}`;
+
+  const textCls = isHome ? (isScrolled ? "text-gray-900" : "text-white") : "text-gray-900";
+  const currentLogo = isHome && !isScrolled ? LOGO_WHITE : LOGO_BLACK;
+
   return (
     <>
-      <header className={headerCls}>
-        {/* unified horizontal padding across breakpoints */}
-        <div
-          className={`mx-auto ${containerMaxW} flex items-center justify-between lg:py-5 py-3 px-4 sm:px-6 lg:px-10 2xl:px-16`}
-        >
-          {/* Left: Mobile menu trigger + Desktop logo */}
+      <header ref={headerRef} className={headerCls}>
+        <div className={`mx-auto ${containerMaxW} flex items-center justify-between lg:py-5 py-3 px-4 sm:px-6 lg:px-10 2xl:px-16`}>
+          {/* Left */}
           <div className="flex items-center gap-2">
-            {/* Mobile: hamburger opens drawer */}
             <Sheet>
               <SheetTrigger asChild className="lg:hidden">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Open menu"
-                  className={textCls + " hover:bg-transparent"}
-                >
+                <Button variant="ghost" size="icon" aria-label="Open menu" className={textCls + " hover:bg-transparent"}>
                   <Menu className="h-5 w-5" />
                 </Button>
               </SheetTrigger>
-
               <SheetContent
                 side="left"
                 className="w-[80%] sm:w-[380px] p-0 flex flex-col [&>button.absolute.right-4.top-4]:hidden"
               >
-                {/* Drawer header */}
                 <div className="flex items-center justify-between px-4 py-3 border-b bg-white">
-                  <Image
-                    src={LOGO_BLACK}
-                    alt="KICK"
-                    width={110}
-                    height={40}
-                    className="object-contain"
-                    priority
-                  />
+                  <Image src={LOGO_BLACK} alt="KICK" width={110} height={40} className="object-contain" priority />
                   <SheetClose asChild>
                     <button className="h-9 w-9 rounded-full bg-black/5 hover:bg-black/10">
                       <span className="sr-only">Close</span>✕
@@ -216,33 +214,22 @@ export default function Header() {
                   </SheetClose>
                 </div>
 
-                {/* Quick search entry */}
                 <div className="p-3 border-b">
-                  <Button
-                    onClick={() => setSearchOpen(true)}
-                    variant="outline"
-                    className="w-full justify-start gap-2"
-                  >
+                  <Button onClick={() => setSearchOpen(true)} variant="outline" className="w-full justify-start gap-2">
                     <Search className="h-4 w-4" />
                     <span>Search products</span>
                   </Button>
                 </div>
 
-                {/* Drawer nav */}
                 <nav className="p-3">
                   <ul className="space-y-2">
-                    {isLoading && (
-                      <li className="px-4 py-2 text-sm text-muted-foreground">Loading…</li>
-                    )}
+                    {isLoading && <li className="px-4 py-2 text-sm text-muted-foreground">Loading…</li>}
 
                     {!isLoading &&
                       catLinks.map((item) => (
                         <li key={item.label}>
                           <SheetClose asChild>
-                            <Link
-                              href={item.href}
-                              className="block rounded-lg px-4 h-12 leading-[48px] text-[15px] font-medium hover:bg-muted"
-                            >
+                            <Link href={item.href} className="block rounded-lg px-4 h-12 leading-[48px] text-[15px] font-medium hover:bg-muted">
                               {item.label}
                             </Link>
                           </SheetClose>
@@ -279,10 +266,7 @@ export default function Header() {
                       ) : (
                         <li key={item.label}>
                           <SheetClose asChild>
-                            <Link
-                              href={item.href}
-                              className="block rounded-lg px-4 h-12 leading-[48px] text-[15px] font-medium hover:bg-muted"
-                            >
+                            <Link href={item.href} className="block rounded-lg px-4 h-12 leading-[48px] text-[15px] font-medium hover:bg-muted">
                               {item.label}
                             </Link>
                           </SheetClose>
@@ -292,7 +276,6 @@ export default function Header() {
                   </ul>
                 </nav>
 
-                {/* Drawer footer */}
                 <div className="mt-auto border-t">
                   <div className="p-3">
                     <SheetClose asChild>
@@ -313,30 +296,16 @@ export default function Header() {
             {/* Desktop: Logo */}
             <div className="hidden lg:block">
               <Link href={WEBSITE_HOME} className="block" aria-label="Go to home">
-                <Image
-                  src={currentLogo}
-                  height={146}
-                  width={383}
-                  alt="KICK"
-                  className="w-32"
-                  priority
-                />
+                <Image src={currentLogo} height={146} width={383} alt="KICK" className="w-32" priority />
               </Link>
             </div>
           </div>
 
-          {/* Center: mobile logo OR desktop nav */}
+          {/* Center */}
           <div className="flex-1 flex justify-center min-w-0">
-            {/* Mobile centered logo */}
+            {/* Mobile logo */}
             <Link href={WEBSITE_HOME} className="lg:hidden block" aria-label="Go to home">
-              <Image
-                src={currentLogo}
-                height={146}
-                width={383}
-                alt="KICK"
-                className="w-24"
-                priority
-              />
+              <Image src={currentLogo} height={146} width={383} alt="KICK" className="w-24" priority />
             </Link>
 
             {/* Desktop nav */}
@@ -360,19 +329,14 @@ export default function Header() {
                       aria-expanded="false"
                     >
                       <span className="whitespace-nowrap">{item.label}</span>
-                      <ChevronDown
-                        className={`h-4 w-4 transition-transform duration-500 group-hover:rotate-180 ${textCls}`}
-                      />
+                      <ChevronDown className={`h-4 w-4 transition-transform duration-500 group-hover:rotate-180 ${textCls}`} />
                     </button>
 
                     <div className="invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all duration-150 absolute left-1/2 -translate-x-1/2 mt-3 min-w-[240px] rounded-md border bg-white shadow-lg">
                       <ul className="py-2">
                         {item.items.map((child) => (
                           <li key={child.label}>
-                            <Link
-                              href={child.href}
-                              className="block px-4 py-2.5 text-sm hover:bg-gray-50 whitespace-nowrap text-gray-900"
-                            >
+                            <Link href={child.href} className="block px-4 py-2.5 text-sm hover:bg-gray-50 whitespace-nowrap text-gray-900">
                               {child.label}
                             </Link>
                           </li>
@@ -393,9 +357,8 @@ export default function Header() {
             </nav>
           </div>
 
-          {/* Right: icons/actions */}
+          {/* Right actions */}
           <div className="flex items-center gap-1">
-            {/* Desktop-only Search */}
             <Button
               variant="ghost"
               size="icon"
@@ -407,7 +370,6 @@ export default function Header() {
               <Search className="h-5 w-5" />
             </Button>
 
-            {/* Desktop-only Account */}
             <Button
               asChild
               variant="ghost"
@@ -421,7 +383,6 @@ export default function Header() {
               </Link>
             </Button>
 
-            {/* Cart: visible on mobile + desktop */}
             <button
               type="button"
               onClick={() => setCartOpen(true)}
@@ -440,19 +401,25 @@ export default function Header() {
         </div>
       </header>
 
-      {/* Sidebars mounted once */}
+      {/* spacer so content doesn't jump (header is fixed) */}
+      <div aria-hidden className="h-[var(--site-header-h,64px)]" />
+
+      {/* Sidebars */}
       <CartSidebar open={cartOpen} onOpenChange={setCartOpen} />
       <SearchSidebar
         open={searchOpen}
         onOpenChange={setSearchOpen}
         products={products}
-        onSelectProduct={handleSelectProduct}
+        onSelectProduct={(p) => {
+          const slug = p?.slug || p?.data?.slug;
+          const id = p?.id || p?.product_id || p?._id;
+          router.push(slug ? `/product/${slug}` : id ? `/product/${id}` : "/");
+        }}
         accent="#fcba17"
       />
 
-      {/* underline animation */}
       <style jsx global>{`
-        :root { --primary: oklch(0.795 0.184 86.047); }
+        :root { --primary: oklch(0.795 0.184 86.047); --site-header-h: 64px; }
         .nav-link-underline { position: relative; }
         .nav-link-underline::after {
           content: "";
@@ -465,9 +432,7 @@ export default function Header() {
           transition: width 500ms ease;
         }
         .nav-link-underline:hover::after,
-        .group:hover .nav-link-underline::after {
-          width: 100%;
-        }
+        .group:hover .nav-link-underline::after { width: 100%; }
       `}</style>
     </>
   );
