@@ -802,7 +802,6 @@ export default function CheckoutClient({ initialUser = null }) {
 
       // ---- KHALTI FLOW (create order first, then initiate for that order)
       if (paymentMethod === "khalti") {
-        // 1) Create pending-payment order
         const { data: createRes } = await axios.post(
           "/api/website/orders",
           payload,
@@ -815,14 +814,12 @@ export default function CheckoutClient({ initialUser = null }) {
         }
         const displayId = createRes.data.display_order_id;
 
-        // 2) Initiate Khalti for that order
         const { data: initRes } = await axios.post(
           "/api/website/payments/khalti/initiate",
           { display_order_id: displayId },
           { withCredentials: true }
         );
         if (initRes?.success && initRes?.payment_url) {
-          // DO NOT clear cart here; user might return if payment fails
           window.location.href = initRes.payment_url;
           return;
         }
@@ -877,7 +874,6 @@ export default function CheckoutClient({ initialUser = null }) {
     try {
       setQrUploading(true);
 
-      // 1) Create order (status should be 'payment Not Verified' on server)
       const { data: orderRes } = await axios.post(
         "/api/website/orders",
         qrPendingPayload,
@@ -892,7 +888,6 @@ export default function CheckoutClient({ initialUser = null }) {
       const orderDoc = orderRes.data;
       setCreatedOrder(orderDoc);
 
-      // 2) Upload screenshot linked to that order
       const fd = new FormData();
       fd.append("file", qrFile);
       fd.append("order_id", orderDoc._id);
@@ -912,7 +907,6 @@ export default function CheckoutClient({ initialUser = null }) {
       );
       if (!uploadRes?.success) {
         showToast("error", uploadRes?.message || "Upload failed");
-        // optional best-effort rollback:
         try {
           await axios.delete(
             `/api/website/orders/${orderDoc._id}?reason=qr_proof_failed`,
@@ -922,7 +916,6 @@ export default function CheckoutClient({ initialUser = null }) {
         return;
       }
 
-      // 3) Success -> clear cart, close dialog, go to thank you
       dispatch(clearCart());
       setQrOpen(false);
       showToast("success", "Payment uploaded. We’ll verify it shortly.");
@@ -947,6 +940,28 @@ export default function CheckoutClient({ initialUser = null }) {
       setCreatedOrder(null);
     }
   };
+
+  /* ====== ONLY CHANGE: measure BottomNav and offset the mobile sticky footer ====== */
+  const [mobileNavHeight, setMobileNavHeight] = useState(0);
+  useEffect(() => {
+    // Find your bottom nav by aria-label (matches your component)
+    const el = document.querySelector('nav[aria-label="Mobile Navigation"]');
+    if (!el) {
+      setMobileNavHeight(0);
+      return;
+    }
+    const measure = () =>
+      setMobileNavHeight(Math.ceil(el.getBoundingClientRect().height));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    window.addEventListener("resize", measure, { passive: true });
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
+  /* ============================================================================== */
 
   return (
     <div className="relative">
@@ -1373,8 +1388,11 @@ export default function CheckoutClient({ initialUser = null }) {
         </div>
       </div>
 
-      {/* Mobile place order button */}
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-white/90 backdrop-blur sm:hidden">
+      {/* Mobile place order button — OFFSET ABOVE BOTTOM NAV */}
+      <div
+        className="fixed inset-x-0 z-40 border-t bg-white/90 backdrop-blur sm:hidden"
+        style={{ bottom: `${mobileNavHeight}px` }}
+      >
         <div className="mx-auto max-w-6xl px-4 py-3">
           <Button
             className="w-full h-11 rounded-xl text-[14px] font-semibold"
