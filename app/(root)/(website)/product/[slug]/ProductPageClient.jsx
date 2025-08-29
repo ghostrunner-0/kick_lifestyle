@@ -12,9 +12,13 @@ import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import axios from "axios";
 
-/* data */
-import useFetch from "@/hooks/useFetch";
-import { addItem, setQty, removeItem, selectItemsMap } from "@/store/cartSlice";
+/* cart */
+import {
+  addItem,
+  setQty,
+  removeItem,
+  selectItemsMap,
+} from "@/store/cartSlice";
 
 /* shadcn/ui */
 import { Button } from "@/components/ui/button";
@@ -136,7 +140,6 @@ const slideUp = {
   exit: { opacity: 0, y: 12, transition: { duration: 0.2 } },
 };
 
-/* NEW: staggered list + item variants */
 const listStagger = {
   hidden: { opacity: 0 },
   show: {
@@ -149,7 +152,6 @@ const item = {
   show: { opacity: 1, y: 0, transition: { duration: 0.28 } },
 };
 
-/* NEW: animated price flip on change */
 const AnimatedPrice = ({ value, className = "" }) => (
   <AnimatePresence mode="popLayout">
     <motion.span
@@ -165,7 +167,6 @@ const AnimatedPrice = ({ value, className = "" }) => (
   </AnimatePresence>
 );
 
-/* stars + utilities for Reviews */
 function Stars({ value = 0, size = 16, className = "" }) {
   const full = Math.floor(value);
   const half = value - full >= 0.5;
@@ -201,20 +202,20 @@ const fmtDate = (d) => {
   } catch {
     return "";
   }
-};
+}
 
 /* ===================== ReviewsTab ===================== */
-function ReviewsTab({ productId, animateUI }) {
-  const [summary, setSummary] = React.useState(null);
-  const [items, setItems] = React.useState([]);
-  const [total, setTotal] = React.useState(0);
-  const [page, setPage] = React.useState(1);
-  const [pageSize] = React.useState(6);
-  const [sort, setSort] = React.useState("newest");
-  const [ratingFilter, setRatingFilter] = React.useState("all");
-  const [isLoadingList, setIsLoadingList] = React.useState(false);
+function ReviewsTab({ productId, animateUI, initialSummary, initialPage }) {
+  const [summary, setSummary] = useState(initialSummary || null);
+  const [items, setItems] = useState(initialPage?.items || []);
+  const [total, setTotal] = useState(initialPage?.total || 0);
+  const [page, setPage] = useState(initialPage?.page || 1);
+  const [pageSize] = useState(initialPage?.limit || 6);
+  const [sort, setSort] = useState("newest");
+  const [ratingFilter, setRatingFilter] = useState("all");
+  const [isLoadingList, setIsLoadingList] = useState(false);
 
-  const loadSummary = React.useCallback(async () => {
+  const loadSummary = useCallback(async () => {
     if (!productId) return;
     try {
       const { data } = await api.get("/api/website/reviews/summary", {
@@ -224,7 +225,11 @@ function ReviewsTab({ productId, animateUI }) {
     } catch {}
   }, [productId]);
 
-  const loadPage = React.useCallback(
+  useEffect(() => {
+    if (!summary) loadSummary();
+  }, [summary, loadSummary]);
+
+  const loadPage = useCallback(
     async (reset = false) => {
       if (!productId) return;
       setIsLoadingList(true);
@@ -252,47 +257,14 @@ function ReviewsTab({ productId, animateUI }) {
   );
 
   useEffect(() => {
-    loadSummary();
-  }, [loadSummary]);
-  useEffect(() => {
+    const isInitialCombo =
+      initialPage && sort === "newest" && ratingFilter === "all";
     setPage(1);
-    loadPage(true);
-  }, [sort, ratingFilter]); // eslint-disable-line
+    if (!isInitialCombo) loadPage(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sort, ratingFilter]);
 
   const hasMore = items.length < total;
-
-  /* write review */
-  const [open, setOpen] = React.useState(false);
-  const [formRating, setFormRating] = React.useState(5);
-  const [formTitle, setFormTitle] = React.useState("");
-  const [formBody, setFormBody] = React.useState("");
-  const [submitting, setSubmitting] = React.useState(false);
-
-  const submitReview = async () => {
-    if (!productId || !formTitle.trim() || !formBody.trim() || !formRating)
-      return;
-    setSubmitting(true);
-    try {
-      const { data } = await api.post("/api/website/reviews", {
-        product: productId,
-        rating: Number(formRating),
-        title: formTitle.trim(),
-        review: formBody.trim(),
-      });
-      if (data?.success) {
-        setOpen(false);
-        setFormRating(5);
-        setFormTitle("");
-        setFormBody("");
-        await loadSummary(); // appears after moderation
-      }
-    } catch (err) {
-      if (err?.response?.status === 401)
-        alert("Please login to write a review.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   const totalCount = summary?.total || 0;
   const avg = summary?.average || 0;
@@ -314,7 +286,7 @@ function ReviewsTab({ productId, animateUI }) {
             {totalCount} review{totalCount === 1 ? "" : "s"}
           </div>
 
-          <Dialog open={open} onOpenChange={setOpen}>
+          <Dialog>
             <DialogTrigger asChild>
               <Button className="mt-4 w-full rounded-full">
                 Write a review
@@ -329,58 +301,24 @@ function ReviewsTab({ productId, animateUI }) {
                   <div className="text-sm font-medium mb-1.5">Your rating</div>
                   <div className="flex items-center gap-2">
                     {[1, 2, 3, 4, 5].map((n) => (
-                      <button
-                        key={n}
-                        type="button"
-                        onClick={() => setFormRating(n)}
-                        aria-label={`${n} star`}
-                        className="p-1"
-                      >
-                        <Star
-                          className={`${
-                            n <= formRating
-                              ? "fill-yellow-400 stroke-yellow-400"
-                              : "stroke-muted-foreground"
-                          }`}
-                        />
+                      <button key={n} type="button" className="p-1" aria-label={`${n} star`}>
+                        <Star className="stroke-muted-foreground" />
                       </button>
                     ))}
-                    <span className="text-xs text-muted-foreground ml-1">
-                      {formRating} / 5
-                    </span>
                   </div>
                 </div>
                 <div className="grid gap-2">
                   <label className="text-sm font-medium">Title</label>
-                  <Input
-                    value={formTitle}
-                    onChange={(e) => setFormTitle(e.target.value)}
-                    placeholder="Great value and build quality"
-                  />
+                  <Input placeholder="Great value and build quality" />
                 </div>
                 <div className="grid gap-2">
                   <label className="text-sm font-medium">Your review</label>
-                  <Textarea
-                    rows={5}
-                    value={formBody}
-                    onChange={(e) => setFormBody(e.target.value)}
-                    placeholder="What did you like? Any downsides?"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Your review will appear after moderation.
-                  </p>
+                  <Textarea rows={5} placeholder="What did you like?" />
                 </div>
               </div>
               <DialogFooter>
-                <Button variant="ghost" onClick={() => setOpen(false)}>
-                  Cancel
-                </Button>
-                <Button
-                  onClick={submitReview}
-                  disabled={submitting || !formTitle.trim() || !formBody.trim()}
-                >
-                  {submitting ? "Submitting…" : "Submit"}
-                </Button>
+                <Button variant="ghost">Cancel</Button>
+                <Button>Submit</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -391,9 +329,7 @@ function ReviewsTab({ productId, animateUI }) {
           <div className="space-y-2">
             {[5, 4, 3, 2, 1].map((star) => {
               const count = buckets?.[star] || 0;
-              const pct = totalCount
-                ? Math.round((count / totalCount) * 100)
-                : 0;
+              const pct = totalCount ? Math.round((count / totalCount) * 100) : 0;
               return (
                 <div key={star} className="flex items-center gap-3">
                   <div className="w-10 text-xs tabular-nums">{star}★</div>
@@ -452,7 +388,7 @@ function ReviewsTab({ productId, animateUI }) {
         {items.map((r) => (
           <motion.div
             key={r._id}
-            className="rounded-2xl border p-4"
+            className="rounded-xl border p-4"
             variants={item}
             layout
           >
@@ -478,7 +414,7 @@ function ReviewsTab({ productId, animateUI }) {
           <div className="text-sm text-muted-foreground">No reviews yet.</div>
         )}
 
-        {items.length < total && (
+        {hasMore && (
           <div className="pt-2">
             <Button
               variant="outline"
@@ -499,18 +435,19 @@ function ReviewsTab({ productId, animateUI }) {
 }
 
 /* ===================== Product Page ===================== */
-export default function ProductPage() {
+export default function ProductPageClient({
+  initialProduct,
+  initialReviewsSummary,
+  initialReviews,
+}) {
   const { slug } = useParams();
   const router = useRouter();
   const dispatch = useDispatch();
 
-  const { data, isLoading } = useFetch(
-    "product",
-    slug ? `/api/website/products/get-by-slug/${slug}` : null
-  );
-  const product = data?.success ? data.data : null;
+  // product ready from SSR
+  const product = initialProduct;
+  const dataReady = !!product;
 
-  const dataReady = !!product && !isLoading;
   const [animateUI, setAnimateUI] = useState(false);
   useEffect(() => {
     if (dataReady) {
@@ -521,40 +458,15 @@ export default function ProductPage() {
     }
   }, [dataReady]);
 
-  /* NEW: rating summary for product card + sticky bar */
-  const [ratingSummary, setRatingSummary] = useState({
-    average: 0,
-    total: 0,
-    loaded: false,
+  const [ratingSummary] = useState({
+    average: Number(initialReviewsSummary?.average || 0),
+    total: Number(initialReviewsSummary?.total || 0),
+    loaded: true,
   });
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (!product?._id) return;
-      try {
-        const { data } = await api.get("/api/website/reviews/summary", {
-          params: { productId: product._id },
-        });
-        if (!cancelled && data?.success) {
-          const avg = Number(data.data?.average || 0);
-          const total = Number(data.data?.total || 0);
-          setRatingSummary({ average: avg, total, loaded: true });
-        }
-      } catch {
-        if (!cancelled) setRatingSummary((s) => ({ ...s, loaded: true }));
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [product?._id]);
 
   /* variants */
   const variants = Array.isArray(product?.variants) ? product.variants : [];
-  const [selectedIdx, setSelectedIdx] = useState(-1);
-  useEffect(() => {
-    if (variants.length > 0 && selectedIdx === -1) setSelectedIdx(0);
-  }, [variants, selectedIdx]);
+  const [selectedIdx, setSelectedIdx] = useState(variants.length ? 0 : -1);
   const activeVariant = useMemo(
     () => (selectedIdx >= 0 ? variants[selectedIdx] : null),
     [selectedIdx, variants]
@@ -566,8 +478,7 @@ export default function ProductPage() {
       return activeVariant.productGallery;
     const base = [];
     if (product?.heroImage?.path) base.push(product.heroImage);
-    if (Array.isArray(product?.productMedia))
-      base.push(...product.productMedia);
+    if (Array.isArray(product?.productMedia)) base.push(...product.productMedia);
     return base;
   }, [product, activeVariant]);
   const galleryKey = useMemo(
@@ -596,7 +507,7 @@ export default function ProductPage() {
   const lineKey = `${product?._id || ""}|${activeVariant?._id || ""}`;
   const inCartLine = itemsMap[lineKey];
 
-  /* media state */
+  /* media */
   const mainSwiperRef = useRef(null);
   const [activeImg, setActiveImg] = useState(0);
   const [openLightbox, setOpenLightbox] = useState(false);
@@ -636,44 +547,24 @@ export default function ProductPage() {
     );
   };
 
-  // NEW: go to checkout
-  const goToCheckout = useCallback(() => {
-    router.push("/checkout");
-  }, [router]);
-
   /* sticky bars */
   const galleryWrapRef = useRef(null);
   const [showStickyBar, setShowStickyBar] = useState(false);
   const [headerOffset, setHeaderOffset] = useState(0);
-  const [mobileNavHeight, setMobileNavHeight] = useState(0); // measure BottomNav height
+  const [bottomOffset, setBottomOffset] = useState(64); // above BottomNav
 
   useEffect(() => {
-    const measureHeader = () => {
+    const measure = () => {
       const hdr = document.querySelector("header");
       setHeaderOffset(hdr ? hdr.getBoundingClientRect().height : 0);
-    };
-    measureHeader();
-    window.addEventListener("resize", measureHeader, { passive: true });
-    return () => window.removeEventListener("resize", measureHeader);
-  }, []);
 
-  // measure bottom nav
-  useEffect(() => {
-    const el = document.querySelector('nav[aria-label="Mobile Navigation"]');
-    if (!el) {
-      setMobileNavHeight(0);
-      return;
-    }
-    const measure = () =>
-      setMobileNavHeight(Math.ceil(el.getBoundingClientRect().height));
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    window.addEventListener("resize", measure, { passive: true });
-    return () => {
-      ro.disconnect();
-      window.removeEventListener("resize", measure);
+      const nav = document.querySelector('nav[aria-label="Mobile Navigation"]');
+      const h = nav ? nav.getBoundingClientRect().height : 56;
+      setBottomOffset(h + 10);
     };
+    measure();
+    window.addEventListener("resize", measure, { passive: true });
+    return () => window.removeEventListener("resize", measure);
   }, []);
 
   useEffect(() => {
@@ -681,17 +572,13 @@ export default function ProductPage() {
     if (!el) return;
     const obs = new IntersectionObserver(
       ([entry]) => setShowStickyBar(!entry.isIntersecting),
-      {
-        root: null,
-        threshold: 0,
-        rootMargin: `-${headerOffset + 8}px 0px 0px 0px`,
-      }
+      { root: null, threshold: 0, rootMargin: `-${headerOffset + 8}px 0px 0px 0px` }
     );
     obs.observe(el);
     return () => obs.disconnect();
   }, [galleryKey, headerOffset]);
 
-  /* skeleton */
+  /* safety skeleton (SSR should make it rare) */
   const Skeleton = () => (
     <div className="mx-auto max-w-[1200px] px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-10">
       <div className="lg:col-span-7">
@@ -699,10 +586,7 @@ export default function ProductPage() {
           <div className="aspect-[4/3] w-full animate-pulse bg-muted" />
           <div className="p-3 flex gap-2">
             {Array.from({ length: 5 }).map((_, i) => (
-              <div
-                key={i}
-                className="w-16 h-16 bg-muted animate-pulse rounded-md"
-              />
+              <div key={i} className="w-16 h-16 bg-muted animate-pulse rounded-md" />
             ))}
           </div>
         </div>
@@ -832,6 +716,7 @@ export default function ProductPage() {
                       </div>
                     )}
 
+                    {/* wider number cell */}
                     <div className="inline-flex items-center rounded-md border bg-background h-9">
                       <Button
                         type="button"
@@ -864,7 +749,7 @@ export default function ProductPage() {
                       >
                         -
                       </Button>
-                      <div className="px-3 py-1 text-sm font-medium w-10 text-center select-none">
+                      <div className="px-3 py-1 text-sm font-medium w-12 text-center select-none tabular-nums">
                         {inCartLine ? inCartLine.qty || 0 : 0}
                       </div>
                       <Button
@@ -903,16 +788,23 @@ export default function ProductPage() {
                       </Button>
                     </div>
 
-                    <Button
-                      className="rounded-full h-9 px-4"
-                      onClick={inCartLine ? goToCheckout : handleAddToCart}
-                      disabled={
-                        !product || isLoading || (!inCartLine && !inStock)
-                      }
-                    >
-                      <ShoppingCart className="mr-2 h-4 w-4" />
-                      {inCartLine ? "Checkout" : "Add to cart"}
-                    </Button>
+                    {inCartLine ? (
+                      <Button
+                        className="rounded-full h-9 px-4"
+                        onClick={() => router.push("/checkout")}
+                      >
+                        Go to checkout
+                      </Button>
+                    ) : (
+                      <Button
+                        className="rounded-full h-9 px-4"
+                        onClick={handleAddToCart}
+                        disabled={!inStock || !product}
+                      >
+                        <ShoppingCart className="mr-2 h-4 w-4" />
+                        Add to cart
+                      </Button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -921,38 +813,44 @@ export default function ProductPage() {
         )}
       </AnimatePresence>
 
-      {/* Mobile bottom sticky — floating pill above BottomNav (price + CTA) */}
+      {/* Mobile floating sticky (price + add/checkout) above BottomNav */}
       <AnimatePresence>
         {animateUI && showStickyBar && (
           <motion.div
-            className="fixed inset-x-0 z-40 md:hidden pointer-events-none"
-            style={{
-              bottom: `calc(${Math.max(
-                mobileNavHeight || 20,
-                0
-              )}px + env(safe-area-inset-bottom) + 12px)`,
-            }}
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 16 }}
-            transition={{ duration: 0.22 }}
+            className="fixed left-0 right-0 z-40 md:hidden pointer-events-none"
+            style={{ bottom: bottomOffset }}
+            {...slideUp}
           >
-            <div className="mx-auto max-w-screen-sm px-3 flex justify-center">
-              <div className="pointer-events-auto w-full max-w-[min(560px,90vw)] rounded-full border shadow-xl bg-white/90 dark:bg-neutral-900/90 supports-[backdrop-filter]:backdrop-blur backdrop-blur px-3 py-2.5">
+            <div className="mx-auto max-w-[1200px] px-3 pointer-events-auto">
+              <div className="mx-auto w-full sm:w-[480px] bg-white/95 dark:bg-neutral-900/95 supports-[backdrop-filter]:backdrop-blur rounded-full shadow-lg border px-3 py-2">
                 <div className="flex items-center justify-between gap-3">
-                  <div className="pl-1 pr-2 text-base font-semibold tabular-nums">
-                    <AnimatedPrice value={formatPrice(priceNow)} />
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="text-base font-semibold">
+                      <AnimatedPrice value={formatPrice(priceNow)} />
+                    </div>
+                    {priceWas ? (
+                      <div className="text-xs text-muted-foreground line-through">
+                        {formatPrice(priceWas)}
+                      </div>
+                    ) : null}
                   </div>
-                  <Button
-                    className="rounded-full h-10 px-5 text-sm"
-                    onClick={inCartLine ? goToCheckout : handleAddToCart}
-                    disabled={
-                      !product || isLoading || (!inCartLine && !inStock)
-                    }
-                  >
-                    <ShoppingCart className="mr-2 h-4 w-4" />
-                    {inCartLine ? "Checkout" : "Add to cart"}
-                  </Button>
+
+                  {inCartLine ? (
+                    <Button
+                      className="rounded-full h-9 px-4 text-sm"
+                      onClick={() => router.push("/checkout")}
+                    >
+                      Go to checkout
+                    </Button>
+                  ) : (
+                    <Button
+                      className="rounded-full h-9 px-4 text-sm"
+                      onClick={handleAddToCart}
+                      disabled={!inStock || !product}
+                    >
+                      Add to cart
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>
@@ -1104,10 +1002,7 @@ export default function ProductPage() {
           </section>
 
           {/* RIGHT: SUMMARY */}
-          <motion.aside
-            className="lg:col-span-5"
-            {...(animateUI ? fadeUp : {})}
-          >
+          <motion.aside className="lg:col-span-5" {...(animateUI ? fadeUp : {})}>
             <div className="bg-white dark:bg-neutral-900 rounded-2xl border p-5 md:p-6 space-y-5">
               <div className="space-y-2">
                 <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">
@@ -1158,9 +1053,9 @@ export default function ProductPage() {
                 </span>
               </div>
 
-              {/* variants grid */}
+              {/* desktop variant thumbnails */}
               {variants.length > 0 && (
-                <div className="space-y-2">
+                <div className="space-y-2 hidden sm:block">
                   <div className="text-sm font-medium">Variants</div>
                   <div className="flex items-center gap-3 flex-wrap">
                     {variants.map((v, i) => {
@@ -1199,13 +1094,33 @@ export default function ProductPage() {
                 </div>
               )}
 
-              {/* actions */}
+              {/* ACTIONS — mobile: variant select + counter on the SAME row */}
               <div className="flex flex-col sm:flex-row gap-3 items-stretch">
-                <div className="inline-flex items-center rounded-md border bg-background">
+                {variants.length > 0 && (
+                  <div className="sm:hidden">
+                    <Select
+                      value={String(selectedIdx)}
+                      onValueChange={(v) => onVariantClick(Number(v))}
+                    >
+                      <SelectTrigger className="h-10">
+                        <SelectValue placeholder="Choose variant" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {variants.map((v, i) => (
+                          <SelectItem key={v?._id || i} value={String(i)}>
+                            {v?.variantName || v?.sku || `Option ${i + 1}`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                <div className="inline-flex items-center rounded-md border bg-background h-10">
                   <Button
                     type="button"
                     variant="ghost"
-                    className="px-3"
+                    className="px-3 h-10"
                     onClick={() => {
                       if (!inCartLine) return;
                       const next = Math.max(0, (inCartLine.qty || 1) - 1);
@@ -1229,16 +1144,17 @@ export default function ProductPage() {
                           })
                         );
                     }}
+                    aria-label="Decrease quantity"
                   >
                     -
                   </Button>
-                  <div className="px-4 py-2 text-sm font-medium select-none">
+                  <div className="px-3 py-2 text-sm font-medium w-12 text-center select-none tabular-nums">
                     {inCartLine ? inCartLine.qty || 0 : 0}
                   </div>
                   <Button
                     type="button"
                     variant="ghost"
-                    className="px-3"
+                    className="px-3 h-10"
                     onClick={() => {
                       if (!inCartLine)
                         return dispatch(
@@ -1258,26 +1174,33 @@ export default function ProductPage() {
                       dispatch(
                         setQty({
                           productId: product?._id,
-                          variant: activeVariant
-                            ? { id: activeVariant._id }
-                            : null,
+                          variant: activeVariant ? { id: activeVariant._id } : null,
                           qty: (inCartLine.qty || 0) + 1,
                         })
                       );
                     }}
+                    aria-label="Increase quantity"
                   >
                     +
                   </Button>
                 </div>
 
-                <Button
-                  className="rounded-full flex-1"
-                  onClick={inCartLine ? goToCheckout : handleAddToCart}
-                  disabled={!product || isLoading || (!inCartLine && !inStock)}
-                >
-                  <ShoppingCart className="mr-2 h-4 w-4" />{" "}
-                  {inCartLine ? "Checkout" : "Add to cart"}
-                </Button>
+                {inCartLine ? (
+                  <Button
+                    className="rounded-full flex-1"
+                    onClick={() => router.push("/checkout")}
+                  >
+                    Go to checkout
+                  </Button>
+                ) : (
+                  <Button
+                    className="rounded-full flex-1"
+                    onClick={handleAddToCart}
+                    disabled={!inStock || !product}
+                  >
+                    <ShoppingCart className="mr-2 h-4 w-4" /> Add to cart
+                  </Button>
+                )}
               </div>
             </div>
           </motion.aside>
@@ -1286,7 +1209,7 @@ export default function ProductPage() {
         <Skeleton />
       )}
 
-      {/* TABS: Overview / Specs / Reviews */}
+      {/* TABS */}
       {dataReady ? (
         <motion.div
           className="mx-auto max-w-[1200px] px-4 sm:px-6 pb-16"
@@ -1316,10 +1239,7 @@ export default function ProductPage() {
                     <div className="px-3 sm:px-6">
                       <div className="space-y-3">
                         {product.descImages.map((img, i) => (
-                          <motion.div
-                            key={img?._id || i}
-                            {...(animateUI ? fadeIn : {})}
-                          >
+                          <motion.div key={img?._id || i} {...(animateUI ? fadeIn : {})}>
                             {img?.path ? (
                               <img
                                 src={img.path}
@@ -1358,7 +1278,7 @@ export default function ProductPage() {
                       {product.additionalInfo.map((row, idx) => (
                         <TableRow
                           key={`${row?.label}-${idx}`}
-                          className="odd:bg-muted/10 hover:bg-muted-20 transition-colors"
+                          className="odd:bg-muted/10 hover:bg-muted/20 transition-colors"
                         >
                           <TableCell className="text-muted-foreground">
                             {row?.label}
@@ -1380,7 +1300,12 @@ export default function ProductPage() {
 
             {/* REVIEWS */}
             <TabsContent value="reviews" className="mt-6">
-              <ReviewsTab productId={product?._id} animateUI={animateUI} />
+              <ReviewsTab
+                productId={product?._id}
+                animateUI={animateUI}
+                initialSummary={initialReviewsSummary}
+                initialPage={initialReviews}
+              />
             </TabsContent>
           </Tabs>
         </motion.div>
