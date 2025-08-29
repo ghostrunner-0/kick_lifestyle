@@ -1,10 +1,9 @@
 // app/api/website/blogs/route.js
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
-import { connectDB } from "@/lib/DB";
-import { catchError, response } from "@/lib/helperFunctions";
 import BlogPost from "@/models/Blog.model";
 import Category from "@/models/Category.model";
+import { cache as redisCache } from "@/lib/redis"; // read-through helper
 
 export const revalidate = 0;
 export const dynamic = "force-dynamic";
@@ -12,70 +11,89 @@ export const runtime = "nodejs";
 
 const isObjectIdLike = (v) => !!v && /^[a-f\d]{24}$/i.test(String(v));
 
-/**
- * Query params (all optional):
- * - page: number (default 1)
- * - limit: number (default 12, max 50)
- * - q: text search query (uses Mongo text index)
- * - category: category slug or ObjectId
- * - tag: single tag or comma-separated tags
- * - sort: 'recent' (default) or 'relevance' (when q is present)
- */
 export async function GET(req) {
-  try {
+  const url = new URL(req.url);
+
+  const page = Math.max(1, Number(url.searchParams.get("page") || 1));
+  const rawLimit = Math.max(1, Number(url.searchParams.get("limit") || 12));
+  const limit = Math.min(rawLimit, 50);
+
+  const q = (url.searchParams.get("q") || "").trim();
+  const categoryParam = (url.searchParams.get("category") || "").trim();
+  const tagParam = (url.searchParams.get("tag") || "").trim();
+  const sortParam = (url.searchParams.get("sort") || "recent").trim().toLowerCase();
+  const noCache = url.searchParams.get("noCache") === "1";
+
+  // final-response cache key
+  const cacheKey = `blogs:v1:${JSON.stringify({
+    page,
+    limit,
+    q,
+    categoryParam,
+    tagParam,
+    sortParam,
+  })}`;
+
+  // compute function used for cache miss (and fallback)
+  const compute = async () => {
+    // lazy-load DB only when needed
+    const { connectDB } = await import("@/lib/DB");
     await connectDB();
 
-    const url = new URL(req.url);
-    const page = Math.max(1, Number(url.searchParams.get("page") || 1));
-    const rawLimit = Math.max(1, Number(url.searchParams.get("limit") || 12));
-    const limit = Math.min(rawLimit, 50);
-
-    const q = (url.searchParams.get("q") || "").trim();
-    const categoryParam = (url.searchParams.get("category") || "").trim();
-    const tagParam = (url.searchParams.get("tag") || "").trim();
-    const sortParam = (url.searchParams.get("sort") || "recent")
-      .trim()
-      .toLowerCase();
-
-    // Base filters: only published + visible + not deleted
+    // base filter
     const match = {
       status: "published",
       showOnWebsite: true,
       deletedAt: null,
     };
 
-    // Category filter: id or slug
+    // category filter
     if (categoryParam) {
       if (isObjectIdLike(categoryParam)) {
         match.category = new mongoose.Types.ObjectId(categoryParam);
       } else {
-        const cat = await Category.findOne({
-          slug: categoryParam.toLowerCase(),
-          deletedAt: null,
-          showOnWebsite: true,
-        })
-          .select({ _id: 1 })
-          .lean()
-          .exec();
-        if (cat?._id) match.category = cat._id;
-        else {
-          // No category match → empty result fast
-          return NextResponse.json(
-            {
-              success: true,
-              page,
-              limit,
-              total: 0,
-              totalPages: 0,
-              data: [],
-            },
-            { status: 200 }
-          );
+        const slug = categoryParam.toLowerCase();
+        const slugKey = `blogs:catSlug:v1:${slug}`;
+
+        // slug -> id lookup (cached 10 min)
+        const catId =
+          noCache
+            ? await Category.findOne({
+                slug,
+                deletedAt: null,
+                showOnWebsite: true,
+              })
+                .select({ _id: 1 })
+                .lean()
+                .then((c) => (c?._id ? String(c._id) : null))
+            : await redisCache.with(slugKey, 600, async () => {
+                const cat = await Category.findOne({
+                  slug,
+                  deletedAt: null,
+                  showOnWebsite: true,
+                })
+                  .select({ _id: 1 })
+                  .lean();
+                return cat?._id ? String(cat._id) : null; // null is cached too
+              });
+
+        if (!catId) {
+          // no such category → empty list
+          return {
+            success: true,
+            page,
+            limit,
+            total: 0,
+            totalPages: 0,
+            data: [],
+          };
         }
+
+        match.category = new mongoose.Types.ObjectId(catId);
       }
     }
 
-    // Tag filter: support comma separated
+    // tag filter
     if (tagParam) {
       const tags = tagParam
         .split(",")
@@ -84,15 +102,14 @@ export async function GET(req) {
       if (tags.length) match.tags = { $in: tags };
     }
 
-    // Search: use text index if q present
+    // query
     const hasSearch = q.length > 0;
     const findQuery = hasSearch
       ? BlogPost.find({ ...match, $text: { $search: q } })
       : BlogPost.find(match);
 
-    // Projection: compact listing fields (exclude heavy content)
+    // projection
     if (hasSearch) {
-      // include textScore for sorting when searching
       findQuery.select({
         title: 1,
         slug: 1,
@@ -121,7 +138,7 @@ export async function GET(req) {
       });
     }
 
-    // Sort
+    // sort
     if (hasSearch && sortParam === "relevance") {
       findQuery.sort({
         score: { $meta: "textScore" },
@@ -129,11 +146,10 @@ export async function GET(req) {
         createdAt: -1,
       });
     } else {
-      // default recent
       findQuery.sort({ publishedAt: -1, createdAt: -1 });
     }
 
-    // Pagination
+    // pagination
     const skip = (page - 1) * limit;
     const [items, total] = await Promise.all([
       findQuery
@@ -142,23 +158,39 @@ export async function GET(req) {
         .limit(limit)
         .lean()
         .exec(),
-      BlogPost.countDocuments(
-        hasSearch ? { ...match, $text: { $search: q } } : match
-      ),
+      BlogPost.countDocuments(hasSearch ? { ...match, $text: { $search: q } } : match),
     ]);
 
-    return NextResponse.json(
-      {
-        success: true,
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-        data: items || [],
-      },
-      { status: 200 }
-    );
-  } catch (error) {
-    return catchError(error, "Failed to fetch blog posts");
+    return {
+      success: true,
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+      data: items || [],
+    };
+  };
+
+  try {
+    if (noCache) {
+      const payload = await compute();
+      return NextResponse.json(payload, { status: 200 });
+    }
+
+    const ttl = q ? 60 : 180; // shorter TTL for searches
+    const payload = await redisCache.with(cacheKey, ttl, compute);
+    return NextResponse.json(payload, { status: 200 });
+  } catch (err) {
+    // if Redis or anything else blows up, fallback to direct DB
+    try {
+      const payload = await compute();
+      return NextResponse.json(payload, { status: 200 });
+    } catch (dbErr) {
+      console.error("blogs route error:", dbErr);
+      return NextResponse.json(
+        { success: false, message: "Failed to fetch blog posts" },
+        { status: 500 }
+      );
+    }
   }
 }

@@ -147,7 +147,6 @@ export default function Header() {
 
   /* Layout constraints */
   const containerMaxW = "max-w-[1600px]";
-  const containerPad = "[padding-inline:clamp(1rem,5vw,6rem)]";
 
   /* Header surface styles */
   const headerCls = isHome
@@ -177,8 +176,9 @@ export default function Header() {
   return (
     <>
       <header className={headerCls}>
+        {/* unified horizontal padding across breakpoints */}
         <div
-          className={`mx-auto ${containerMaxW} ${containerPad} flex items-center justify-between lg:py-5 py-3 px-3`}
+          className={`mx-auto ${containerMaxW} flex items-center justify-between lg:py-5 py-3 px-4 sm:px-6 lg:px-10 2xl:px-16`}
         >
           {/* Left: Mobile menu trigger + Desktop logo */}
           <div className="flex items-center gap-2">

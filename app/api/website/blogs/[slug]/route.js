@@ -1,6 +1,8 @@
+// app/api/website/blogs/[slug]/route.js
 import { NextResponse } from "next/server";
-import { connectDB } from "@/lib/DB";
+import mongoose from "mongoose";
 import BlogPost from "@/models/Blog.model";
+import { cache as redisCache } from "@/lib/redis"; // read-through helper
 
 /** Normalize Mongoose doc to plain JSON */
 const pick = (obj, keys) => {
@@ -50,10 +52,10 @@ const serialize = (doc) => {
 
 export async function GET(req, { params }) {
   try {
-    await connectDB();
-
     const url = new URL(req.url);
     const preview = url.searchParams.get("preview") === "1";
+    const noCache = url.searchParams.get("noCache") === "1";
+
     const param = await params;
     const slug = decodeURIComponent(param.slug || "").trim();
     if (!slug) {
@@ -63,25 +65,40 @@ export async function GET(req, { params }) {
       );
     }
 
-    const query = {
-      slug,
-      deletedAt: null,
-      showOnWebsite: true,
-      ...(preview ? {} : { status: "published" }),
+    // Cache key & TTL (shorter for preview)
+    const CACHE_KEY = `blog:slug:v1:${slug}:${preview ? "preview" : "live"}`;
+    const TTL_SECONDS = preview ? 20 : 300;
+
+    const compute = async () => {
+      const { connectDB } = await import("@/lib/DB");
+      await connectDB();
+
+      const query = {
+        slug,
+        deletedAt: null,
+        showOnWebsite: true,
+        ...(preview ? {} : { status: "published" }),
+      };
+
+      const doc = await BlogPost.findOne(query)
+        .populate("category", "name slug")
+        .lean();
+
+      return serialize(doc); // may be null (cache negative too)
     };
 
-    const doc = await BlogPost.findOne(query)
-      .populate("category", "name slug")
-      .lean();
+    const data = noCache
+      ? await compute()
+      : await redisCache.with(CACHE_KEY, TTL_SECONDS, compute);
 
-    if (!doc) {
+    if (!data) {
       return NextResponse.json(
         { success: false, message: "Post not found" },
         { status: 404 }
       );
     }
 
-    return NextResponse.json({ success: true, data: serialize(doc) }, { status: 200 });
+    return NextResponse.json({ success: true, data }, { status: 200 });
   } catch (err) {
     console.error("GET /api/website/blogs/[slug] error:", err);
     return NextResponse.json(
