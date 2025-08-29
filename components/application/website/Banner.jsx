@@ -13,7 +13,7 @@ export default function Banner({ banners = [], loading = false }) {
   const [currentBg, setCurrentBg] = useState(banners?.[0]?.bgColor || "#ffffff");
   const sliderRef = useRef(null);
 
-  // soft gradient bg from provided hex
+  // tiny helpers for the soft gradient bg
   const hexToRgb = (hex) => {
     const v = hex?.replace("#", "") || "ffffff";
     const n = v.length === 3 ? v.split("").map((c) => c + c).join("") : v;
@@ -99,7 +99,7 @@ export default function Banner({ banners = [], loading = false }) {
 
   return (
     <div className="relative w-full bg-white isolate">
-      {/* background wash behind the media */}
+      {/* soft background wash */}
       <div
         className="absolute left-0 right-0 top-0 -z-10 overflow-hidden h-[45vh] min-h-[260px] max-h-[520px]"
         style={{ backgroundImage: mkGradient(currentBg) }}
@@ -113,10 +113,15 @@ export default function Banner({ banners = [], loading = false }) {
         ) : (
           <Slider ref={sliderRef} {...settings}>
             {banners.map(({ _id, desktopImage, mobileImage, href }, i) => {
-              // Use ONE URL for LCP discoverability; prefer desktop (the LCP on desktop).
-              const src = desktopImage?.path || mobileImage?.path || "";
+              const desktopSrc = desktopImage?.path || mobileImage?.path || "";
+              const mobileSrc = mobileImage?.path || desktopImage?.path || "";
               const alt = desktopImage?.alt || mobileImage?.alt || "Banner";
+
+              // LCP slide: eager + fetchpriority high (avoid Next's mis-preload with <picture>)
               const isLCP = i === 0;
+              const eagerProps = isLCP
+                ? { loading: "eager", fetchPriority: "high" }
+                : {}; // others default (lazy when offscreen)
 
               return (
                 <div key={_id || i} className="px-5">
@@ -126,18 +131,21 @@ export default function Banner({ banners = [], loading = false }) {
                     rel="noreferrer"
                     className="block rounded-2xl overflow-hidden shadow-lg"
                   >
-                    <Image
-                      src={src}
-                      alt={alt}
-                      width={1600}
-                      height={900}
-                      // ✅ LCP: eager + high fetch priority
-                      priority={isLCP}
-                      fetchPriority={isLCP ? "high" : undefined}
-                      // realistic sizes for your layout (≈1263px on desktop hero)
-                      sizes="(min-width: 1280px) 1263px, (min-width: 768px) 100vw, 100vw"
-                      className="w-full h-auto object-cover rounded-2xl"
-                    />
+                    <picture>
+                      {/* Desktop art-direction */}
+                      <source media="(min-width: 768px)" srcSet={desktopSrc} />
+                      {/* Mobile default image (Next optimizing) */}
+                      <Image
+                        src={mobileSrc}
+                        alt={alt}
+                        width={1600}
+                        height={900}
+                        // realistic sizes for your layout (≈1263px desktop hero)
+                        sizes="(min-width: 1280px) 1263px, (min-width: 768px) 100vw, 100vw"
+                        className="w-full h-auto object-cover rounded-2xl"
+                        {...eagerProps}
+                      />
+                    </picture>
                   </a>
                 </div>
               );
