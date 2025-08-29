@@ -203,7 +203,7 @@ const fmtDate = (d) => {
   }
 };
 
-/* ===================== ReviewsTab (extract to keep hooks order stable) ===================== */
+/* ===================== ReviewsTab ===================== */
 function ReviewsTab({ productId, animateUI }) {
   const [summary, setSummary] = React.useState(null);
   const [items, setItems] = React.useState([]);
@@ -478,7 +478,7 @@ function ReviewsTab({ productId, animateUI }) {
           <div className="text-sm text-muted-foreground">No reviews yet.</div>
         )}
 
-        {hasMore && (
+        {items.length < total && (
           <div className="pt-2">
             <Button
               variant="outline"
@@ -636,11 +636,16 @@ export default function ProductPage() {
     );
   };
 
+  // NEW: go to checkout
+  const goToCheckout = useCallback(() => {
+    router.push("/checkout");
+  }, [router]);
+
   /* sticky bars */
   const galleryWrapRef = useRef(null);
   const [showStickyBar, setShowStickyBar] = useState(false);
   const [headerOffset, setHeaderOffset] = useState(0);
-  const [mobileNavHeight, setMobileNavHeight] = useState(0); // <-- measure BottomNav height
+  const [mobileNavHeight, setMobileNavHeight] = useState(0); // measure BottomNav height
 
   useEffect(() => {
     const measureHeader = () => {
@@ -900,11 +905,13 @@ export default function ProductPage() {
 
                     <Button
                       className="rounded-full h-9 px-4"
-                      onClick={handleAddToCart}
-                      disabled={!inStock || isLoading || !product}
+                      onClick={inCartLine ? goToCheckout : handleAddToCart}
+                      disabled={
+                        !product || isLoading || (!inCartLine && !inStock)
+                      }
                     >
                       <ShoppingCart className="mr-2 h-4 w-4" />
-                      {inCartLine ? "In cart" : "Add to cart"}
+                      {inCartLine ? "Checkout" : "Add to cart"}
                     </Button>
                   </div>
                 </div>
@@ -914,13 +921,16 @@ export default function ProductPage() {
         )}
       </AnimatePresence>
 
-      {/* Mobile bottom sticky — floating pill above BottomNav (price + add only) */}
+      {/* Mobile bottom sticky — floating pill above BottomNav (price + CTA) */}
       <AnimatePresence>
         {animateUI && showStickyBar && (
           <motion.div
             className="fixed inset-x-0 z-40 md:hidden pointer-events-none"
             style={{
-              bottom: `calc(${Math.max(mobileNavHeight || 20, 0)}px + env(safe-area-inset-bottom) + 12px)`,
+              bottom: `calc(${Math.max(
+                mobileNavHeight || 20,
+                0
+              )}px + env(safe-area-inset-bottom) + 12px)`,
             }}
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
@@ -935,11 +945,13 @@ export default function ProductPage() {
                   </div>
                   <Button
                     className="rounded-full h-10 px-5 text-sm"
-                    onClick={handleAddToCart}
-                    disabled={!inStock || isLoading || !product}
+                    onClick={inCartLine ? goToCheckout : handleAddToCart}
+                    disabled={
+                      !product || isLoading || (!inCartLine && !inStock)
+                    }
                   >
                     <ShoppingCart className="mr-2 h-4 w-4" />
-                    {inCartLine ? "In cart" : "Add to cart"}
+                    {inCartLine ? "Checkout" : "Add to cart"}
                   </Button>
                 </div>
               </div>
@@ -1260,10 +1272,11 @@ export default function ProductPage() {
 
                 <Button
                   className="rounded-full flex-1"
-                  onClick={handleAddToCart}
-                  disabled={!inStock || isLoading || !product}
+                  onClick={inCartLine ? goToCheckout : handleAddToCart}
+                  disabled={!product || isLoading || (!inCartLine && !inStock)}
                 >
-                  <ShoppingCart className="mr-2 h-4 w-4" /> Add to cart
+                  <ShoppingCart className="mr-2 h-4 w-4" />{" "}
+                  {inCartLine ? "Checkout" : "Add to cart"}
                 </Button>
               </div>
             </div>
@@ -1345,7 +1358,7 @@ export default function ProductPage() {
                       {product.additionalInfo.map((row, idx) => (
                         <TableRow
                           key={`${row?.label}-${idx}`}
-                          className="odd:bg-muted/10 hover:bg-muted/20 transition-colors"
+                          className="odd:bg-muted/10 hover:bg-muted-20 transition-colors"
                         >
                           <TableCell className="text-muted-foreground">
                             {row?.label}
@@ -1373,7 +1386,7 @@ export default function ProductPage() {
         </motion.div>
       ) : null}
 
-      {/* spacer for mobile sticky (kept minimal; floating pill already clears BottomNav) */}
+      {/* spacer for mobile sticky */}
       <div className="h-16 md:h-0" />
 
       {/* LIGHTBOX */}
