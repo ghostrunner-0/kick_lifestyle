@@ -1,8 +1,12 @@
+// app/api/admin/media/route.js
 import { NextResponse } from "next/server";
 import path from "path";
 import fs from "fs";
 import fsp from "fs/promises";
 import { connectDB } from "@/lib/DB";
+
+// ✅ Register Tag BEFORE Media so populate("tags") has a schema to use
+import "@/models/Tag.model";
 import Media from "@/models/Media.model";
 
 // Serve dynamically (disable static caching)
