@@ -70,12 +70,7 @@ const getVariantHero = (v, fallback) =>
   fallback ||
   "";
 
-/* compact animated price */
-const AnimatedPrice = ({ value, className = "" }) => (
-  <span className={className}>{value}</span>
-);
-
-/* unified qty control (used in main card & sticky bars) */
+/* Qty control used in card + sticky */
 const QtyControl = ({
   qty = 0,
   onDec,
@@ -120,11 +115,10 @@ export default function ProductPageClient({ initialProduct }) {
   const router = useRouter();
   const dispatch = useDispatch();
 
-  // ---------- data ----------
   const product = initialProduct || null;
   const slug = product?.slug || product?.data?.slug || "";
 
-  // rating summary (lightweight)
+  // rating summary
   const [ratingSummary, setRatingSummary] = useState({
     average: 0,
     total: 0,
@@ -152,7 +146,7 @@ export default function ProductPageClient({ initialProduct }) {
     };
   }, [product?._id]);
 
-  // ---------- variants & pricing ----------
+  // variants & pricing
   const variants = Array.isArray(product?.variants) ? product.variants : [];
   const [selectedIdx, setSelectedIdx] = useState(variants.length > 0 ? 0 : -1);
   useEffect(() => {
@@ -168,19 +162,19 @@ export default function ProductPageClient({ initialProduct }) {
     [selectedIdx, variants]
   );
 
-  const baseGallery = useMemo(() => {
-    const g = [];
-    if (activeVariant?.productGallery?.length) {
+  const gallery = useMemo(() => {
+    if (activeVariant?.productGallery?.length)
       return activeVariant.productGallery;
-    }
-    if (product?.heroImage?.path) g.push(product.heroImage);
-    if (Array.isArray(product?.productMedia)) g.push(...product.productMedia);
-    return g;
+    const base = [];
+    if (product?.heroImage?.path) base.push(product.heroImage);
+    if (Array.isArray(product?.productMedia))
+      base.push(...product.productMedia);
+    return base;
   }, [product, activeVariant]);
 
   const heroSrc =
     product?.heroImage?.path ||
-    baseGallery?.[0]?.path ||
+    gallery?.[0]?.path ||
     activeVariant?.productGallery?.[0]?.path ||
     "";
 
@@ -191,7 +185,7 @@ export default function ProductPageClient({ initialProduct }) {
   const priceWas = offPct ? effMrp : null;
   const inStock = inferInStock(activeVariant || product);
 
-  // ---------- cart ----------
+  // cart
   const itemsMap = useSelector(selectItemsMap) || {};
   const lineKey = `${product?._id || ""}|${activeVariant?._id || ""}`;
   const inCartLine = itemsMap[lineKey];
@@ -199,7 +193,7 @@ export default function ProductPageClient({ initialProduct }) {
 
   const handleAddToCart = useCallback(() => {
     if (!product) return;
-    const primaryImage = heroSrc || baseGallery?.[0]?.path || undefined;
+    const primaryImage = heroSrc || gallery?.[0]?.path || undefined;
     dispatch(
       addItem({
         productId: product?._id,
@@ -229,11 +223,11 @@ export default function ProductPageClient({ initialProduct }) {
     priceNow,
     effMrp,
     heroSrc,
-    baseGallery,
+    gallery,
     slug,
   ]);
 
-  // ---------- sticky bars (desktop + mobile) ----------
+  // sticky bars (desktop top; mobile bottom above BottomNav)
   const [headerOffset, setHeaderOffset] = useState(0);
   useEffect(() => {
     const measure = () => {
@@ -256,15 +250,13 @@ export default function ProductPageClient({ initialProduct }) {
     );
     obs.observe(el);
     return () => obs.disconnect();
-  }, [headerOffset, baseGallery?.length]);
+  }, [headerOffset, gallery?.length]);
 
-  // keep mobile sticky above BottomNav
   const BOTTOM_NAV_H = 56;
 
-  // ---------- UI ----------
   return (
     <main>
-      {/* DESKTOP sticky (top) */}
+      {/* DESKTOP sticky (sits under header; header has z-50) */}
       {showSticky && (
         <div
           className="fixed inset-x-0 hidden md:block z-40"
@@ -273,7 +265,6 @@ export default function ProductPageClient({ initialProduct }) {
           <div className="mx-auto max-w-[1200px] px-4 sm:px-6">
             <div className="bg-white/95 dark:bg-neutral-900/95 supports-[backdrop-filter]:backdrop-blur rounded-lg shadow-md border px-3 py-2">
               <div className="flex items-center justify-between gap-3">
-                {/* left: thumb + name + price */}
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="relative w-10 h-10 rounded-md overflow-hidden bg-muted shrink-0">
                     {heroSrc ? (
@@ -292,7 +283,7 @@ export default function ProductPageClient({ initialProduct }) {
                     </div>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <span className="font-medium text-gray-900">
-                        <AnimatedPrice value={money(priceNow)} />
+                        {money(priceNow)}
                         {priceWas ? (
                           <span className="ml-1 line-through text-muted-foreground">
                             {money(priceWas)}
@@ -312,7 +303,6 @@ export default function ProductPageClient({ initialProduct }) {
                   </div>
                 </div>
 
-                {/* right: qty + action */}
                 <div className="flex items-center gap-2">
                   <QtyControl
                     size="sm"
@@ -379,7 +369,7 @@ export default function ProductPageClient({ initialProduct }) {
         </div>
       )}
 
-      {/* MOBILE sticky (bottom – sits above BottomNav) */}
+      {/* MOBILE sticky (above BottomNav) */}
       {showSticky && (
         <div
           className="fixed inset-x-0 md:hidden z-40"
@@ -390,9 +380,7 @@ export default function ProductPageClient({ initialProduct }) {
           <div className="mx-auto max-w-[1200px] px-3">
             <div className="rounded-t-xl border-t shadow-lg bg-white/95 dark:bg-neutral-900/95 supports-[backdrop-filter]:backdrop-blur p-2.5">
               <div className="flex items-center justify-between gap-3">
-                <div className="text-base font-semibold">
-                  <AnimatedPrice value={money(priceNow)} />
-                </div>
+                <div className="text-base font-semibold">{money(priceNow)}</div>
                 {qtyNow > 0 ? (
                   <Button
                     className="rounded-full h-10 px-5 text-sm"
@@ -417,7 +405,7 @@ export default function ProductPageClient({ initialProduct }) {
 
       {/* MAIN */}
       <div className="mx-auto max-w-[1200px] px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-10">
-        {/* LEFT: gallery (sentinel) */}
+        {/* LEFT: gallery (sentinel for sticky) */}
         <section className="lg:col-span-7" ref={galleryRef}>
           <div className="bg-white dark:bg-neutral-900 rounded-2xl border overflow-hidden">
             <div className="relative aspect-[4/3] bg-white">
@@ -442,7 +430,7 @@ export default function ProductPageClient({ initialProduct }) {
           </div>
         </section>
 
-        {/* RIGHT: summary */}
+        {/* RIGHT: summary card */}
         <aside className="lg:col-span-5">
           <div className="bg-white dark:bg-neutral-900 rounded-2xl border p-5 md:p-6 space-y-5">
             <div className="space-y-2">
@@ -457,9 +445,7 @@ export default function ProductPageClient({ initialProduct }) {
             </div>
 
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <div className="text-2xl font-bold">
-                <AnimatedPrice value={money(priceNow)} />
-              </div>
+              <div className="text-2xl font-bold">{money(priceNow)}</div>
               {priceWas && (
                 <div className="text-sm text-muted-foreground line-through">
                   {money(priceWas)}
@@ -485,47 +471,44 @@ export default function ProductPageClient({ initialProduct }) {
               </span>
             </div>
 
-            {/* Variants (ring not clipped) */}
+            {/* Variants – ring visible (not clipped) and on the same line */}
             {variants.length > 0 && (
               <div className="space-y-2">
+                <div className="text-sm font-medium">Variants</div>
                 <div className="flex items-center gap-3 flex-wrap">
-                  <div className="text-sm font-medium">Variants</div>
-                  <div className="flex items-center gap-3 flex-wrap">
-                    {variants.map((v, i) => {
-                      const img = getVariantHero(v, heroSrc);
-                      const selected = i === selectedIdx;
-                      return (
-                        <button
-                          key={v?._id || i}
-                          type="button"
-                          onClick={() => setSelectedIdx(i)}
-                          className={[
-                            "relative p-0.5 rounded-full transition",
-                            selected
-                              ? "ring-2 ring-yellow-400"
-                              : "ring-1 ring-slate-200 hover:ring-slate-300",
-                          ].join(" ")}
-                          aria-pressed={selected}
-                          title={v?.variantName || v?.sku || `Option ${i + 1}`}
-                        >
-                          {/* inner circle may clip */}
-                          <span className="block h-10 w-10 rounded-full overflow-hidden bg-muted">
-                            {img ? (
-                              <Image
-                                src={img}
-                                alt={v?.variantName || `variant-${i}`}
-                                width={40}
-                                height={40}
-                                className="h-10 w-10 object-cover"
-                              />
-                            ) : (
-                              <span className="block h-full w-full bg-muted" />
-                            )}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  {variants.map((v, i) => {
+                    const img = getVariantHero(v, heroSrc);
+                    const selected = i === selectedIdx;
+                    return (
+                      <button
+                        key={v?._id || i}
+                        type="button"
+                        onClick={() => setSelectedIdx(i)}
+                        className={[
+                          "relative p-0.5 rounded-full transition",
+                          selected
+                            ? "ring-2 ring-yellow-400"
+                            : "ring-1 ring-slate-200 hover:ring-slate-300",
+                        ].join(" ")}
+                        aria-pressed={selected}
+                        title={v?.variantName || v?.sku || `Option ${i + 1}`}
+                      >
+                        <span className="block h-10 w-10 rounded-full overflow-hidden bg-muted">
+                          {img ? (
+                            <Image
+                              src={img}
+                              alt={v?.variantName || `variant-${i}`}
+                              width={40}
+                              height={40}
+                              className="h-10 w-10 object-cover"
+                            />
+                          ) : (
+                            <span className="block h-full w-full bg-muted" />
+                          )}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -600,7 +583,7 @@ export default function ProductPageClient({ initialProduct }) {
         </aside>
       </div>
 
-      {/* spacer so mobile sticky doesn't overlap page end */}
+      {/* spacer so mobile sticky doesn’t overlap the end */}
       <div className="h-[80px] md:h-0" />
     </main>
   );
