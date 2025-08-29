@@ -10,21 +10,13 @@ import "slick-carousel/slick/slick-theme.css";
 
 export default function Banner({ banners = [], loading = false }) {
   const [active, setActive] = useState(0);
-  const [currentBg, setCurrentBg] = useState(
-    banners?.[0]?.bgColor || "#ffffff"
-  );
+  const [currentBg, setCurrentBg] = useState(banners?.[0]?.bgColor || "#ffffff");
   const sliderRef = useRef(null);
 
   // soft gradient bg from provided hex
   const hexToRgb = (hex) => {
     const v = hex?.replace("#", "") || "ffffff";
-    const n =
-      v.length === 3
-        ? v
-            .split("")
-            .map((c) => c + c)
-            .join("")
-        : v;
+    const n = v.length === 3 ? v.split("").map((c) => c + c).join("") : v;
     const num = parseInt(n, 16);
     return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
   };
