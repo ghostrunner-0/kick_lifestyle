@@ -1111,8 +1111,8 @@ export default function ProductPageClient() {
                     <motion.div
                       className="thumbs-row flex pt-1 ps-1  gap-2.5 md:gap-3 pb-1 pe-4"
                       {...(animateUI ? fadeIn : {})}
-                    >
-                      {gallery.map((g, i) => (
+                    > 
+                      {gallery.map((g, i) => ( 
                         <motion.button
                           key={g?._id || g?.path || i}
                           type="button"
