@@ -24,15 +24,20 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ShoppingCart } from "lucide-react";
+import { ShoppingCart, ChevronLeft, ChevronRight } from "lucide-react";
 import { PRODUCT_VIEW_ROUTE } from "@/routes/WebsiteRoutes";
 import useEmblaCarousel from "embla-carousel-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, animate } from "framer-motion";
 
 /* Brand + helpers */
 const BRAND = "#fcba17";
 const BRAND_HOVER = "#e9ae12";
 const PLACEHOLDER_SRC = "/placeholder.png";
+
+/* Progress colors */
+const PROGRESS_BG = "rgba(0,0,0,0.10)";
+const PROGRESS_FILL = BRAND;
+const PROGRESS_GLOW = "rgba(252,186,23,0.18)";
 
 const toNum = (v) => (typeof v === "string" ? Number(v) : v);
 
@@ -70,6 +75,72 @@ const readStock = (obj) => {
     null;
   const n = Number(raw);
   return Number.isFinite(n) ? n : null;
+};
+
+/* ============ Hook: detect actual truncation (ellipsis) ============ */
+function useIsTruncated() {
+  const ref = React.useRef(null);
+  const [truncated, setTruncated] = React.useState(false);
+
+  const check = React.useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    setTruncated(el.scrollWidth > el.clientWidth);
+  }, []);
+
+  React.useEffect(() => {
+    check();
+    const ro = new ResizeObserver(check);
+    if (ref.current) ro.observe(ref.current);
+    window.addEventListener("resize", check, { passive: true });
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", check);
+    };
+  }, [check]);
+
+  return [ref, truncated, check];
+}
+
+/* ------------------ Minimal animated arrow button ------------------ */
+const ArrowButton = ({ side, onClick }) => {
+  const isLeft = side === "left";
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      whileHover={{ scale: 1.04 }}
+      whileTap={{ scale: 0.92 }}
+      className={[
+        "hidden md:flex absolute",
+        isLeft ? "left-2" : "right-2",
+        "top-1/2 -translate-y-1/2 z-30 h-9 w-9 items-center justify-center",
+        "rounded-full border border-black/10 bg-white/90 text-slate-700 shadow-sm",
+        "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition",
+        "backdrop-blur",
+      ].join(" ")}
+      aria-label={isLeft ? "Previous image" : "Next image"}
+    >
+      <motion.span
+        aria-hidden
+        className="absolute inset-0 rounded-full"
+        initial={false}
+        whileHover={{ boxShadow: "0 0 0 6px rgba(252,186,23,0.18)" }}
+        transition={{ duration: 0.22 }}
+      />
+      <motion.span
+        className="pointer-events-none"
+        whileHover={{ x: isLeft ? -2.5 : 2.5 }}
+        transition={{ type: "spring", stiffness: 600, damping: 28 }}
+      >
+        {isLeft ? (
+          <ChevronLeft className="h-4 w-4" />
+        ) : (
+          <ChevronRight className="h-4 w-4" />
+        )}
+      </motion.span>
+    </motion.button>
+  );
 };
 
 export default function ProductCard({
@@ -265,9 +336,7 @@ export default function ProductCard({
     onAddToCart?.(buildCartPayload(1));
     showToast(
       "success",
-      `${name}${
-        activeVariant ? ` — ${activeVariant.variantName}` : ""
-      } added to cart.`
+      `${name}${activeVariant ? ` — ${activeVariant.variantName}` : ""} added to cart.`
     );
   };
 
@@ -296,7 +365,7 @@ export default function ProductCard({
     ? "Out of Stock"
     : "Add To Cart";
 
-  /* ==================== EMBLA: swipe works on mobile ==================== */
+  /* ==================== EMBLA ==================== */
   const galleryKey = activeVariant?._id || slug || "base";
   const [emblaRef, emblaApi] = useEmblaCarousel({
     loop: gallery.length > 1,
@@ -305,12 +374,55 @@ export default function ProductCard({
     dragFree: false,
   });
 
-  // progress bar
-  const [scrollProgress, setScrollProgress] = useState(0);
+  // Progress handling with wrap-back animation
+  const prevSnapRef = useRef(0);
+  const animControlsRef = useRef(null);
+  const [wrapRunning, setWrapRunning] = useState(false);
+  const [renderProgress, setRenderProgress] = useState(0);
+
+  const scrollToRender = useCallback(
+    (p) => {
+      if (!wrapRunning) setRenderProgress(p);
+    },
+    [wrapRunning]
+  );
+
   const onScroll = useCallback(() => {
     if (!emblaApi) return;
     const p = emblaApi.scrollProgress();
-    setScrollProgress(Number.isFinite(p) ? Math.max(0, Math.min(1, p)) : 0);
+    const clamped = Number.isFinite(p) ? Math.max(0, Math.min(1, p)) : 0;
+    scrollToRender(clamped);
+  }, [emblaApi, scrollToRender]);
+
+  useEffect(() => {
+    if (!emblaApi) return;
+    const snaps = emblaApi.scrollSnapList().length;
+    const last = Math.max(0, snaps - 1);
+
+    const onSelect = () => {
+      const cur = emblaApi.selectedScrollSnap();
+      const prev = prevSnapRef.current ?? cur;
+
+      if (emblaApi.options().loop && prev === last && cur === 0) {
+        setWrapRunning(true);
+        animControlsRef.current?.stop?.();
+        animControlsRef.current = animate(1, 0, {
+          duration: 0.35,
+          ease: [0.4, 0, 0.2, 1],
+          onUpdate: (v) => setRenderProgress(v),
+          onComplete: () => setWrapRunning(false),
+        });
+      }
+
+      prevSnapRef.current = cur;
+    };
+
+    prevSnapRef.current = emblaApi.selectedScrollSnap();
+    emblaApi.on("select", onSelect);
+    return () => {
+      emblaApi.off("select", onSelect);
+      animControlsRef.current?.stop?.();
+    };
   }, [emblaApi]);
 
   useEffect(() => {
@@ -328,16 +440,53 @@ export default function ProductCard({
     if (emblaApi) {
       emblaApi.reInit();
       emblaApi.scrollTo(0, true);
+      prevSnapRef.current = 0;
+      setRenderProgress(0);
     }
   }, [emblaApi, galleryKey, gallery.length]);
 
-  // prevent click-through after a swipe
-  const handleSlideLinkClick = (e) => {
-    if (emblaApi && !emblaApi.clickAllowed()) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-  };
+  const pct = Math.max(0, Math.min(1, renderProgress)) * 100;
+
+  // Click guard to avoid navigating while swiping
+  const onSlideLinkClick = useCallback(
+    (e) => {
+      if (emblaApi && !emblaApi.clickAllowed()) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    },
+    [emblaApi]
+  );
+
+  // Arrow actions
+  const scrollPrev = useCallback(() => emblaApi?.scrollPrev(), [emblaApi]);
+  const scrollNext = useCallback(() => emblaApi?.scrollNext(), [emblaApi]);
+
+  /* ========= Name tooltip only when truncated ========= */
+  const [nameRef, nameTruncated, checkNameTrunc] = useIsTruncated();
+  useEffect(() => {
+    checkNameTrunc();
+  }, [checkNameTrunc, name, variants.length]);
+
+  const NameBlock = (
+    <div className="flex-1 min-w-0">
+      {productHref ? (
+        <Link
+          href={productHref}
+          className="hover:underline underline-offset-2 block"
+          aria-label={name ? `View ${name}` : "View product"}
+        >
+          <span ref={nameRef} className="block truncate">
+            {name}
+          </span>
+        </Link>
+      ) : (
+        <span ref={nameRef} className="block truncate">
+          {name}
+        </span>
+      )}
+    </div>
+  );
 
   return (
     <motion.div
@@ -395,7 +544,6 @@ export default function ProductCard({
                 key={galleryKey}
                 className="embla__viewport h-full"
                 ref={emblaRef}
-                /* ✨ important for mobile swipe */
                 style={{ touchAction: "pan-y" }}
                 initial={{ opacity: 0.2, scale: 0.995 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -413,7 +561,7 @@ export default function ProductCard({
                           href={productHref}
                           aria-label={name ? `View ${name}` : "View product"}
                           className="absolute inset-0 block"
-                          onClick={handleSlideLinkClick}
+                          onClick={onSlideLinkClick}
                           draggable={false}
                         >
                           <Image
@@ -451,17 +599,61 @@ export default function ProductCard({
               </motion.div>
             </AnimatePresence>
 
+            {/* Minimal, noticeable progress rail */}
             {gallery.length > 1 && (
-              <div className="absolute bottom-1 left-3 right-3 z-20 h-1 rounded-full bg-black/10 overflow-hidden">
-                <motion.div
-                  className="h-full rounded-full bg-black/40 origin-left"
-                  animate={{ scaleX: scrollProgress || 0.0001 }}
-                  initial={false}
-                  transition={{ type: "spring", stiffness: 220, damping: 28 }}
-                  style={{ transformOrigin: "left" }}
-                  aria-hidden
-                />
+              <div className="absolute bottom-2 left-3 right-3 z-20 pointer-events-none">
+                <div
+                  className="relative h-[6px] rounded-full overflow-hidden"
+                  style={{ background: PROGRESS_BG }}
+                >
+                  {(() => {
+                    const THUMB = 10;
+                    const fillWidth = `calc(${pct}% + ${THUMB / 2}px)`;
+                    return (
+                      <>
+                        <motion.div
+                          className="absolute inset-y-0 left-0 rounded-full"
+                          style={{
+                            width: fillWidth,
+                            background: PROGRESS_FILL,
+                            boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.06)",
+                          }}
+                          transition={{
+                            type: "spring",
+                            stiffness: 240,
+                            damping: 28,
+                          }}
+                          aria-hidden
+                        />
+                        <motion.div
+                          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rounded-full"
+                          style={{
+                            left: `${pct}%`,
+                            width: THUMB,
+                            height: THUMB,
+                            background: PROGRESS_FILL,
+                            boxShadow: `0 2px 8px rgba(0,0,0,0.22), 0 0 0 4px ${PROGRESS_GLOW}`,
+                          }}
+                          transition={{
+                            type: "spring",
+                            stiffness: 320,
+                            damping: 26,
+                          }}
+                          aria-hidden
+                        />
+                      </>
+                    );
+                  })()}
+                </div>
               </div>
+            )}
+
+            {/* Desktop arrows with micro-interactions */}
+            {gallery.length > 1 && (
+              <>
+                <ArrowButton side="left" onClick={scrollPrev} />
+                <ArrowButton side="right" onClick={scrollNext} />
+              </>
             )}
           </div>
         </div>
@@ -469,23 +661,22 @@ export default function ProductCard({
 
       {/* INFO */}
       <div className="p-3 sm:p-4">
-        {/* Title + Variants */}
-        <div className="mb-1 flex items-start gap-3">
-          <h3 className="flex-1 line-clamp-2 text-[15px] font-medium text-slate-900 dark:text-white">
-            {productHref ? (
-              <Link
-                href={productHref}
-                className="hover:underline underline-offset-2"
-                aria-label={name ? `View ${name}` : "View product"}
-              >
-                {name}
-              </Link>
-            ) : (
-              name
-            )}
-          </h3>
+        {/* Title + Variants — single row, consistent height, tooltip only if truncated */}
+        <div className="mb-1 flex items-center gap-2 min-h-[28px]">
+          {nameTruncated ? (
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>{NameBlock}</TooltipTrigger>
+                <TooltipContent side="top" className="max-w-[280px] text-xs">
+                  {name}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : (
+            NameBlock
+          )}
 
-          {swatches.length > 0 && (
+          {variants.length > 0 && (
             <ScrollArea
               className="shrink-0 max-w-[50%] overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] me-0.5"
               aria-label="Choose color"
@@ -498,13 +689,25 @@ export default function ProductCard({
                 aria-activedescendant={
                   selectedIdx >= 0 ? `${groupId}-opt-${selectedIdx}` : undefined
                 }
-                className="flex items-center gap-2 py-0.75 px-1"
+                className="flex items-center gap-2 py-0.5 px-1"
                 onKeyDown={onVariantKeyDown}
                 ref={swatchGroupRef}
                 tabIndex={-1}
               >
                 <TooltipProvider delayDuration={200}>
-                  {swatches.map((s) => {
+                  {variants.map((v, i) => {
+                    const s = {
+                      key:
+                        v?._id ||
+                        v?.sku ||
+                        `${v?.variantName || "variant"}-${i}`,
+                      img:
+                        v?.swatchImage?.path ||
+                        v?.productGallery?.[0]?.path ||
+                        null,
+                      name: v?.variantName || "Variant",
+                      index: i,
+                    };
                     const selected = s.index === selectedIdx;
                     return (
                       <Tooltip key={s.key}>
