@@ -24,16 +24,24 @@ export async function GET(req) {
     }
 
     const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
-    const limit = Math.min(30, Math.max(1, parseInt(url.searchParams.get("limit") || "10", 10)));
-    const sortParam = String(url.searchParams.get("sort") || "newest").toLowerCase();
+    const limit = Math.min(
+      30,
+      Math.max(1, parseInt(url.searchParams.get("limit") || "10", 10))
+    );
+    const sortParam = String(
+      url.searchParams.get("sort") || "newest"
+    ).toLowerCase();
     const rating = url.searchParams.get("rating"); // optional
 
     // Ensure product exists
-    const exists = await Product.findOne({ _id: productId, deletedAt: null }).select("_id").lean();
+    const exists = await Product.findOne({ _id: productId, deletedAt: null })
+      .select("_id")
+      .lean();
     if (!exists) return response(false, 404, "Product not found");
 
     const query = { product: productId, status: "approved", deletedAt: null };
-    if (rating && ["1", "2", "3", "4", "5"].includes(rating)) query.rating = Number(rating);
+    if (rating && ["1", "2", "3", "4", "5"].includes(rating))
+      query.rating = Number(rating);
 
     const sortMap = {
       newest: { createdAt: -1 },
@@ -62,7 +70,12 @@ export async function GET(req) {
       userName: r?.user?.name || "Verified buyer",
     }));
 
-    return response(true, 200, "Reviews fetched", { items, total, page, pageSize: limit });
+    return response(true, 200, "Reviews fetched", {
+      items,
+      total,
+      page,
+      pageSize: limit,
+    });
   } catch (err) {
     return catchError(err, "Failed to fetch reviews");
   }
@@ -73,44 +86,71 @@ export async function GET(req) {
  * Body: { product, rating (1..5), title, review }
  * Auth required. Server injects `user` from session.
  */
+/**
+ * POST /api/website/reviews
+ * Body: { product, rating (1..5), title, review }
+ * Auth required. Server injects `user` from session.
+ */
 export async function POST(req) {
   try {
-    // first, ensure the session is authenticated (lib/Authentication returns true)
-    const auth = await isAuthenticated("user");
-    if (!auth) return response(false, 401, "Please login to write a review");
+    // Check auth (no hardcoded role so any signed-in user works)
+    const authed = await isAuthenticated();
+    if (!authed) return response(false, 401, "Please login to write a review");
 
-    // get the server session and resolve the actual user id from DB
+    // Resolve session + user
     const session = await getServerSession(authOptions);
     const email = session?.user?.email;
-
     if (!email) return response(false, 401, "Please login to write a review");
 
     await connectDB();
-    const sessionUser = await User.findOne({ email, deletedAt: null }).select("_id").lean();
-    if (!sessionUser) return response(false, 401, "Please login to write a review");
+
+    const sessionUser = await User.findOne({ email, deletedAt: null })
+      .select("_id role")
+      .lean();
+    if (!sessionUser)
+      return response(false, 401, "Please login to write a review");
+
+    // Parse body
     const body = await req.json().catch(() => ({}));
     const { product, rating, title, review } = body || {};
 
-    if (!product || !isValidObjectId(product)) return response(false, 400, "Invalid product");
-    const r = Number(rating);
-    if (!Number.isFinite(r) || r < 1 || r > 5) return response(false, 400, "Rating must be between 1 and 5");
-    if (!title || !String(title).trim()) return response(false, 400, "Title is required");
-    if (!review || !String(review).trim()) return response(false, 400, "Review text is required");
+    // Validate input
+    if (!product || !isValidObjectId(product))
+      return response(false, 400, "Invalid product");
 
-    const exists = await Product.findOne({ _id: product, deletedAt: null }).select("_id").lean();
+    const r = Number(rating);
+    if (!Number.isFinite(r) || r < 1 || r > 5)
+      return response(false, 400, "Rating must be between 1 and 5");
+
+    if (!title || !String(title).trim())
+      return response(false, 400, "Title is required");
+
+    if (!review || !String(review).trim())
+      return response(false, 400, "Review text is required");
+
+    // Ensure product exists
+    const exists = await Product.findOne({ _id: product, deletedAt: null })
+      .select("_id")
+      .lean();
     if (!exists) return response(false, 404, "Product not found");
 
+    // Create review (default to moderation)
     const doc = await Review.create({
       product,
-      user: sessionUser._id, // stamp from session
+      user: sessionUser._id,
       rating: r,
       title: String(title).trim(),
       review: String(review).trim(),
-      status: "unapproved", // moderation
+      status: "unapproved",
       deletedAt: null,
     });
 
-    return response(true, 201, "Review submitted. It will appear after moderation.", { _id: doc._id });
+    return response(
+      true,
+      201,
+      "Review submitted. It will appear after moderation.",
+      { _id: doc._id }
+    );
   } catch (err) {
     return catchError(err, "Failed to create review");
   }

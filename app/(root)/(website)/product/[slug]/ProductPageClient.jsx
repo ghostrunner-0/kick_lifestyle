@@ -7,7 +7,7 @@ import React, {
   useRef,
   useEffect,
 } from "react";
-import { useDispatch, useSelector } from "react-redux"; 
+import { useDispatch, useSelector } from "react-redux";
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import axios from "axios";
@@ -41,9 +41,21 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 
 /* icons */
-import { ChevronLeft, ShoppingCart, Star } from "lucide-react";
+import {
+  ChevronLeft,
+  ShoppingCart,
+  Star,
+  ChevronsUpDown,
+  Check,
+} from "lucide-react";
 
 /* media */
 import Lightbox from "yet-another-react-lightbox";
@@ -58,10 +70,13 @@ import "swiper/css";
 /* animation */
 import { motion, AnimatePresence } from "framer-motion";
 
+/* toast */
+import { showToast } from "@/lib/ShowToast";
+
 /* ------------ helpers ------------ */
 const api = axios.create({ baseURL: "/", withCredentials: true });
 
-/* ✅ step for +/-, default = 1 (as requested) */
+/* step for +/-, default = 1 */
 const STEP = 1;
 
 const toNum = (v) => (typeof v === "string" ? Number(v) : v);
@@ -199,6 +214,9 @@ const fmtDate = (d) => {
 
 /* ===================== ReviewsTab ===================== */
 function ReviewsTab({ productId, animateUI }) {
+  const auth = useSelector((s) => s?.authStore?.auth);
+  const isAuthed = !!auth;
+
   const [summary, setSummary] = React.useState(null);
   const [items, setItems] = React.useState([]);
   const [total, setTotal] = React.useState(0);
@@ -207,6 +225,11 @@ function ReviewsTab({ productId, animateUI }) {
   const [sort] = React.useState("newest");
   const [ratingFilter] = React.useState("all");
   const [isLoadingList, setIsLoadingList] = React.useState(false);
+
+  // form
+  const [openDialog, setOpenDialog] = React.useState(false);
+  const [form, setForm] = React.useState({ rating: 5, title: "", review: "" });
+  const [submitting, setSubmitting] = React.useState(false);
 
   const loadSummary = React.useCallback(async () => {
     if (!productId) return;
@@ -233,9 +256,12 @@ function ReviewsTab({ productId, animateUI }) {
         const { data } = await api.get("/api/website/reviews", { params });
         if (data?.success) {
           setTotal(data.data.total || 0);
-          if (reset) setItems(data.data.items || []);
-          else setItems((prev) => [...prev, ...(data.data.items || [])]);
-          if (reset) setPage(1);
+          if (reset) {
+            setItems(data.data.items || []);
+            setPage(1);
+          } else {
+            setItems((prev) => [...prev, ...(data.data.items || [])]);
+          }
         }
       } finally {
         setIsLoadingList(false);
@@ -246,7 +272,46 @@ function ReviewsTab({ productId, animateUI }) {
 
   useEffect(() => {
     loadSummary();
-  }, [loadSummary]);
+    loadPage(true);
+  }, [loadSummary, loadPage]);
+
+  const handleSubmitReview = async (e) => {
+    e?.preventDefault?.();
+    if (!isAuthed || !productId) {
+      showToast("error", "Please login to write a review.");
+      return;
+    }
+    if (!form.title?.trim() || !form.review?.trim()) {
+      showToast("warning", "Please fill the title and review.");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      const payload = {
+        product: productId,
+        rating: Number(form.rating) || 5,
+        title: form.title.trim(),
+        review: form.review.trim(),
+      };
+      const { data } = await api.post("/api/website/reviews", payload);
+      if (data?.success) {
+        await Promise.all([loadSummary(), loadPage(true)]);
+        setForm({ rating: 5, title: "", review: "" });
+        setOpenDialog(false);
+        showToast(
+          "success",
+          "Thanks for your review! Your feedback helps others."
+        );
+      } else {
+        showToast("error", data?.message || "Something went wrong.");
+      }
+    } catch {
+      showToast("error", "Could not submit review. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <motion.div
@@ -296,12 +361,105 @@ function ReviewsTab({ productId, animateUI }) {
         </div>
       ) : null}
 
-      {/* Controls (kept minimal) */}
-      <div className="flex flex-wrap items-center gap-3">
+      {/* Controls */}
+      <div className="flex flex-wrap items-center gap-3 justify-between">
         <div className="text-sm text-muted-foreground">
           {total} review{total === 1 ? "" : "s"}
         </div>
-        <Separator orientation="vertical" className="hidden sm:block h-6" />
+
+        {/* Write review / Login prompt */}
+        {isAuthed ? (
+          <Dialog open={openDialog} onOpenChange={setOpenDialog}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="rounded-full" type="button">
+                Write a review
+              </Button>
+            </DialogTrigger>
+            <DialogContent
+              className="sm:max-w-md"
+              onOpenAutoFocus={(e) => e.preventDefault()}
+              onCloseAutoFocus={(e) => e.preventDefault()}
+            >
+              <DialogHeader>
+                <DialogTitle>Write a review</DialogTitle>
+              </DialogHeader>
+
+              <form onSubmit={handleSubmitReview} className="space-y-4">
+                {/* Rating */}
+                <div>
+                  <div className="text-sm font-medium mb-1">Rating</div>
+                  <div className="flex items-center gap-2">
+                    {[1, 2, 3, 4, 5].map((r) => (
+                      <button
+                        type="button"
+                        key={r}
+                        onClick={() => setForm((f) => ({ ...f, rating: r }))}
+                        aria-label={`Rate ${r} star${r === 1 ? "" : "s"}`}
+                      >
+                        <Star
+                          size={20}
+                          className={
+                            r <= form.rating
+                              ? "fill-yellow-400 stroke-yellow-400"
+                              : "stroke-muted-foreground"
+                          }
+                        />
+                      </button>
+                    ))}
+                    <span className="ml-1 text-xs text-muted-foreground">
+                      {form.rating}/5
+                    </span>
+                  </div>
+                </div>
+
+                {/* Title */}
+                <div>
+                  <div className="text-sm font-medium mb-1">Title</div>
+                  <Input
+                    value={form.title}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, title: e.target.value }))
+                    }
+                    placeholder="Great sound & battery!"
+                    required
+                  />
+                </div>
+
+                {/* Review */}
+                <div>
+                  <div className="text-sm font-medium mb-1">Review</div>
+                  <Textarea
+                    value={form.review}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, review: e.target.value }))
+                    }
+                    rows={5}
+                    placeholder="Share details about comfort, ANC, mic quality, etc."
+                    required
+                  />
+                </div>
+
+                <DialogFooter className="gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setOpenDialog(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={submitting}>
+                    {submitting ? "Submitting..." : "Submit review"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+        ) : (
+          <div className="text-sm text-muted-foreground">
+            Please <span className="font-medium text-foreground">login</span> to
+            write a review.
+          </div>
+        )}
       </div>
 
       {/* List */}
@@ -452,7 +610,7 @@ export default function ProductPageClient() {
         productId: product?._id,
         slug,
         name: product?.name,
-        qty: STEP, // ✅ use step for first add
+        qty: STEP,
         price: priceNow,
         mrp: effMrp,
         image: primaryImage,
@@ -548,7 +706,7 @@ export default function ProductPageClient() {
     </div>
   );
 
-  /* ✅ use STEP in +/- */
+  /* +/- handlers */
   const decQty = () => {
     if (!inCartLine) return;
     const next = Math.max(0, (inCartLine.qty || STEP) - STEP);
@@ -575,7 +733,7 @@ export default function ProductPageClient() {
           productId: product?._id,
           slug,
           name: product?.name,
-          qty: STEP, // ✅
+          qty: STEP,
           price: priceNow,
           mrp: effMrp,
           image: heroSrc || gallery?.[activeImg]?.path,
@@ -586,17 +744,24 @@ export default function ProductPageClient() {
       setQty({
         productId: product?._id,
         variant: activeVariant ? { id: activeVariant._id } : null,
-        qty: (inCartLine.qty || 0) + STEP, // ✅
+        qty: (inCartLine.qty || 0) + STEP,
       })
     );
   };
 
   const goCheckout = () => router.push("/checkout");
 
+  /* scroll preserve for dropdown in sticky */
+  const scrollLockRef = useRef(0);
+  const preserveScroll = useCallback(() => {
+    if (typeof window === "undefined") return;
+    scrollLockRef.current = window.scrollY || window.pageYOffset || 0;
+    requestAnimationFrame(() => window.scrollTo(0, scrollLockRef.current));
+  }, []);
+
   return (
-    /* ✅ prevent horizontal overflow */
     <main className="overflow-x-clip">
-      {/* Desktop TOP sticky pill — z lowered so Sheet (z-50) stays above */}
+      {/* Desktop TOP sticky pill */}
       <AnimatePresence>
         {animateUI && showStickyBar && (
           <motion.div
@@ -645,6 +810,128 @@ export default function ProductPageClient() {
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {/* Variant selector (dropdown with image) */}
+                  {Array.isArray(variants) && variants.length > 0 ? (
+                    <div className="hidden md:flex items-center">
+                      <DropdownMenu
+                        modal={false}
+                        onOpenChange={(open) => {
+                          preserveScroll();
+                          if (!open) preserveScroll();
+                        }}
+                      >
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="rounded-full h-9 pl-2 pr-2.5 gap-2 flex items-center"
+                            type="button"
+                            aria-label="Select variant"
+                            onClick={preserveScroll}
+                          >
+                            <span className="relative h-6 w-6 rounded-full overflow-hidden border shrink-0">
+                              {getVariantHero(
+                                variants[selectedIdx] || {},
+                                heroSrc
+                              ) ? (
+                                <Image
+                                  src={getVariantHero(
+                                    variants[selectedIdx] || {},
+                                    heroSrc
+                                  )}
+                                  alt={
+                                    variants[selectedIdx]?.variantName ||
+                                    variants[selectedIdx]?.sku ||
+                                    "Variant"
+                                  }
+                                  fill
+                                  sizes="24px"
+                                  className="object-cover"
+                                />
+                              ) : (
+                                <span className="block h-full w-full bg-muted" />
+                              )}
+                            </span>
+
+                            <span className="max-w-[12rem] truncate text-xs md:text-sm">
+                              {variants[selectedIdx]?.variantName ||
+                                variants[selectedIdx]?.sku ||
+                                `Option ${selectedIdx + 1}`}
+                            </span>
+
+                            <ChevronsUpDown className="ml-1 h-4 w-4 opacity-60" />
+                          </Button>
+                        </DropdownMenuTrigger>
+
+                        <DropdownMenuContent
+                          align="end"
+                          className="w-[280px] p-1"
+                          sideOffset={6}
+                          onOpenAutoFocus={(e) => {
+                            e.preventDefault();
+                            preserveScroll();
+                          }}
+                          onCloseAutoFocus={(e) => {
+                            e.preventDefault();
+                            preserveScroll();
+                          }}
+                        >
+                          <div className="max-h-72 overflow-y-auto">
+                            {variants.map((v, i) => {
+                              const img = getVariantHero(v, heroSrc);
+                              const selected = i === selectedIdx;
+                              return (
+                                <DropdownMenuItem
+                                  key={v?._id || i}
+                                  onClick={() => {
+                                    onVariantClick(i);
+                                    preserveScroll();
+                                  }}
+                                  className="gap-2 py-2"
+                                >
+                                  <span className="relative h-8 w-8 rounded-full overflow-hidden border shrink-0">
+                                    {img ? (
+                                      <Image
+                                        src={img}
+                                        alt={
+                                          v?.variantName ||
+                                          v?.sku ||
+                                          `Variant ${i + 1}`
+                                        }
+                                        fill
+                                        sizes="32px"
+                                        className="object-cover"
+                                      />
+                                    ) : (
+                                      <span className="block h-full w-full bg-muted" />
+                                    )}
+                                  </span>
+
+                                  <span className="flex-1 min-w-0">
+                                    <span className="block text-sm truncate">
+                                      {v?.variantName ||
+                                        v?.sku ||
+                                        `Option ${i + 1}`}
+                                    </span>
+                                    {v?.sku ? (
+                                      <span className="block text-xs text-muted-foreground truncate">
+                                        {v.sku}
+                                      </span>
+                                    ) : null}
+                                  </span>
+
+                                  {selected ? (
+                                    <Check className="h-4 w-4 opacity-90" />
+                                  ) : null}
+                                </DropdownMenuItem>
+                              );
+                            })}
+                          </div>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  ) : null}
+
                   <div className="inline-flex items-center rounded-full border bg-background h-9">
                     <Button
                       type="button"
@@ -684,7 +971,7 @@ export default function ProductPageClient() {
         )}
       </AnimatePresence>
 
-      {/* Mobile bottom sticky — z lowered; stays above BottomNav but below Sheet */}
+      {/* Mobile bottom sticky */}
       <AnimatePresence>
         {animateUI && (
           <motion.div
@@ -748,7 +1035,7 @@ export default function ProductPageClient() {
           className="mx-auto max-w-[1200px] px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-10"
           {...(animateUI ? fadeUp : {})}
         >
-          {/* LEFT: GALLERY (sentinel) */}
+          {/* LEFT: GALLERY */}
           <section className="lg:col-span-7" ref={galleryWrapRef}>
             <div className="bg-white dark:bg-neutral-900 rounded-2xl border overflow-hidden">
               {/* main image */}
@@ -908,10 +1195,13 @@ export default function ProductPageClient() {
                 </span>
               </div>
 
-              {/* Variants + Counter on the SAME ROW */}
-              {variants.length > 0 && (
-                <div className="flex items-center justify-between gap-3">
-                  {/* pills */}
+              {/* Variants + Counter (always show counter) */}
+              <div
+                className={`flex items-center gap-3 ${
+                  variants.length > 0 ? "justify-between" : "justify-start"
+                }`}
+              >
+                {variants.length > 0 && (
                   <div className="flex items-center gap-2 flex-1 flex-wrap">
                     {variants.map((v, i) => {
                       const img = getVariantHero(v, heroSrc);
@@ -946,35 +1236,34 @@ export default function ProductPageClient() {
                       );
                     })}
                   </div>
+                )}
 
-                  {/* compact counter */}
-                  <div className="inline-flex items-center rounded-md border bg-background shrink-0">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="px-3 min-w-[44px]"
-                      onClick={decQty}
-                      aria-label="Decrease quantity"
-                    >
-                      –
-                    </Button>
-                    <div className="px-3 py-2 text-sm font-medium select-none tabular-nums w-[36px] text-center">
-                      {inCartLine ? inCartLine.qty || 0 : 0}
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="px-3 min-w-[44px]"
-                      onClick={incQty}
-                      aria-label="Increase quantity"
-                    >
-                      +
-                    </Button>
+                {/* qty +/− ALWAYS visible */}
+                <div className="inline-flex items-center rounded-md border bg-background shrink-0">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="px-3 min-w-[44px]"
+                    onClick={decQty}
+                    aria-label="Decrease quantity"
+                  >
+                    –
+                  </Button>
+                  <div className="px-3 py-2 text-sm font-medium select-none tabular-nums w-[36px] text-center">
+                    {inCartLine ? inCartLine.qty || 0 : 0}
                   </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="px-3 min-w-[44px]"
+                    onClick={incQty}
+                    aria-label="Increase quantity"
+                  >
+                    +
+                  </Button>
                 </div>
-              )}
+              </div>
 
-              {/* Add / Checkout button */}
               <Button
                 className="rounded-full w-full"
                 onClick={inCartLine ? goCheckout : handleAddToCart}
@@ -990,7 +1279,7 @@ export default function ProductPageClient() {
         <Skeleton />
       )}
 
-      {/* TABS: Overview / Specs / Reviews */}
+      {/* TABS */}
       {dataReady ? (
         <motion.div
           className="mx-auto max-w-[1200px] px-4 sm:px-6 pb-16"
@@ -1111,9 +1400,8 @@ export default function ProductPageClient() {
         }}
       />
 
-      {/* ✅ Replace global styles to eliminate extra width/scroll */}
+      {/* global styles to eliminate extra width/scroll */}
       <style jsx global>{`
-        /* Global safeguard */
         html,
         body {
           overflow-x: clip;
@@ -1124,13 +1412,9 @@ export default function ProductPageClient() {
             overflow-x: hidden;
           }
         }
-
-        /* Compute scrollbar width for precise full-bleed without overspill */
         :root {
           --sbw: calc(100vw - 100%);
         }
-
-        /* Full-bleed container without overflow */
         .bleed-images {
           width: calc(100vw - var(--sbw));
           margin-left: calc(50% - ((100vw - var(--sbw)) / 2));
@@ -1138,8 +1422,6 @@ export default function ProductPageClient() {
           overflow-x: hidden;
           position: relative;
         }
-
-        /* Modern viewport units where supported */
         @supports (width: 100dvw) {
           .bleed-images {
             width: 100dvw;
@@ -1147,8 +1429,6 @@ export default function ProductPageClient() {
             margin-right: calc(50% - 50dvw);
           }
         }
-
-        /* Make sure images don’t introduce inline gaps or margins */
         .bleed-images img {
           display: block;
           width: 100%;
@@ -1157,8 +1437,6 @@ export default function ProductPageClient() {
           border: 0;
           padding: 0;
         }
-
-        /* Swiper safety: ensure no internal overflow causes scrollbars */
         .swiper,
         .swiper-wrapper,
         .swiper-slide {
