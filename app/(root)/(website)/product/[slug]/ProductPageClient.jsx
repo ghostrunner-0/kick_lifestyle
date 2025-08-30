@@ -706,7 +706,7 @@ export default function ProductPageClient() {
     </div>
   );
 
-  /* +/- handlers */
+  /* qty +/- */
   const decQty = () => {
     if (!inCartLine) return;
     const next = Math.max(0, (inCartLine.qty || STEP) - STEP);
@@ -751,7 +751,7 @@ export default function ProductPageClient() {
 
   const goCheckout = () => router.push("/checkout");
 
-  /* scroll preserve for dropdown in sticky */
+  /* scroll preserve helper */
   const scrollLockRef = useRef(0);
   const preserveScroll = useCallback(() => {
     if (typeof window === "undefined") return;
@@ -810,7 +810,7 @@ export default function ProductPageClient() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {/* Variant selector (dropdown with image) */}
+                  {/* Variant dropdown in sticky (keeps scroll) */}
                   {Array.isArray(variants) && variants.length > 0 ? (
                     <div className="hidden md:flex items-center">
                       <DropdownMenu
@@ -1037,12 +1037,12 @@ export default function ProductPageClient() {
         >
           {/* LEFT: GALLERY */}
           <section className="lg:col-span-7" ref={galleryWrapRef}>
-            <div className="bg-white dark:bg-neutral-900 rounded-2xl border overflow-hidden">
+            <div className="bg-white dark:bg-neutral-900 rounded-2xl border overflow-hidden product-gallery">
               {/* main image */}
               <motion.div className="relative" {...(animateUI ? fadeIn : {})}>
                 {Array.isArray(gallery) && gallery.length ? (
                   <Swiper
-                    key={galleryKey}
+                    key={`${galleryKey}|${activeVariant?._id || ""}`}
                     onSwiper={(swiper) => (mainSwiperRef.current = swiper)}
                     onSlideChange={(s) => {
                       setActiveImg(s.activeIndex);
@@ -1050,18 +1050,25 @@ export default function ProductPageClient() {
                     }}
                     slidesPerView={1}
                     spaceBetween={8}
+                    watchOverflow
+                    allowTouchMove={gallery.length > 1}
+                    autoHeight
+                    observer
+                    observeParents
+                    speed={260}
                     style={{ width: "100%" }}
                   >
                     {gallery.map((g, idx) => (
                       <SwiperSlide key={g?._id || g?.path || idx}>
-                        <div className="relative aspect-[4/3] bg-white">
+                        <div className="relative aspect-[4/3] bg-white slide-box">
                           {g?.path ? (
                             <Image
                               src={g.path}
                               alt={g?.alt || product?.name || `img-${idx}`}
                               fill
                               sizes="(max-width: 1024px) 100vw, 700px"
-                              className="object-contain"
+                              className="object-contain select-none pointer-events-none"
+                              draggable={false}
                               priority={idx === 0}
                             />
                           ) : (
@@ -1071,7 +1078,9 @@ export default function ProductPageClient() {
                             <Button
                               size="sm"
                               variant="secondary"
+                              type="button"
                               onClick={() => {
+                                preserveScroll();
                                 setLightboxIndex(idx);
                                 setOpenLightbox(true);
                               }}
@@ -1097,15 +1106,16 @@ export default function ProductPageClient() {
 
               {/* horizontal thumbs */}
               {Array.isArray(gallery) && gallery.length > 1 && (
-                <div className="p-3">
-                  <ScrollArea className="w-full">
+                <div className="p-5">
+                  <ScrollArea className="w-full thumbs-scrollarea">
                     <motion.div
-                      className="flex gap-2.5 md:gap-3 pb-1"
+                      className="thumbs-row flex pt-1 ps-1  gap-2.5 md:gap-3 pb-1 pe-4"
                       {...(animateUI ? fadeIn : {})}
                     >
                       {gallery.map((g, i) => (
                         <motion.button
                           key={g?._id || g?.path || i}
+                          type="button"
                           onClick={() => {
                             mainSwiperRef.current?.slideTo(i);
                             setActiveImg(i);
@@ -1125,7 +1135,8 @@ export default function ProductPageClient() {
                               alt={g?.alt || `thumb-${i}`}
                               fill
                               sizes="64px"
-                              className="object-cover"
+                              className="object-cover select-none pointer-events-none"
+                              draggable={false}
                             />
                           ) : (
                             <div className="w-full h-full bg-muted" />
@@ -1195,7 +1206,7 @@ export default function ProductPageClient() {
                 </span>
               </div>
 
-              {/* Variants + Counter (always show counter) */}
+              {/* Variants + Counter (counter always visible) */}
               <div
                 className={`flex items-center gap-3 ${
                   variants.length > 0 ? "justify-between" : "justify-start"
@@ -1209,8 +1220,8 @@ export default function ProductPageClient() {
                       return (
                         <motion.button
                           key={v?._id || i}
-                          onClick={() => onVariantClick(i)}
                           type="button"
+                          onClick={() => onVariantClick(i)}
                           whileHover={{ scale: 1.06 }}
                           whileTap={{ scale: 0.97 }}
                           className={`relative h-10 w-10 rounded-full overflow-hidden border transition ${
@@ -1227,7 +1238,8 @@ export default function ProductPageClient() {
                               alt={v?.variantName || `variant-${i}`}
                               fill
                               sizes="40px"
-                              className="object-cover"
+                              className="object-cover select-none pointer-events-none"
+                              draggable={false}
                             />
                           ) : (
                             <div className="h-full w-full bg-muted" />
@@ -1238,7 +1250,6 @@ export default function ProductPageClient() {
                   </div>
                 )}
 
-                {/* qty +/− ALWAYS visible */}
                 <div className="inline-flex items-center rounded-md border bg-background shrink-0">
                   <Button
                     type="button"
@@ -1315,7 +1326,7 @@ export default function ProductPageClient() {
                             alt={img?.alt || `desc-${i}`}
                             loading="lazy"
                             draggable={false}
-                            className="block w-full h-auto object-contain"
+                            className="block w-full h-auto object-contain select-none"
                           />
                         ) : (
                           <div key={i} className="h-[40vh] bg-muted" />
@@ -1383,6 +1394,7 @@ export default function ProductPageClient() {
           setActiveImg(lightboxIndex);
           if (mainSwiperRef.current?.slideTo)
             mainSwiperRef.current.slideTo(lightboxIndex);
+          preserveScroll();
         }}
         slides={(gallery || []).map((g) => ({
           src: g?.path || "",
@@ -1400,7 +1412,7 @@ export default function ProductPageClient() {
         }}
       />
 
-      {/* global styles to eliminate extra width/scroll */}
+      {/* global styles to eliminate extra width/scroll + gallery safety */}
       <style jsx global>{`
         html,
         body {
@@ -1436,12 +1448,46 @@ export default function ProductPageClient() {
           margin: 0;
           border: 0;
           padding: 0;
+          user-select: none;
+          -webkit-user-drag: none;
         }
-        .swiper,
-        .swiper-wrapper,
-        .swiper-slide {
-          min-width: 0;
-          overflow: hidden;
+
+        /* Swiper safety: ensure slides follow content height */
+        .product-gallery .swiper {
+          height: auto !important;
+        }
+        .product-gallery .swiper-wrapper {
+          height: auto !important;
+        }
+        .product-gallery .swiper-slide {
+          height: auto !important;
+        }
+
+        /* Defensive sizing for main box */
+        .product-gallery .slide-box {
+          min-height: 200px;
+        }
+        /* --- Thumbnails end-gutter fix --- */
+        .product-gallery .thumbs-row {
+          /* Ensure the last item has breathing room inside the rounded container */
+          padding-inline-end: 1rem; /* tailwind pe-4 mirrors this, but keep as CSS backup */
+        }
+
+        /* Add a flexible spacer after the last thumb so it never gets clipped */
+        .product-gallery .thumbs-row::after {
+          content: "";
+          display: block;
+          flex: 0 0 14px; /* end buffer so the yellow ring never touches the edge */
+        }
+
+        /* Make sure thumbs don’t shrink in weird layouts */
+        .product-gallery .thumbs-row > button {
+          flex: 0 0 auto;
+        }
+
+        /* Stabilize scrollbar space so width doesn’t change on hover/scroll */
+        .product-gallery .thumbs-scrollarea {
+          scrollbar-gutter: stable both-edges;
         }
       `}</style>
     </main>
