@@ -15,7 +15,7 @@ const PATHAO_RETURN_HEADER_SECRET =
   "f3992ecc-59da-4cbe-a049-a13da2018d51";
 
 // They send your shared secret in X-PATHAO-Signature (plain compare per docs)
-const WEBHOOK_SHARED_SECRET = process.env.PATHAO_WEBHOOK_SECRET || "";
+const WEBHOOK_SHARED_SECRET = process.env.PATHAO_WEBHOOK_SECRET || "pwhk_2b8c0c3f6a1e47d890f79e1a01a3d5e2";
 
 /** --------- DB connect (cached) --------- **/
 let cached = global._mongoose;
