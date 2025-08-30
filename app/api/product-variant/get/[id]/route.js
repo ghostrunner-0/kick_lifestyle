@@ -12,8 +12,8 @@ export async function GET(req, { params }) {
     if (!admin) return response(false, 403, "unauthorized");
 
     await connectDB();
-
-    const { id } = params || {};
+    const param = await params;
+    const { id } = param || {};
     if (!id) return response(false, 400, "Missing variant id/sku");
 
     // Match by ObjectId if valid; otherwise treat as SKU (case-insensitive via uppercasing)
@@ -32,7 +32,7 @@ export async function GET(req, { params }) {
           "mrp",
           "specialPrice",
           "sku",
-          "stock",            // ✅ include variant stock
+          "stock", // ✅ include variant stock
           "swatchImage",
           "productGallery",
           "createdAt",

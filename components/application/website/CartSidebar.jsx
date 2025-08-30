@@ -52,7 +52,9 @@ export default function CartSidebar({ open, onOpenChange }) {
         const key = `${it.productId}|${it.variant?.id || ""}`;
         const title = it.variant ? `${it.name} — ${it.variant.name}` : it.name;
         const isFree = !!it.isFreeItem;
-        const lineTotal = isFree ? 0 : (Number(it.price) || 0) * (Number(it.qty) || 0);
+        const lineTotal = isFree
+          ? 0
+          : (Number(it.price) || 0) * (Number(it.qty) || 0);
         const img = it.image || it.variant?.image || "/placeholder.png";
         return { key, title, lineTotal, img, it, isFree };
       }),
@@ -114,10 +116,17 @@ export default function CartSidebar({ open, onOpenChange }) {
           {items.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center gap-3 text-center px-4">
               <span className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-                <ShoppingCart className="h-8 w-8 text-slate-600" aria-hidden="true" />
+                <ShoppingCart
+                  className="h-8 w-8 text-slate-600"
+                  aria-hidden="true"
+                />
               </span>
-              <div className="text-sm font-medium text-slate-900">Your cart is empty</div>
-              <div className="text-xs text-muted-foreground">Add items to see them here</div>
+              <div className="text-sm font-medium text-slate-900">
+                Your cart is empty
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Add items to see them here
+              </div>
             </div>
           ) : (
             <ul className="divide-y rounded-xl border bg-white">
@@ -141,12 +150,15 @@ export default function CartSidebar({ open, onOpenChange }) {
                           {title}
                         </div>
                         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-600">
-                          <span>{it.isFreeItem ? formatNpr(0) : formatNpr(it.price)}</span>
-                          {!it.isFreeItem && Number(it.mrp) > Number(it.price) && (
-                            <span className="line-through text-slate-400">
-                              MRP {formatNpr(it.mrp)}
-                            </span>
-                          )}
+                          <span>
+                            {it.isFreeItem ? formatNpr(0) : formatNpr(it.price)}
+                          </span>
+                          {!it.isFreeItem &&
+                            Number(it.mrp) > Number(it.price) && (
+                              <span className="line-through text-slate-400">
+                                MRP {formatNpr(it.mrp)}
+                              </span>
+                            )}
                           {it?.flags?.capped && (
                             <span className="text-amber-600">(qty capped)</span>
                           )}
@@ -208,36 +220,37 @@ export default function CartSidebar({ open, onOpenChange }) {
         </div>
 
         {/* Footer (no subtotal card; total only in button) */}
-    <div className="shrink-0 px-4 pb-4 pt-2 bg-white/80 backdrop-blur border-t">
-      {repricing ? (
-        <Button
-          className="mt-0 w-full h-11 rounded-xl text-[14px] font-semibold"
-          disabled
-        >
-          Updating…
-        </Button>
-      ) : items.length > 0 ? (
-        <Button
-          asChild
-          className="mt-0 w-full h-11 rounded-xl text-[14px] font-semibold"
-          aria-label={`Go to checkout — ${formatNpr(subtotal)}`}
-        >
-          <Link
-            href="/checkout"
-            onClick={() => {
-              // optionally close the sheet if parent passed a handler
-              try { onOpenChange?.(false); } catch {}
-            }}
-          >
-            {`Checkout — ${formatNpr(subtotal)}`}
-          </Link>
-        </Button>
-      ) : (
-        <div className="h-3" />
-      )}
-      <div className="pt-[env(safe-area-inset-bottom)]" />
-</div>
-
+        <div className="shrink-0 px-4 pb-4 pt-2 bg-white/80 backdrop-blur border-t">
+          {repricing ? (
+            <Button
+              className="mt-0 w-full h-11 rounded-xl text-[14px] font-semibold"
+              disabled
+            >
+              Updating…
+            </Button>
+          ) : items.length > 0 ? (
+            <Button
+              asChild
+              className="mt-0 w-full h-11 rounded-xl text-[14px] font-semibold"
+              aria-label={`Go to checkout — ${formatNpr(subtotal)}`}
+            >
+              <Link
+                href="/checkout"
+                onClick={() => {
+                  // optionally close the sheet if parent passed a handler
+                  try {
+                    onOpenChange?.(false);
+                  } catch {}
+                }}
+              >
+                {`Checkout — ${formatNpr(subtotal)}`}
+              </Link>
+            </Button>
+          ) : (
+            <div className="h-3" />
+          )}
+          <div className="pt-[env(safe-area-inset-bottom)]" />
+        </div>
       </SheetContent>
     </Sheet>
   );
