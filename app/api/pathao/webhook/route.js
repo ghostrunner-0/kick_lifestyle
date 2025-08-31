@@ -1,9 +1,9 @@
 // app/api/pathao/webhook/route.js
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
-import Order from "@/models/Order";
-import Shipping from "@/models/Shipping";
-import PathaoLedger from "@/models/PathaoLedger";
+import Order from "@/models/Orders.model";
+import Shipping from "@/models/Shipping.model";
+import PathaoLedger from "@/models/PathaoLedger.model";
 
 /** --------- Config --------- **/
 const INBOUND_SIGNATURE_HEADER = "x-pathao-signature";
