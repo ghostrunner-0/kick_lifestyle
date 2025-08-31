@@ -9,12 +9,12 @@ import PathaoLedger from "@/models/PathaoLedger";
 const INBOUND_SIGNATURE_HEADER = "x-pathao-signature";
 const REQUIRED_RETURN_HEADER = "X-Pathao-Merchant-Webhook-Integration-Secret";
 
-// Pathao requires this exact value back in your response header:
+// MUST be exactly this for Pathao's handshake check:
 const PATHAO_RETURN_HEADER_SECRET =
   process.env.PATHAO_RETURN_HEADER_SECRET ||
   "f3992ecc-59da-4cbe-a049-a13da2018d51";
 
-// They send your shared secret in X-PATHAO-Signature (plain compare per docs)
+// Pathao sends back the shared secret in X-PATHAO-Signature for real events
 const WEBHOOK_SHARED_SECRET =
   process.env.PATHAO_WEBHOOK_SECRET || "pwhk_2b8c0c3f6a1e47d890f79e1a01a3d5e2";
 
@@ -36,29 +36,19 @@ async function dbConnect() {
 }
 
 /** --------- Helpers --------- **/
-function withPathaoHeader(json, { status = 200 } = {}) {
+function jsonWithHeader(json, { status = 200 } = {}) {
   const res = NextResponse.json(json, { status });
+  // Header names are case-insensitive, but we set their exact-cased name anyway:
   res.headers.set(REQUIRED_RETURN_HEADER, PATHAO_RETURN_HEADER_SECRET);
   return res;
 }
-
-function unauthorized(msg = "Invalid signature") {
-  return withPathaoHeader({ ok: false, error: msg }, { status: 401 });
-}
-
-function badRequest(msg = "Bad request") {
-  return withPathaoHeader({ ok: false, error: msg }, { status: 400 });
-}
+const ack202 = (msg) => jsonWithHeader({ ok: true, received: msg }, { status: 202 });
+const ack200 = (msg) => jsonWithHeader({ ok: true, received: msg }, { status: 200 });
+const badRequest = (msg) => jsonWithHeader({ ok: false, error: msg }, { status: 400 });
+const unauthorized = (msg) => jsonWithHeader({ ok: false, error: msg }, { status: 401 });
 
 /** --------- Core Handler --------- **/
 export async function POST(req) {
-  const sig = req.headers.get(INBOUND_SIGNATURE_HEADER) || "";
-
-  // Validate signature
-  if (!WEBHOOK_SHARED_SECRET || sig !== WEBHOOK_SHARED_SECRET) {
-    return unauthorized();
-  }
-
   let payload;
   try {
     payload = await req.json();
@@ -66,31 +56,28 @@ export async function POST(req) {
     return badRequest("Invalid JSON");
   }
 
-  const event = String(payload?.event || "")
-    .toLowerCase()
-    .trim();
+  const event = String(payload?.event || "").toLowerCase().trim();
 
-  // Special ping: must return 202 per Pathao docs
+  // 1) Handshake: must reply 202 + header, do NOT require signature here
   if (event === "webhook_integration") {
-    return withPathaoHeader({ ok: true, received: event }, { status: 202 });
+    return ack202("webhook_integration");
   }
 
-  // NEW: Ignore anything that doesn't carry a merchant order id
+  // 2) For real events, require the plain shared secret in the header
+  const sig = req.headers.get(INBOUND_SIGNATURE_HEADER) || "";
+  if (!WEBHOOK_SHARED_SECRET || sig !== WEBHOOK_SHARED_SECRET) {
+    return unauthorized("Invalid signature");
+  }
+
+  // 3) Only attend events that carry merchant_order_id (your requirement)
   const displayOrderId = payload?.merchant_order_id || null;
   if (!displayOrderId) {
-    // Ack quickly so Pathao doesn't retry, but do nothing else
-    return withPathaoHeader({
-      ok: true,
-      ignored: true,
-      reason: "missing_merchant_order_id",
-      received: event || "unknown",
-    });
+    return ack200("ignored_missing_merchant_order_id");
   }
 
   try {
     await dbConnect();
 
-    // Common payload bits
     const consignmentId = payload?.consignment_id || null;
     const storeId = payload?.store_id || null;
     const deliveryFee = Number(payload?.delivery_fee ?? 0) || 0;
@@ -100,14 +87,11 @@ export async function POST(req) {
     const updatedAt = payload?.updated_at || null;
     const timestamp = payload?.timestamp || null;
 
-    const order = await Order.findOne({
-      display_order_id: displayOrderId,
-    }).lean();
+    const order = await Order.findOne({ display_order_id: displayOrderId }).lean();
 
-    /** order.created → upsert Shipping, attach tracking to Order, ledger */
+    // --- order.created: upsert Shipping, attach tracking to Order, ledger
     if (event === "order.created") {
-      const phoneNumber =
-        order?.customer?.phone || order?.user?.phone || "unknown";
+      const phoneNumber = order?.customer?.phone || order?.user?.phone || "unknown";
 
       await Shipping.findOneAndUpdate(
         { consignmentId: consignmentId || "__unknown__" },
@@ -148,9 +132,11 @@ export async function POST(req) {
         timestampRaw: timestamp,
         netPayout: 0,
       });
+
+      return ack200(event);
     }
 
-    /** order.updated → ledger trail */
+    // --- order.updated: ledger trail
     if (event === "order.updated") {
       await PathaoLedger.create({
         consignmentId,
@@ -165,9 +151,10 @@ export async function POST(req) {
         timestampRaw: timestamp,
         netPayout: 0,
       });
+      return ack200(event);
     }
 
-    /** order.delivered → mark completed (+COD paid), ledger */
+    // --- order.delivered: mark completed (+COD paid), ledger
     if (event === "order.delivered") {
       if (order) {
         const setOps = {
@@ -176,6 +163,7 @@ export async function POST(req) {
         };
         if (consignmentId) setOps["shipping.trackingId"] = consignmentId;
         if (order.paymentMethod === "cod") setOps["payment.status"] = "paid";
+
         await Order.updateOne({ _id: order._id }, { $set: setOps });
       }
 
@@ -192,9 +180,11 @@ export async function POST(req) {
         timestampRaw: timestamp,
         netPayout: Math.max(0, collectedAmount - deliveryFee),
       });
+
+      return ack200(event);
     }
 
-    /** order.returned → mark cancelled, ledger */
+    // --- order.returned: mark cancelled, ledger
     if (event === "order.returned") {
       if (order) {
         const setOps = {
@@ -218,9 +208,11 @@ export async function POST(req) {
         timestampRaw: timestamp,
         netPayout: -deliveryFee,
       });
+
+      return ack200(event);
     }
 
-    /** order.delivery-failed → mark cancelled, ledger */
+    // --- order.delivery-failed: mark cancelled, ledger
     if (event === "order.delivery-failed") {
       if (order) {
         const setOps = {
@@ -244,9 +236,11 @@ export async function POST(req) {
         timestampRaw: timestamp,
         netPayout: -deliveryFee,
       });
+
+      return ack200(event);
     }
 
-    /** order.paid (Payment Invoice) → ledger (invoice id captured) */
+    // --- order.paid (Payment Invoice): ledger (capture invoice id)
     if (event === "order.paid") {
       await PathaoLedger.create({
         consignmentId,
@@ -261,13 +255,34 @@ export async function POST(req) {
         timestampRaw: timestamp,
         netPayout: -deliveryFee,
       });
+
+      return ack200(event);
     }
 
-    return withPathaoHeader({ ok: true, received: event || "unknown" });
+    // Fallback: ACK unknown/other order.* events so Pathao doesn't retry
+    if (event.startsWith("order.")) {
+      await PathaoLedger.create({
+        consignmentId,
+        displayOrderId,
+        event,
+        storeId,
+        deliveryFee,
+        collectedAmount: Number(payload?.collected_amount ?? 0) || 0,
+        invoiceId: invoiceId || null,
+        reason: reason || null,
+        updatedAtRaw: updatedAt,
+        timestampRaw: timestamp,
+        netPayout: 0,
+      });
+      return ack200(event);
+    }
+
+    // Non-order events: just ACK
+    return ack200(event || "unknown");
   } catch (err) {
     console.error("Pathao webhook error:", err);
-    // Ack to avoid retries; you've already signature-checked.
-    return withPathaoHeader({ ok: false, error: "internal_error" });
+    // Still ACK to prevent excessive retries
+    return jsonWithHeader({ ok: false, error: "internal_error" }, { status: 200 });
   }
 }
 
