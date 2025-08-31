@@ -9,12 +9,12 @@ import PathaoLedger from "@/models/PathaoLedger.model";
 const INBOUND_SIGNATURE_HEADER = "x-pathao-signature";
 const REQUIRED_RETURN_HEADER = "X-Pathao-Merchant-Webhook-Integration-Secret";
 
-// MUST be exactly this for Pathao's handshake check:
+// Must match Pathao’s docs exactly:
 const PATHAO_RETURN_HEADER_SECRET =
   process.env.PATHAO_RETURN_HEADER_SECRET ||
   "f3992ecc-59da-4cbe-a049-a13da2018d51";
 
-// Pathao sends back the shared secret in X-PATHAO-Signature for real events
+// Your shared secret Pathao will send back in X-PATHAO-Signature for real events
 const WEBHOOK_SHARED_SECRET =
   process.env.PATHAO_WEBHOOK_SECRET || "pwhk_2b8c0c3f6a1e47d890f79e1a01a3d5e2";
 
@@ -36,16 +36,17 @@ async function dbConnect() {
 }
 
 /** --------- Helpers --------- **/
-function jsonWithHeader(json, { status = 200 } = {}) {
+function withPathaoHeader(json, { status = 200 } = {}) {
   const res = NextResponse.json(json, { status });
-  // Header names are case-insensitive, but we set their exact-cased name anyway:
+  // exact header name/value required by Pathao:
   res.headers.set(REQUIRED_RETURN_HEADER, PATHAO_RETURN_HEADER_SECRET);
   return res;
 }
-const ack202 = (msg) => jsonWithHeader({ ok: true, received: msg }, { status: 202 });
-const ack200 = (msg) => jsonWithHeader({ ok: true, received: msg }, { status: 200 });
-const badRequest = (msg) => jsonWithHeader({ ok: false, error: msg }, { status: 400 });
-const unauthorized = (msg) => jsonWithHeader({ ok: false, error: msg }, { status: 401 });
+
+const ack202 = (msg) => withPathaoHeader({ ok: true, received: msg }, { status: 202 });
+const ack200 = (msg) => withPathaoHeader({ ok: true, received: msg }, { status: 200 });
+const badRequest = (msg) => withPathaoHeader({ ok: false, error: msg }, { status: 400 });
+const unauthorized = (msg) => withPathaoHeader({ ok: false, error: msg }, { status: 401 });
 
 /** --------- Core Handler --------- **/
 export async function POST(req) {
@@ -58,38 +59,39 @@ export async function POST(req) {
 
   const event = String(payload?.event || "").toLowerCase().trim();
 
-  // 1) Handshake: must reply 202 + header, do NOT require signature here
+  // 1) Handshake (no signature check, MUST be 202 + header)
   if (event === "webhook_integration") {
     return ack202("webhook_integration");
   }
 
-  // 2) For real events, require the plain shared secret in the header
+  // 2) Real events require signature check (plain compare per docs)
   const sig = req.headers.get(INBOUND_SIGNATURE_HEADER) || "";
   if (!WEBHOOK_SHARED_SECRET || sig !== WEBHOOK_SHARED_SECRET) {
     return unauthorized("Invalid signature");
   }
 
-  // 3) Only attend events that carry merchant_order_id (your requirement)
+  // 3) Only attend events that provide merchant_order_id
   const displayOrderId = payload?.merchant_order_id || null;
   if (!displayOrderId) {
+    // ack so Pathao doesn't retry
     return ack200("ignored_missing_merchant_order_id");
   }
 
   try {
     await dbConnect();
 
+    // Common bits
     const consignmentId = payload?.consignment_id || null;
     const storeId = payload?.store_id || null;
     const deliveryFee = Number(payload?.delivery_fee ?? 0) || 0;
     const collectedAmount = Number(payload?.collected_amount ?? 0) || 0;
-    const invoiceId = payload?.invoice_id || null;
     const reason = payload?.reason || null;
     const updatedAt = payload?.updated_at || null;
     const timestamp = payload?.timestamp || null;
 
     const order = await Order.findOne({ display_order_id: displayOrderId }).lean();
 
-    // --- order.created: upsert Shipping, attach tracking to Order, ledger
+    // --- order.created: attach tracking to Order & upsert Shipping (NO ledger)
     if (event === "order.created") {
       const phoneNumber = order?.customer?.phone || order?.user?.phone || "unknown";
 
@@ -118,43 +120,15 @@ export async function POST(req) {
           }
         );
       }
-
-      await PathaoLedger.create({
-        consignmentId,
-        displayOrderId,
-        event,
-        storeId,
-        deliveryFee,
-        collectedAmount: 0,
-        invoiceId: null,
-        reason: null,
-        updatedAtRaw: updatedAt,
-        timestampRaw: timestamp,
-        netPayout: 0,
-      });
-
       return ack200(event);
     }
 
-    // --- order.updated: ledger trail
+    // --- order.updated: no ledger (we just ACK)
     if (event === "order.updated") {
-      await PathaoLedger.create({
-        consignmentId,
-        displayOrderId,
-        event,
-        storeId,
-        deliveryFee,
-        collectedAmount: 0,
-        invoiceId: null,
-        reason: null,
-        updatedAtRaw: updatedAt,
-        timestampRaw: timestamp,
-        netPayout: 0,
-      });
       return ack200(event);
     }
 
-    // --- order.delivered: mark completed (+COD paid), ledger
+    // --- order.delivered: mark completed (+ set COD paid), WRITE LEDGER
     if (event === "order.delivered") {
       if (order) {
         const setOps = {
@@ -163,7 +137,6 @@ export async function POST(req) {
         };
         if (consignmentId) setOps["shipping.trackingId"] = consignmentId;
         if (order.paymentMethod === "cod") setOps["payment.status"] = "paid";
-
         await Order.updateOne({ _id: order._id }, { $set: setOps });
       }
 
@@ -172,19 +145,21 @@ export async function POST(req) {
         displayOrderId,
         event,
         storeId,
+        currency: "NPR",
         deliveryFee,
         collectedAmount,
+        netPayout: Math.max(0, collectedAmount - deliveryFee),
         invoiceId: null,
         reason: null,
         updatedAtRaw: updatedAt,
         timestampRaw: timestamp,
-        netPayout: Math.max(0, collectedAmount - deliveryFee),
+        raw: payload,
       });
 
       return ack200(event);
     }
 
-    // --- order.returned: mark cancelled, ledger
+    // --- order.returned: mark cancelled, WRITE LEDGER
     if (event === "order.returned") {
       if (order) {
         const setOps = {
@@ -200,19 +175,21 @@ export async function POST(req) {
         displayOrderId,
         event,
         storeId,
+        currency: "NPR",
         deliveryFee,
         collectedAmount: 0,
+        netPayout: -deliveryFee,
         invoiceId: null,
         reason: reason || "returned",
         updatedAtRaw: updatedAt,
         timestampRaw: timestamp,
-        netPayout: -deliveryFee,
+        raw: payload,
       });
 
       return ack200(event);
     }
 
-    // --- order.delivery-failed: mark cancelled, ledger
+    // --- order.delivery-failed: mark cancelled (NO ledger)
     if (event === "order.delivery-failed") {
       if (order) {
         const setOps = {
@@ -222,67 +199,20 @@ export async function POST(req) {
         if (consignmentId) setOps["shipping.trackingId"] = consignmentId;
         await Order.updateOne({ _id: order._id }, { $set: setOps });
       }
-
-      await PathaoLedger.create({
-        consignmentId,
-        displayOrderId,
-        event,
-        storeId,
-        deliveryFee,
-        collectedAmount: 0,
-        invoiceId: null,
-        reason: reason || "delivery_failed",
-        updatedAtRaw: updatedAt,
-        timestampRaw: timestamp,
-        netPayout: -deliveryFee,
-      });
-
       return ack200(event);
     }
 
-    // --- order.paid (Payment Invoice): ledger (capture invoice id)
-    if (event === "order.paid") {
-      await PathaoLedger.create({
-        consignmentId,
-        displayOrderId,
-        event,
-        storeId,
-        deliveryFee,
-        collectedAmount: 0,
-        invoiceId: invoiceId || null,
-        reason: null,
-        updatedAtRaw: updatedAt,
-        timestampRaw: timestamp,
-        netPayout: -deliveryFee,
-      });
-
-      return ack200(event);
-    }
-
-    // Fallback: ACK unknown/other order.* events so Pathao doesn't retry
+    // --- order.paid, others: just ACK (NO ledger)
     if (event.startsWith("order.")) {
-      await PathaoLedger.create({
-        consignmentId,
-        displayOrderId,
-        event,
-        storeId,
-        deliveryFee,
-        collectedAmount: Number(payload?.collected_amount ?? 0) || 0,
-        invoiceId: invoiceId || null,
-        reason: reason || null,
-        updatedAtRaw: updatedAt,
-        timestampRaw: timestamp,
-        netPayout: 0,
-      });
       return ack200(event);
     }
 
-    // Non-order events: just ACK
+    // Non-order events: ACK
     return ack200(event || "unknown");
   } catch (err) {
     console.error("Pathao webhook error:", err);
-    // Still ACK to prevent excessive retries
-    return jsonWithHeader({ ok: false, error: "internal_error" }, { status: 200 });
+    // ACK to avoid retries; you already checked signature.
+    return withPathaoHeader({ ok: false, error: "internal_error" }, { status: 200 });
   }
 }
 
