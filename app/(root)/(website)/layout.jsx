@@ -10,7 +10,7 @@ import { ProductProvider } from "@/components/providers/ProductProvider";
 import BottomNav from "@/components/application/website/BottomNav";
 import { deriveKey } from "@/components/providers/ProductProvider";
 import AuthHydrator from "@/components/providers/AuthHydrator"; // <-- add this
-import { SpeedInsights } from "@vercel/speed-insights/next"
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const poppins = Poppins({
   subsets: ["latin"],
@@ -19,9 +19,7 @@ const poppins = Poppins({
 });
 
 const SITE_URL =
-  process.env.NEXT_PUBLIC_BASE_URL ||
-  process.env.NEXT_PUBLIC_SITE_URL ||
-  "";
+  process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || "";
 
 export default async function Layout({ children }) {
   let initialCategories = [];
@@ -42,7 +40,9 @@ export default async function Layout({ children }) {
     if (initialCategories.length) {
       initialActiveKey = deriveKey(initialCategories[0]);
       const prodRes = await fetch(
-        `${SITE_URL}/api/website/products?category=${encodeURIComponent(initialActiveKey)}`,
+        `${SITE_URL}/api/website/products?category=${encodeURIComponent(
+          initialActiveKey
+        )}`,
         { next: { revalidate: 120 } }
       );
       const prodJson = await prodRes.json();
@@ -52,7 +52,6 @@ export default async function Layout({ children }) {
 
   return (
     <html lang="en">
-      <SpeedInsights/>
       <body className={poppins.className}>
         <ReactQueryProvider>
           {/* <-- Hydrate Redux from NextAuth session if needed */}
@@ -65,6 +64,7 @@ export default async function Layout({ children }) {
             >
               <Header />
               <main className="pb-16 md:pb-0">{children}</main>
+              <SpeedInsights />
               <Footer />
               <BottomNav />
             </ProductProvider>
