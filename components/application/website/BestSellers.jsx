@@ -6,6 +6,7 @@ import ProductCard from "@/components/application/website/ProductCard";
 import { useCategories } from "@/components/providers/CategoriesProvider";
 import { useProducts, deriveKey } from "@/components/providers/ProductProvider";
 import { motion, AnimatePresence } from "framer-motion";
+import Productcaresousel from "./Productcaresousel";
 
 /* de-dup */
 const canonicalKey = (p) => {
@@ -34,15 +35,8 @@ const PillSkeleton = () => (
   <span className="h-9 sm:h-10 w-24 rounded-full bg-slate-100 animate-pulse" />
 );
 
-/* motion */
-const gridVariants = {
-  hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { staggerChildren: 0.05, when: "beforeChildren" } },
-};
-const cardVariants = {
-  hidden: { opacity: 0, y: 8, scale: 0.99 },
-  show: { opacity: 1, y: 0, scale: 1, transition: { type: "spring", stiffness: 300, damping: 26 } },
-};
+/* minimal motion for header/tabs */
+const fade = { hidden: { opacity: 0 }, show: { opacity: 1 } };
 
 export default function BestSellers({ className = "" }) {
   const { categories = [], isLoading: catLoading } = useCategories();
@@ -54,20 +48,27 @@ export default function BestSellers({ className = "" }) {
   );
 
   const displayProducts = useMemo(() => {
-    if (prodLoading) return Array.from({ length: 8 }).map(() => null);
-    const uniq = dedupeByCanonical(products);
+    const uniq = dedupeByCanonical(products || []);
     return uniq.slice(0, 24);
-  }, [prodLoading, products]);
+  }, [products]);
 
   if (!categories?.length && !catLoading) return null;
 
   return (
     <section className={"py-8 " + className}>
-      {/* ⬇️ widened to match Header (1600px max with gutters) */}
+      {/* keep exact container paddings */}
       <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header row */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-          <h2 className="shrink-0 text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900" title="Top Picks For You">
+        <motion.div
+          variants={fade}
+          initial="hidden"
+          animate="show"
+          className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4"
+        >
+          <h2
+            className="shrink-0 text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900"
+            title="Top Picks For You"
+          >
             Top Picks For You
           </h2>
 
@@ -104,12 +105,12 @@ export default function BestSellers({ className = "" }) {
                   })}
             </div>
           </div>
-        </div>
+        </motion.div>
 
-        {/* Products grid — original card size (1/2/3/4 columns) */}
+        {/* Carousel (keeps same spacing; no extra left space; no view-all) */}
         <div className="mt-6">
-          <AnimatePresence mode="popLayout">
-            {displayProducts.length === 0 && !prodLoading ? (
+          <AnimatePresence mode="wait">
+            {(!displayProducts.length && !prodLoading) ? (
               <motion.div
                 key="empty"
                 initial={{ opacity: 0 }}
@@ -121,30 +122,25 @@ export default function BestSellers({ className = "" }) {
               </motion.div>
             ) : (
               <motion.div
-                key={activeKey || "grid"}
-                variants={gridVariants}
-                initial="hidden"
-                animate="show"
-                exit="hidden"
-                className="
-                  grid gap-6
-                  grid-cols-1
-                  sm:grid-cols-2
-                  md:grid-cols-3
-                  xl:grid-cols-4
-                "
+                key={activeKey || "carousel"}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
               >
-                {displayProducts.map((p, i) => (
-                  <motion.div variants={cardVariants} key={(p && canonicalKey(p)) || `skeleton-${i}`} className="h-full">
-                    {prodLoading || !p ? (
-                      <div className="h-[340px] md:h-[380px] rounded-2xl bg-slate-100 animate-pulse" />
-                    ) : (
-                      <div className="h-full">
-                        <ProductCard product={p} />
-                      </div>
-                    )}
-                  </motion.div>
-                ))}
+                <Productcaresousel
+                  items={displayProducts}
+                  loading={prodLoading}
+                  skeletonCount={8}
+                  /* match old grid spacing and columns */
+                  gapClass="gap-6"
+                  itemBasisClass="basis-full sm:basis-1/2 md:basis-1/3 xl:basis-1/4"
+                  showEdges={false}
+                  renderItem={(p) => (
+                    <div className="h-full">
+                      <ProductCard product={p} />
+                    </div>
+                  )}
+                />
               </motion.div>
             )}
           </AnimatePresence>
