@@ -61,6 +61,7 @@
     "@tiptap/extension-underline": "^3.3.0",
     "@tiptap/react": "^3.3.0",
     "@tiptap/starter-kit": "^3.3.0",
+    "@vercel/speed-insights": "^1.2.0",
     "ag-grid-react": "^34.1.1",
     "axios": "^1.11.0",
     "bcryptjs": "^3.0.2",

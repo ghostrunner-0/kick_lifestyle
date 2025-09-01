@@ -10,6 +10,7 @@ import { ProductProvider } from "@/components/providers/ProductProvider";
 import BottomNav from "@/components/application/website/BottomNav";
 import { deriveKey } from "@/components/providers/ProductProvider";
 import AuthHydrator from "@/components/providers/AuthHydrator"; // <-- add this
+import { SpeedInsights } from "@vercel/speed-insights/next"
 
 const poppins = Poppins({
   subsets: ["latin"],
@@ -51,6 +52,7 @@ export default async function Layout({ children }) {
 
   return (
     <html lang="en">
+      <SpeedInsights/>
       <body className={poppins.className}>
         <ReactQueryProvider>
           {/* <-- Hydrate Redux from NextAuth session if needed */}
