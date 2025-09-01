@@ -11,7 +11,8 @@ import Productcaresousel from "./Productcaresousel";
 /* de-dup */
 const canonicalKey = (p) => {
   if (!p) return null;
-  const slug = p.slug || p.handle || p.data?.slug || p.productSlug || p.seo?.slug;
+  const slug =
+    p.slug || p.handle || p.data?.slug || p.productSlug || p.seo?.slug;
   if (slug) return `slug:${String(slug).toLowerCase()}`;
   const parent = p.parentId || p.productId || p.pid || p.masterId || p.groupId;
   if (parent) return `pid:${parent}`;
@@ -35,12 +36,17 @@ const PillSkeleton = () => (
   <span className="h-9 sm:h-10 w-24 rounded-full bg-slate-100 animate-pulse" />
 );
 
-/* minimal motion for header/tabs */
+/* minimal motion for header */
 const fade = { hidden: { opacity: 0 }, show: { opacity: 1 } };
 
 export default function BestSellers({ className = "" }) {
   const { categories = [], isLoading: catLoading } = useCategories();
-  const { products = [], isLoading: prodLoading, activeKey, setActiveKey } = useProducts();
+  const {
+    products = [],
+    isLoading: prodLoading,
+    activeKey,
+    setActiveKey,
+  } = useProducts();
 
   const catKeys = useMemo(
     () => (Array.isArray(categories) ? categories.map(deriveKey) : []),
@@ -58,7 +64,7 @@ export default function BestSellers({ className = "" }) {
     <section className={"py-8 " + className}>
       {/* keep exact container paddings */}
       <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header row */}
+        {/* Header row (title only now) */}
         <motion.div
           variants={fade}
           initial="hidden"
@@ -71,46 +77,46 @@ export default function BestSellers({ className = "" }) {
           >
             Top Picks For You
           </h2>
-
-          {/* Tabs */}
-          <div className="sm:ml-auto relative">
-            <div
-              role="tablist"
-              aria-label="Category filter"
-              className="flex gap-2 sm:gap-3 overflow-x-auto overflow-y-hidden pr-2 -mr-2 py-1 snap-x snap-mandatory no-scrollbar"
-            >
-              {catLoading && !categories.length
-                ? Array.from({ length: 4 }).map((_, i) => <PillSkeleton key={i} />)
-                : (categories || []).map((cat, i) => {
-                    const key = catKeys[i];
-                    const isActive = key === activeKey;
-                    return (
-                      <Button
-                        key={key || i}
-                        type="button"
-                        role="tab"
-                        aria-selected={!!isActive}
-                        onClick={() => key && setActiveKey(key)}
-                        variant="ghost"
-                        className={
-                          "snap-start shrink-0 min-w-max rounded-full h-9 sm:h-10 px-4 sm:px-6 text-[14px] sm:text-[15px] font-semibold whitespace-nowrap border transition-colors " +
-                          (isActive
-                            ? "bg-[#fcba17] hover:bg-[#e9ae12] text-slate-900 border-[#e9ae12]"
-                            : "bg-[#FFF3C2] hover:bg-[#FFE9A6] text-slate-900 border-[#F9D886]")
-                        }
-                      >
-                        {cat?.name || "Category"}
-                      </Button>
-                    );
-                  })}
-            </div>
-          </div>
         </motion.div>
-
-        {/* Carousel (keeps same spacing; no extra left space; no view-all) */}
+        {/* Category pills moved to bottom */}
+        <div className="mt-6">
+          <div
+            role="tablist"
+            aria-label="Category filter"
+            className="flex gap-2 sm:gap-3 overflow-x-auto overflow-y-hidden pr-2 -mr-2 py-1 snap-x snap-mandatory no-scrollbar"
+          >
+            {catLoading && !categories.length
+              ? Array.from({ length: 4 }).map((_, i) => (
+                  <PillSkeleton key={i} />
+                ))
+              : (categories || []).map((cat, i) => {
+                  const key = catKeys[i];
+                  const isActive = key === activeKey;
+                  return (
+                    <Button
+                      key={key || i}
+                      type="button"
+                      role="tab"
+                      aria-selected={!!isActive}
+                      onClick={() => key && setActiveKey(key)}
+                      variant="ghost"
+                      className={
+                        "snap-start shrink-0 min-w-max rounded-full h-9 sm:h-10 px-4 sm:px-6 text-[14px] sm:text-[15px] font-semibold whitespace-nowrap border transition-colors " +
+                        (isActive
+                          ? "bg-[#fcba17] hover:bg-[#e9ae12] text-slate-900 border-[#e9ae12]"
+                          : "bg-[#FFF3C2] hover:bg-[#FFE9A6] text-slate-900 border-[#F9D886]")
+                      }
+                    >
+                      {cat?.name || "Category"}
+                    </Button>
+                  );
+                })}
+          </div>
+        </div>
+        {/* Carousel */}
         <div className="mt-6">
           <AnimatePresence mode="wait">
-            {(!displayProducts.length && !prodLoading) ? (
+            {!displayProducts.length && !prodLoading ? (
               <motion.div
                 key="empty"
                 initial={{ opacity: 0 }}
@@ -134,7 +140,6 @@ export default function BestSellers({ className = "" }) {
                   /* match old grid spacing and columns */
                   gapClass="gap-6"
                   itemBasisClass="basis-full sm:basis-1/2 md:basis-1/3 xl:basis-1/4"
-                  showEdges={false}
                   renderItem={(p) => (
                     <div className="h-full">
                       <ProductCard product={p} />
