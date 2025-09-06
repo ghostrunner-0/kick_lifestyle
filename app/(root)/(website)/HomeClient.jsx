@@ -7,6 +7,7 @@ import { useProducts } from "@/components/providers/ProductProvider";
 import { useMemo } from "react";
 import KickLifestyleMarquee from "@/components/application/website/KickLifestyleMarquee";
 import BlogCarousel from "@/components/application/website/BlogCarousel";
+import HomePageBannerDisplay from "@/components/application/website/HomePageBannerDisplay"; // ← added
 
 const Trusted = dynamic(
   () => import("@/components/application/website/Trusted"),
@@ -56,10 +57,14 @@ export default function HomeClient({ initialBanners = [] }) {
         <CategoryBanner />
       </section>
 
-      {/* BestSellers placeholder caused the big gap. Tighten it (or remove CIS entirely). */}
+      {/* BestSellers */}
       <section className="content-visibility-auto contain-intrinsic-size-[460px] md:contain-intrinsic-size-[520px] xl:contain-intrinsic-size-[560px]">
-        {/* If you still see any gap, switch the line above to just: className="content-visibility-auto" */}
         <BestSellers />
+      </section>
+
+      {/* Edge-to-edge homepage banner (object-contain, no overflow) */}
+      <section className="content-visibility-auto">
+        <HomePageBannerDisplay />
       </section>
 
       {/* show the big grid only if we really have enough unique items */}
