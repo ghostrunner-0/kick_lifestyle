@@ -164,7 +164,7 @@ export default function Trusted({ testimonials = SAMPLE }) {
                 <span className="text-[#fcba17] font-semibold">Nepal</span>
               </p>
               <h2 className="mt-4 text-4xl md:text-5xl xl:text-6xl font-bold leading-tight tracking-tight text-neutral-900">
-                <span className="text-[#fcba17]">50,000+</span> satisfied
+                <span className="text-[#fcba17]">100K+</span> satisfied
                 customers
               </h2>
             </div>

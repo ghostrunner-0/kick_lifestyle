@@ -24,12 +24,12 @@ import { IoMdClose } from "react-icons/io";
 import Image from "next/image";
 import LOGO_BLACK from "@/public/assets/images/logo-black.png";
 import LOGO_WHITE from "@/public/assets/images/logo-white.png";
-import KICK_MINI from "@/public/assets/images/kick-logo.png"; // <-- compact logo
+import KICK_MINI from "@/public/assets/images/kick-logo.png";
 import { Button } from "@/components/ui/button";
 import { adminAppSiderbarMenu } from "@/lib/AdminSiderbarMenu";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 /* utilities */
 function isActive(pathname, url) {
@@ -41,46 +41,43 @@ function isActive(pathname, url) {
 
 function useLocalSections() {
   const KEY = "admin.sidebar.sections";
-  const [map, setMap] = useState({});
-  useEffect(() => {
-    if (typeof window === "undefined") return;
+  const [map, setMap] = useState(() => {
     try {
+      if (typeof window === "undefined") return {};
       const raw = localStorage.getItem(KEY);
-      if (raw) setMap(JSON.parse(raw));
-    } catch {}
-  }, []);
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  });
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
       localStorage.setItem(KEY, JSON.stringify(map));
     } catch {}
   }, [map]);
+
   return [map, setMap];
 }
 
 export default function AppSidebar() {
   const pathname = usePathname();
-  const { open, toggleSidebar, isMobile } = useSidebar(); // open = expanded on desktop
+  const { open, toggleSidebar, isMobile } = useSidebar();
   const [sections, setSections] = useLocalSections();
 
-  // Close after clicking a link on mobile
   const handleAfterNav = () => {
     if (isMobile) toggleSidebar();
   };
 
   return (
-    <Sidebar
-      /* icon = collapses to an icon rail instead of off-screen */
-      collapsible="icon"
-      className="z-50"
-    >
+    <Sidebar collapsible="icon" className="z-50">
       <SidebarHeader className="border-b h-[56px] p-0">
         <div className="flex items-center justify-between px-3">
-          {/* swap logo when collapsed */}
           {open ? (
             <>
               <Image
-                src={LOGO_BLACK.src}
+                src={LOGO_BLACK}
                 height={44}
                 width={110}
                 className="block dark:hidden"
@@ -88,7 +85,7 @@ export default function AppSidebar() {
                 priority
               />
               <Image
-                src={LOGO_WHITE.src}
+                src={LOGO_WHITE}
                 height={44}
                 width={110}
                 className="hidden dark:block"
@@ -98,7 +95,7 @@ export default function AppSidebar() {
             </>
           ) : (
             <Image
-              src={KICK_MINI.src}
+              src={KICK_MINI}
               height={28}
               width={28}
               alt="K"
@@ -107,7 +104,6 @@ export default function AppSidebar() {
             />
           )}
 
-          {/* mobile close button */}
           <Button
             type="button"
             size="icon"
@@ -125,23 +121,18 @@ export default function AppSidebar() {
         <SidebarMenu>
           {adminAppSiderbarMenu.map((menu, i) => {
             const hasChildren = !!menu.subMenu?.length;
-
-            // active check
             const parentActive =
               isActive(pathname, menu.url) ||
-              (hasChildren &&
-                menu.subMenu.some((s) => isActive(pathname, s.url)));
+              (hasChildren && menu.subMenu.some((s) => isActive(pathname, s.url)));
 
-            // persisted open state per group (keyed by title)
-            const secKey = menu.title;
+            const secKey = menu.title || `section-${i}`;
             const isOpen = sections[secKey] ?? parentActive ?? false;
-
             const setOpen = (v) =>
               setSections((m) => ({ ...m, [secKey]: Boolean(v) }));
 
             return (
               <Collapsible
-                key={i}
+                key={secKey}
                 className="group/collapsible"
                 open={isOpen}
                 onOpenChange={setOpen}
@@ -150,15 +141,21 @@ export default function AppSidebar() {
                   <CollapsibleTrigger asChild>
                     <SidebarMenuButton
                       asChild
-                      tooltip={menu.title} // <- shows a hover tooltip when collapsed
+                      isActive={parentActive}
+                      tooltip={menu.title}
                       className={[
-                        "px-2 py-3 rounded-md font-medium transition-colors",
+                        "flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors",
                         parentActive
                           ? "bg-accent text-foreground"
                           : "text-muted-foreground hover:bg-accent/60",
                       ].join(" ")}
                     >
-                      <Link href={menu.url || "#"} onClick={handleAfterNav}>
+                      <Link
+                        href={menu.url || "#"}
+                        onClick={handleAfterNav}
+                        aria-current={parentActive ? "page" : undefined}
+                        className="flex w-full items-center"
+                      >
                         {menu.icon ? <menu.icon className="shrink-0" /> : null}
                         <span className="truncate">{menu.title}</span>
                         {hasChildren && (
@@ -173,10 +170,12 @@ export default function AppSidebar() {
                       <SidebarMenuSub className="mt-1">
                         {menu.subMenu.map((sub, j) => {
                           const subActive = isActive(pathname, sub.url);
+                          const subKey = sub.title || sub.url || `sub-${i}-${j}`;
                           return (
-                            <SidebarMenuSubItem key={j}>
+                            <SidebarMenuSubItem key={subKey}>
                               <SidebarMenuSubButton
                                 asChild
+                                isActive={subActive}
                                 tooltip={sub.title}
                                 className={[
                                   "px-2 py-2 rounded-md transition-colors",
@@ -185,7 +184,11 @@ export default function AppSidebar() {
                                     : "text-muted-foreground hover:bg-accent/60",
                                 ].join(" ")}
                               >
-                                <Link href={sub.url} onClick={handleAfterNav}>
+                                <Link
+                                  href={sub.url}
+                                  onClick={handleAfterNav}
+                                  aria-current={subActive ? "page" : undefined}
+                                >
                                   {sub.title}
                                 </Link>
                               </SidebarMenuSubButton>
@@ -209,7 +212,6 @@ export default function AppSidebar() {
         </div>
       </SidebarFooter>
 
-      {/* the slim hoverable rail while collapsed */}
       <SidebarRail />
     </Sidebar>
   );
