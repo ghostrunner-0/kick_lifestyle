@@ -38,5 +38,6 @@ export const ADMIN_BANNERS_EDIT = (id) =>
   id ? `/admin/banners/edit/${id}` : "";
 
 export const ADMIN_ORDERS_ALL = "/admin/orders";
+export const ADMIN_HOME_MID_BANNER = "/admin/homebanner";
 export const ADMIN_ORDERS_EDIT =(id) =>
   id ? `/admin/orders/${id}` : "";

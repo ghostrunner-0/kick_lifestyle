@@ -7,26 +7,18 @@ import { useProducts } from "@/components/providers/ProductProvider";
 import { useMemo } from "react";
 import KickLifestyleMarquee from "@/components/application/website/KickLifestyleMarquee";
 import BlogCarousel from "@/components/application/website/BlogCarousel";
-import HomePageBannerDisplay from "@/components/application/website/HomePageBannerDisplay"; // ← added
+import HomePageBannerDisplay from "@/components/application/website/HomePageBannerDisplay";
 
-const Trusted = dynamic(
-  () => import("@/components/application/website/Trusted"),
-  { ssr: true }
-);
-const BestSellers = dynamic(
-  () => import("@/components/application/website/BestSellers"),
-  { ssr: true }
-);
-const ProductGrid = dynamic(
-  () => import("@/components/application/website/ProductGrid"),
-  { ssr: true }
-);
+import { motion, useReducedMotion } from "framer-motion";
+
+const Trusted = dynamic(() => import("@/components/application/website/Trusted"), { ssr: true });
+const BestSellers = dynamic(() => import("@/components/application/website/BestSellers"), { ssr: true });
+const ProductGrid = dynamic(() => import("@/components/application/website/ProductGrid"), { ssr: true });
 
 /* same canonical key for quick counting */
 const canonicalKey = (p) => {
   if (!p) return null;
-  const slug =
-    p.slug || p.handle || p?.data?.slug || p.productSlug || p?.seo?.slug;
+  const slug = p.slug || p.handle || p?.data?.slug || p.productSlug || p?.seo?.slug;
   if (slug) return `slug:${String(slug).toLowerCase()}`;
   const parent = p.parentId || p.productId || p.pid || p.masterId || p.groupId;
   if (parent) return `pid:${parent}`;
@@ -37,6 +29,22 @@ const canonicalKey = (p) => {
 
 export default function HomeClient({ initialBanners = [] }) {
   const { products, isLoading: prodLoading } = useProducts();
+  const prefersReduced = useReducedMotion();
+
+  // scroll entrance animation (fade + slight rise)
+  const reveal = {
+    hidden: { opacity: 0, y: 14 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: { duration: 0.5, ease: "easeOut" },
+    },
+  };
+
+  // apply only to sections that should animate on scroll
+  const scrollAnimProps = prefersReduced
+    ? {}
+    : { initial: "hidden", whileInView: "visible", viewport: { once: true, amount: 0.22 } };
 
   // count unique to decide whether to render the big grid
   const uniqueCount = useMemo(() => {
@@ -50,41 +58,63 @@ export default function HomeClient({ initialBanners = [] }) {
 
   return (
     <main>
+      {/* ✅ Top banners: NO animation */}
       <Banner banners={initialBanners} loading={false} />
 
-      {/* Category banner was oversized; 600px -> ~420px */}
       <section className="content-visibility-auto contain-intrinsic-size-[420px] md:contain-intrinsic-size-[460px]">
         <CategoryBanner />
       </section>
 
-      {/* BestSellers */}
-      <section className="content-visibility-auto contain-intrinsic-size-[460px] md:contain-intrinsic-size-[520px] xl:contain-intrinsic-size-[560px]">
+      {/* ✅ From here down: animate on scroll */}
+      <motion.section
+        className="content-visibility-auto contain-intrinsic-size-[460px] md:contain-intrinsic-size-[520px] xl:contain-intrinsic-size-[560px]"
+        variants={reveal}
+        {...scrollAnimProps}
+      >
         <BestSellers />
-      </section>
+      </motion.section>
 
-      {/* Edge-to-edge homepage banner (object-contain, no overflow) */}
-      <section className="content-visibility-auto">
+      <motion.section
+        className="content-visibility-auto"
+        variants={reveal}
+        {...scrollAnimProps}
+      >
         <HomePageBannerDisplay />
-      </section>
+      </motion.section>
 
-      {/* show the big grid only if we really have enough unique items */}
       {uniqueCount >= 8 && (
-        <section className="content-visibility-auto contain-intrinsic-size-[1200px]">
+        <motion.section
+          className="content-visibility-auto contain-intrinsic-size-[1200px]"
+          variants={reveal}
+          {...scrollAnimProps}
+        >
           <ProductGrid products={products} loading={prodLoading} />
-        </section>
+        </motion.section>
       )}
 
-      {/* Hashtag marquee directly after BestSellers */}
-      <section className="content-visibility-auto py-7">
+      <motion.section
+        className="content-visibility-auto py-7"
+        variants={reveal}
+        {...scrollAnimProps}
+      >
         <KickLifestyleMarquee />
-      </section>
+      </motion.section>
 
-      <section className="content-visibility-auto contain-intrinsic-size-[400px]">
+      <motion.section
+        className="content-visibility-auto contain-intrinsic-size-[400px]"
+        variants={reveal}
+        {...scrollAnimProps}
+      >
         <Trusted />
-      </section>
-      <section className="content-visibility-auto">
+      </motion.section>
+
+      <motion.section
+        className="content-visibility-auto"
+        variants={reveal}
+        {...scrollAnimProps}
+      >
         <BlogCarousel />
-      </section>
+      </motion.section>
     </main>
   );
 }

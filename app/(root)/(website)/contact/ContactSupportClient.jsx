@@ -105,7 +105,7 @@ export default function ContactSupportClient() {
               asChild
               style={{ backgroundColor: PRIMARY, color: "#111" }}
             >
-              <a href="mailto:support@example.com">Email support</a>
+              <a href="mailto:info@kick.com.np">Email support</a>
             </Button>
             <Button
               size="sm"
@@ -137,10 +137,10 @@ export default function ContactSupportClient() {
                 <div className="min-w-0">
                   <div className="text-xs text-muted-foreground">Email</div>
                   <a
-                    href="mailto:support@example.com"
+                    href="mailto:info@kick.com.np"
                     className="font-medium hover:underline break-all"
                   >
-                    support@example.com
+                    info@kick.com.np
                   </a>
                 </div>
               </div>
@@ -152,10 +152,10 @@ export default function ContactSupportClient() {
                 <div className="min-w-0">
                   <div className="text-xs text-muted-foreground">Phone</div>
                   <a
-                    href="tel:+9779800000000"
+                    href="tel:+9779820810020"
                     className="font-medium hover:underline"
                   >
-                    +977 98XXXXXXXX
+                    +977 9820810020
                   </a>
                 </div>
               </div>
@@ -168,7 +168,9 @@ export default function ContactSupportClient() {
                   <div className="text-xs text-muted-foreground">
                     Hours (NPT)
                   </div>
-                  <div className="font-medium">Sun–Fri, 10:00 – 18:00</div>
+                  <div className="font-medium">
+                    Sun–Fri, 10:00 AM – 05:00 PM
+                  </div>
                 </div>
               </div>
 

@@ -193,7 +193,10 @@ export default function Footer() {
                       <p>
                         Kick Lifestyle, Kathmandu, Nepal
                         <br />
-                        <Link href="/contact" className="hover:underline">
+                        <Link
+                          href="https://maps.app.goo.gl/3VVPwH56bnSftizMA"
+                          className="hover:underline"
+                        >
                           Get directions →
                         </Link>
                       </p>
@@ -283,10 +286,10 @@ export default function Footer() {
                 <div>
                   <div className="text-muted-foreground">Email</div>
                   <Link
-                    href="mailto:hello@example.com"
+                    href="mailto:info@kick.com.np"
                     className="hover:underline"
                   >
-                    hello@example.com
+                    info@kick.com.np
                   </Link>
                 </div>
               </li>
