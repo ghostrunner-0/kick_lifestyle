@@ -8,35 +8,42 @@ const CategoriesContext = createContext({
   categories: [],
   isLoading: true,
   error: null,
+  refetch: () => {},
 });
 
 export function CategoriesProvider({ children, initialCategories = [] }) {
   const hasInitial = Array.isArray(initialCategories) && initialCategories.length > 0;
 
-  const { data, isLoading, error } = useFetch(
-    "website-categories",
-    "/api/website/category",
-    {
-      // hydrate cache so background refetch still works
-      initialData: hasInitial ? initialCategories : undefined,
-      // ❤️ make select handle BOTH { data: [...] } and [...] shapes
-      select: (res) => {
-        const arr = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
-        return arr.filter((c) => c?.showOnWebsite);
-      },
-      staleTime: 5 * 60 * 1000,
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
-    }
-  );
+  const {
+    data,
+    isLoading,
+    isFetching,
+    error,
+    refetch,
+  } = useFetch("website-categories", "/api/website/category", {
+    // Use initial data only for first paint, then replace with fresh fetch.
+    initialData: hasInitial ? initialCategories : undefined,
 
-  // If we have initial, show it immediately and don't show loading on first paint
-  const categories = hasInitial ? initialCategories : (data ?? []);
-  const loading = hasInitial ? false : isLoading;
+    // Works with either { data: [...] } or [...] responses
+    select: (res) => {
+      const arr = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+      return arr.filter((c) => c?.showOnWebsite);
+    },
+
+    // Make sure we always get fresh data after any mutation / page load
+    staleTime: 0,                  // never consider cached data fresh
+    refetchOnMount: "always",      // force fetch on mount/navigation
+    refetchOnReconnect: true,
+    refetchOnWindowFocus: false,   // optional; keep false if you prefer
+  });
+
+  // Prefer fresh data when present; fall back to initial while it loads
+  const categories = (data ?? (hasInitial ? initialCategories : []));
+  const loading = !data && (isLoading || isFetching);
 
   const value = useMemo(
-    () => ({ categories, isLoading: loading, error }),
-    [categories, loading, error]
+    () => ({ categories, isLoading: loading, error, refetch }),
+    [categories, loading, error, refetch]
   );
 
   return <CategoriesContext.Provider value={value}>{children}</CategoriesContext.Provider>;

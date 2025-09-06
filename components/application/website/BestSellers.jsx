@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import ProductCard from "@/components/application/website/ProductCard";
 import { useCategories } from "@/components/providers/CategoriesProvider";
@@ -39,6 +39,9 @@ const PillSkeleton = () => (
 /* minimal motion for header */
 const fade = { hidden: { opacity: 0 }, show: { opacity: 1 } };
 
+/* pin this slug first */
+const PINNED_SLUG = "true-wireless-earbuds";
+
 export default function BestSellers({ className = "" }) {
   const { categories = [], isLoading: catLoading } = useCategories();
   const {
@@ -48,10 +51,42 @@ export default function BestSellers({ className = "" }) {
     setActiveKey,
   } = useProducts();
 
+  /* 1) Order categories with pinned slug first (then preserve original order for the rest) */
+  const orderedCategories = useMemo(() => {
+    if (!Array.isArray(categories) || categories.length === 0) return [];
+    const pinned = [];
+    const rest = [];
+    for (const c of categories) {
+      const slug = String(c?.slug || "").toLowerCase();
+      if (slug === PINNED_SLUG) pinned.push(c);
+      else rest.push(c);
+    }
+    return [...pinned, ...rest];
+  }, [categories]);
+
+  /* keys aligned to the ordered list */
   const catKeys = useMemo(
-    () => (Array.isArray(categories) ? categories.map(deriveKey) : []),
-    [categories]
+    () => (Array.isArray(orderedCategories) ? orderedCategories.map(deriveKey) : []),
+    [orderedCategories]
   );
+
+  /* 2) Select pinned slug first on initial/whenever categories change,
+        but DON'T override if user already picked a valid category. */
+  useEffect(() => {
+    if (!orderedCategories.length) return;
+
+    // prefer pinned if present, else first category
+    const pinnedCat = orderedCategories.find(
+      (c) => String(c?.slug || "").toLowerCase() === PINNED_SLUG
+    );
+    const preferredKey = deriveKey(pinnedCat || orderedCategories[0]);
+
+    // set only when no active or active is not in current list
+    const activeIsValid = catKeys.includes(activeKey);
+    if (!activeIsValid && preferredKey) {
+      setActiveKey(preferredKey);
+    }
+  }, [orderedCategories, catKeys, activeKey, setActiveKey]);
 
   const displayProducts = useMemo(() => {
     const uniq = dedupeByCanonical(products || []);
@@ -78,7 +113,8 @@ export default function BestSellers({ className = "" }) {
             Top Picks For You
           </h2>
         </motion.div>
-        {/* Category pills moved to bottom */}
+
+        {/* Category pills */}
         <div className="mt-6">
           <div
             role="tablist"
@@ -86,10 +122,8 @@ export default function BestSellers({ className = "" }) {
             className="flex gap-2 sm:gap-3 overflow-x-auto overflow-y-hidden pr-2 -mr-2 py-1 snap-x snap-mandatory no-scrollbar"
           >
             {catLoading && !categories.length
-              ? Array.from({ length: 4 }).map((_, i) => (
-                  <PillSkeleton key={i} />
-                ))
-              : (categories || []).map((cat, i) => {
+              ? Array.from({ length: 4 }).map((_, i) => <PillSkeleton key={i} />)
+              : (orderedCategories || []).map((cat, i) => {
                   const key = catKeys[i];
                   const isActive = key === activeKey;
                   return (
@@ -113,6 +147,7 @@ export default function BestSellers({ className = "" }) {
                 })}
           </div>
         </div>
+
         {/* Carousel */}
         <div className="mt-6">
           <AnimatePresence mode="wait">
