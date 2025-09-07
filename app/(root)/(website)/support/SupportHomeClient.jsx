@@ -1,8 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { motion, useReducedMotion } from "framer-motion";
+
+import TitleCard from "@/components/application/TitleCard";
+
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,7 +19,8 @@ import {
   ArrowRight,
   ExternalLink,
 } from "lucide-react";
-import { motion, useReducedMotion } from "framer-motion";
+
+const PRIMARY = "#fcba17";
 
 const tiles = [
   {
@@ -46,39 +50,37 @@ const tiles = [
 ];
 
 export default function SupportHomeClient() {
-  const router = useRouter();
   const prefersReduced = useReducedMotion();
-
-  /* ---------- Search form ---------- */
-  const onSearch = (e) => {
-    e.preventDefault();
-    const q = new FormData(e.currentTarget).get("q")?.toString().trim() || "";
-    router.push(`/support/faq${q ? `?q=${encodeURIComponent(q)}` : ""}`);
-  };
 
   /* ---------- Quick Track state ---------- */
   const [orderId, setOrderId] = useState("");
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
-  const [resp, setResp] = useState(null); // API json
+  const [resp, setResp] = useState(null);
   const [error, setError] = useState("");
 
-  const validPhone = (v) => /^\d{10}$/.test(String(v).replace(/[^\d]/g, "").slice(-10));
+  const validPhone = (v) =>
+    /^\d{10}$/.test(String(v).replace(/[^\d]/g, "").slice(-10));
 
   const track = async () => {
     setError("");
     setResp(null);
 
     const id = orderId.trim();
-    const p = String(phone || "").replace(/[^\d]/g, "").slice(-10);
+    const p = String(phone || "")
+      .replace(/[^\d]/g, "")
+      .slice(-10);
 
     if (!id) return setError("Please enter your Order ID.");
-    if (!validPhone(p)) return setError("Please enter a valid 10-digit phone number.");
+    if (!validPhone(p))
+      return setError("Please enter a valid 10-digit phone number.");
 
     setLoading(true);
     try {
       const res = await fetch(
-        `/api/website/support/track/${encodeURIComponent(id)}?phone=${encodeURIComponent(p)}`,
+        `/api/website/support/track/${encodeURIComponent(
+          id
+        )}?phone=${encodeURIComponent(p)}`,
         { method: "GET", cache: "no-store" }
       );
       const json = await res.json();
@@ -99,9 +101,12 @@ export default function SupportHomeClient() {
   /* ---------- Animations ---------- */
   const fadeUp = {
     hidden: { opacity: 0, y: prefersReduced ? 0 : 12 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" } },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: { duration: 0.35, ease: "easeOut" },
+    },
   };
-
   const stagger = {
     hidden: {},
     visible: { transition: { staggerChildren: prefersReduced ? 0 : 0.06 } },
@@ -110,18 +115,34 @@ export default function SupportHomeClient() {
   const data = resp?.data || null;
 
   return (
-    <motion.div initial="hidden" animate="visible" className="mx-auto max-w-6xl px-4 py-8 space-y-8">
-      <motion.header variants={fadeUp} className="space-y-3 text-center">
-        <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Help Center</h1>
-        <p className="text-muted-foreground">
-          Find your order, manage warranty, or get in touch with us.
-        </p>
-
-        <form onSubmit={onSearch} className="mx-auto mt-4 flex w-full max-w-xl items-center gap-2">
-          <Input name="q" placeholder="Search FAQs (e.g. refund, delivery time, warranty)…" className="h-11" />
-          <Button type="submit" className="h-11">Search</Button>
-        </form>
-      </motion.header>
+    <motion.div
+      initial="hidden"
+      animate="visible"
+      className="mx-auto max-w-6xl px-4 py-8 space-y-8"
+    >
+      {/* TitleCard header (replaces search) */}
+      <TitleCard
+        title="Help Center"
+        subtitle="Find your order, manage warranty, or get in touch with us."
+        badge="We’re here to help"
+        accent={PRIMARY}
+        variant="solid"
+        pattern="grid"
+        align="center"
+        size="md"
+        className="text-black"
+        actions={
+          <Button
+            asChild
+            size="sm"
+            className="bg-[#fcba17] text-white border-[#fcba17] hover:bg-[#e7b517] hover:border-[#e7b517] focus-visible:ring-[#fcba17]"
+          >
+            <Link href="/support/faq">
+              Browse FAQs <ArrowRight className="ml-2 h-4 w-4" />
+            </Link>
+          </Button>
+        }
+      />
 
       {/* Tiles */}
       <motion.section variants={stagger} className="grid gap-4 sm:grid-cols-2">
@@ -129,19 +150,24 @@ export default function SupportHomeClient() {
           <Link key={t.href} href={t.href}>
             <motion.div
               variants={fadeUp}
-              whileHover={{ y: prefersReduced ? 0 : -3, scale: prefersReduced ? 1 : 1.01 }}
+              whileHover={{
+                y: prefersReduced ? 0 : -3,
+                scale: prefersReduced ? 1 : 1.01,
+              }}
               whileTap={{ scale: prefersReduced ? 1 : 0.997 }}
               transition={{ type: "spring", stiffness: 300, damping: 24 }}
             >
               <Card className="h-full transition-colors cursor-pointer">
                 <CardHeader className="flex flex-row items-center gap-3">
-                  <div className="grid place-items-center h-10 w-10 rounded-lg border">
+                  <div className="grid place-items-center h-10 w-10 rounded-lg border bg-muted/40">
                     {t.icon}
                   </div>
                   <div className="font-medium">{t.title}</div>
                 </CardHeader>
                 <CardContent className="flex items-end justify-between">
-                  <p className="text-sm text-muted-foreground max-w-[34ch]">{t.desc}</p>
+                  <p className="text-sm text-muted-foreground max-w-[34ch]">
+                    {t.desc}
+                  </p>
                   <ArrowRight className="h-5 w-5 opacity-60" />
                 </CardContent>
               </Card>
@@ -151,11 +177,23 @@ export default function SupportHomeClient() {
       </motion.section>
 
       {/* Quick Track */}
-      <motion.section variants={fadeUp} className="rounded-xl border p-4 md:p-5 bg-background space-y-4">
+      <motion.section
+        variants={fadeUp}
+        className="rounded-xl border p-4 md:p-5 bg-background space-y-4"
+      >
         <div className="flex flex-col md:flex-row items-center gap-3">
           <div className="flex items-center gap-2">
-            <PackageSearch className="h-5 w-5" />
-            <div className="font-medium">Quick Track</div>
+            <Badge
+              variant="secondary"
+              className="text-[10px] font-medium"
+              style={{
+                backgroundColor: `${PRIMARY}33`,
+                borderColor: `${PRIMARY}55`,
+                color: "#111",
+              }}
+            >
+              Quick Track
+            </Badge>
           </div>
           <div className="ml-auto w-full md:w-auto flex gap-2">
             <Input
@@ -178,9 +216,7 @@ export default function SupportHomeClient() {
         </div>
 
         {/* Error */}
-        {error ? (
-          <div className="text-sm text-red-600">{error}</div>
-        ) : null}
+        {error ? <div className="text-sm text-red-600">{error}</div> : null}
 
         {/* Result */}
         {data ? (
@@ -188,7 +224,9 @@ export default function SupportHomeClient() {
             <CardHeader className="flex flex-row items-center justify-between gap-2">
               <div className="space-y-1">
                 <div className="text-sm text-muted-foreground">Order</div>
-                <div className="text-base font-medium">{data.displayOrderId}</div>
+                <div className="text-base font-medium">
+                  {data.displayOrderId}
+                </div>
                 <div className="text-xs text-muted-foreground">
                   Placed on {new Date(data.placedAt).toLocaleString()}
                 </div>
@@ -198,7 +236,8 @@ export default function SupportHomeClient() {
                   {data.status}
                 </Badge>
                 <Badge className="capitalize">
-                  {data.payment?.method || "—"} • {data.payment?.status || "unpaid"}
+                  {data.payment?.method || "—"} •{" "}
+                  {data.payment?.status || "unpaid"}
                 </Badge>
               </div>
             </CardHeader>
@@ -215,7 +254,11 @@ export default function SupportHomeClient() {
                 </div>
                 {data.shipping?.tracking?.url ? (
                   <Button asChild variant="outline" size="sm" className="mt-1">
-                    <a href={data.shipping.tracking.url} target="_blank" rel="noopener noreferrer">
+                    <a
+                      href={data.shipping.tracking.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
                       Track on Pathao <ExternalLink className="ml-1 h-4 w-4" />
                     </a>
                   </Button>
@@ -226,7 +269,11 @@ export default function SupportHomeClient() {
               <div className="space-y-2">
                 <div className="text-sm font-medium">Delivery Address</div>
                 <div className="text-sm text-muted-foreground">
-                  {[data.shipping?.address?.area, data.shipping?.address?.zone, data.shipping?.address?.city]
+                  {[
+                    data.shipping?.address?.area,
+                    data.shipping?.address?.zone,
+                    data.shipping?.address?.city,
+                  ]
                     .filter(Boolean)
                     .join(", ") || "—"}
                 </div>
@@ -236,7 +283,8 @@ export default function SupportHomeClient() {
                   </div>
                 ) : null}
                 <div className="text-xs text-muted-foreground">
-                  {data.customer?.fullName || "Customer"} • {data.customer?.phoneMasked || "**********"}
+                  {data.customer?.fullName || "Customer"} •{" "}
+                  {data.customer?.phoneMasked || "**********"}
                 </div>
               </div>
 
@@ -244,16 +292,27 @@ export default function SupportHomeClient() {
               <div className="space-y-2">
                 <div className="text-sm font-medium">Summary</div>
                 <div className="text-sm text-muted-foreground">
-                  Items: {Array.isArray(data.items) ? data.items.reduce((n, it) => n + (it.qty || 0), 0) : 0}
+                  Items:{" "}
+                  {Array.isArray(data.items)
+                    ? data.items.reduce((n, it) => n + (it.qty || 0), 0)
+                    : 0}
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  Total: {data.amounts?.total != null ? `NPR ${data.amounts.total}` : "—"}
+                  Total:{" "}
+                  {data.amounts?.total != null
+                    ? `NPR ${data.amounts.total}`
+                    : "—"}
                 </div>
 
                 {/* Khalti CTA if unpaid */}
-                {data.khaltiPayment?.available && data.khaltiPayment?.payment_url ? (
+                {data.khaltiPayment?.available &&
+                data.khaltiPayment?.payment_url ? (
                   <Button asChild size="sm" className="mt-1">
-                    <a href={data.khaltiPayment.payment_url} target="_blank" rel="noopener noreferrer">
+                    <a
+                      href={data.khaltiPayment.payment_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
                       Complete Payment <ExternalLink className="ml-1 h-4 w-4" />
                     </a>
                   </Button>

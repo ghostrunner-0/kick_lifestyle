@@ -69,7 +69,7 @@ export default function WarrantySupport() {
         <RefreshCw className="h-4 w-4" />
         <div className="text-sm">Ready to begin?</div>
         <Button asChild className="ml-auto">
-          <Link href="/support/contact">Start a warranty claim</Link>
+          <Link href="/warranty">Start a warranty claim</Link>
         </Button>
       </motion.div>
     </motion.div>
