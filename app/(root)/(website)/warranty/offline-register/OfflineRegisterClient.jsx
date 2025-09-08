@@ -419,7 +419,13 @@ export default function OfflineRegisterClient() {
                                   <Calendar
                                     mode="single"
                                     selected={field.value}
-                                    onSelect={(d) => field.onChange(d)}
+                                    // ⬇️ Prevent future dates
+                                    disabled={(date) => date > new Date()}
+                                    toDate={new Date()}
+                                    onSelect={(d) => {
+                                      // guard again in case of manual calls
+                                      if (d && d <= new Date()) field.onChange(d);
+                                    }}
                                     initialFocus
                                   />
                                 </PopoverContent>

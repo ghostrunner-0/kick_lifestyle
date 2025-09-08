@@ -40,5 +40,6 @@ export const ADMIN_BANNERS_EDIT = (id) =>
 export const ADMIN_ORDERS_ALL = "/admin/orders";
 export const ADMIN_HOME_MID_BANNER = "/admin/homebanner";
 export const STUDENT_DISCOUNT = "/admin/student-discount";
+export const ADMIN_OFFLINE_REGISTRATIONS = "/admin/offline-registration";
 export const ADMIN_ORDERS_EDIT =(id) =>
   id ? `/admin/orders/${id}` : "";
