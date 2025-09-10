@@ -1,11 +1,36 @@
+// app/api/admin/orders/route.js
 export const dynamic = "force-dynamic";
 
 import mongoose from "mongoose";
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+
 import { connectDB } from "@/lib/DB";
+import User from "@/models/User.model";
 import Order from "@/models/Orders.model";
 
-/* small helpers */
+/* ---------- role guard: only admin + sales ---------- */
+async function requireRole(allowed = ["admin", "sales"]) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.email) {
+    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+  }
+
+  await connectDB();
+  const user = await User.findOne({ email: session.user.email, deletedAt: null }).lean();
+  if (!user) {
+    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+  }
+
+  if (!allowed.includes(user.role)) {
+    return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 });
+  }
+
+  return null; // ok
+}
+
+/* ---------- helpers ---------- */
 const isObjectId = (s) => /^[0-9a-fA-F]{24}$/.test(String(s || "").trim());
 const esc = (s) => String(s || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -19,11 +44,10 @@ function parseSort(sortRaw) {
   return { [path]: d };
 }
 
-/** Build a powerful $and-of-$or query from a free text `q` */
+/** Build an $and of $or clauses from free-text q */
 function buildSearchQuery(q) {
   if (!q) return {};
 
-  // split by whitespace, ignore empties
   const tokens = String(q)
     .trim()
     .split(/\s+/)
@@ -31,29 +55,21 @@ function buildSearchQuery(q) {
 
   if (tokens.length === 0) return {};
 
-  // for each token, we want "this token must match something"
   const andClauses = tokens.map((tok) => {
     const r = new RegExp(esc(tok), "i");
     const or = [];
 
-    // direct ids
     if (isObjectId(tok)) {
       or.push({ _id: new mongoose.Types.ObjectId(tok) });
     }
 
-    // numeric handling (total / seq)
     const n = Number(tok.replace(/[, ]/g, ""));
-    const isNum = Number.isFinite(n);
-
-    if (isNum) {
-      // exact totals or display seq
+    if (Number.isFinite(n)) {
       or.push({ "amounts.total": n });
       or.push({ display_order_seq: n });
-      // phones often digits-only
       or.push({ "customer.phone": new RegExp(esc(String(n)), "i") });
     }
 
-    // date handling (search by createdAt day)
     const d = new Date(tok);
     if (!isNaN(d.getTime())) {
       const start = new Date(d);
@@ -63,7 +79,6 @@ function buildSearchQuery(q) {
       or.push({ createdAt: { $gte: start, $lte: end } });
     }
 
-    // text partials across many fields
     or.push(
       { display_order_id: r },
       { paymentMethod: r },
@@ -74,7 +89,6 @@ function buildSearchQuery(q) {
       { "address.cityLabel": r },
       { "address.zoneLabel": r },
       { "address.areaLabel": r },
-      // items array (dot notation matches inside subdocs)
       { "items.name": r },
       { "items.variantName": r }
     );
@@ -85,12 +99,16 @@ function buildSearchQuery(q) {
   return { $and: andClauses };
 }
 
+/* ---------- GET /admin/orders ---------- */
 export async function GET(req) {
+  // role check
+  const guard = await requireRole(["admin", "sales"]);
+  if (guard) return guard; // returns a NextResponse when blocked
+
   try {
     await connectDB();
 
     const { searchParams } = new URL(req.url);
-
     const q = searchParams.get("q")?.trim() || "";
     const page = Math.max(1, Number(searchParams.get("page") || 1));
     const limit = Math.min(200, Math.max(1, Number(searchParams.get("limit") || 20)));
@@ -124,7 +142,7 @@ export async function GET(req) {
           createdAt: 1,
           customer: 1,
           address: 1,
-          items: { $slice: 1 }, // tiny sample so we can search by item names but keep payload light
+          items: { $slice: 1 }, // tiny sample
           amounts: 1,
           paymentMethod: 1,
           status: 1,
@@ -135,12 +153,7 @@ export async function GET(req) {
 
     return NextResponse.json({
       success: true,
-      data: {
-        items,
-        total,
-        page,
-        limit,
-      },
+      data: { items, total, page, limit },
     });
   } catch (e) {
     return NextResponse.json(

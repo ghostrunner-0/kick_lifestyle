@@ -9,11 +9,12 @@ export const revalidate = 0;
 
 export async function GET(req) {
   try {
-    const admin = await isAuthenticated("admin");
-    if (!admin) {
+    // allow admin and sales
+    const allowed = await isAuthenticated(["admin", "sales"]);
+    if (!allowed) {
       return NextResponse.json(
-        { success: false, message: "Unauthorized" },
-        { status: 403 }
+        { success: false, message: "admin not authenticated" },
+        { status: 401 }
       );
     }
 

@@ -23,13 +23,11 @@ function orderDescription(order) {
   const names = (order?.items || []).map((it) => it?.variantName ? `${it?.name} - ${it.variantName}` : it?.name);
   return names.filter(Boolean).slice(0, 5).join(", ");
 }
-
-// ✅ NEW: only COD should have a collectible amount; everyone else is 0
+// only COD collects money
 function codAmount(order) {
   const isCOD = String(order?.paymentMethod || "").toLowerCase() === "cod";
   return isCOD ? Math.round(Number(order?.amounts?.total || 0)) : 0;
 }
-
 function kgWeight(order) {
   const w = Number(order?.metadata?.packageWeight) || Number(order?.shipping?.packageWeight) || PATHAO_DEFAULT_WEIGHT;
   return Math.max(0.5, Math.min(10, Number.isFinite(w) ? w : 0.5));
@@ -40,8 +38,11 @@ function kgWeight(order) {
  * body: { ids: string[], dryRun?: boolean, storeId?: number }
  */
 export async function POST(req) {
-  const admin = isAuthenticated("admin");
-  if (!admin) return NextResponse.json({ success: false, message: "admin not authenticated" }, { status: 401 });
+  // ✅ allow admin + sales and AWAIT the check
+  const allowed = await isAuthenticated(["admin", "sales"]);
+  if (!allowed) {
+    return NextResponse.json({ success: false, message: "not authorized" }, { status: 401 });
+  }
 
   await connectDB();
 
@@ -49,18 +50,41 @@ export async function POST(req) {
   const ids = Array.isArray(body?.ids) ? body.ids : [];
   const dryRun = !!body?.dryRun;
 
-  const oids = ids.filter((id) => /^[0-9a-fA-F]{24}$/.test(String(id))).map((id) => new mongoose.Types.ObjectId(id));
-  if (oids.length === 0) return NextResponse.json({ success: false, message: "No valid order ids" }, { status: 400 });
+  const oids = ids
+    .filter((id) => /^[0-9a-fA-F]{24}$/.test(String(id)))
+    .map((id) => new mongoose.Types.ObjectId(id));
+  if (oids.length === 0) {
+    return NextResponse.json({ success: false, message: "No valid order ids" }, { status: 400 });
+  }
 
   let storeId = Number(body?.storeId || 0);
-  try { if (!storeId) storeId = await resolvePathaoStoreId(); }
-  catch (e) { return NextResponse.json({ success: false, message: e?.message || "Failed to resolve Pathao store" }, { status: 500 }); }
+  try {
+    if (!storeId) storeId = await resolvePathaoStoreId();
+  } catch (e) {
+    return NextResponse.json(
+      { success: false, message: e?.message || "Failed to resolve Pathao store" },
+      { status: 500 }
+    );
+  }
 
   const orders = await Order.find({ _id: { $in: oids } })
-    .select({ _id: 1, display_order_id: 1, customer: 1, address: 1, items: 1, amounts: 1, paymentMethod: 1, payment: 1, metadata: 1, shipping: 1 })
+    .select({
+      _id: 1,
+      display_order_id: 1,
+      customer: 1,
+      address: 1,
+      items: 1,
+      amounts: 1,
+      paymentMethod: 1,
+      payment: 1,
+      metadata: 1,
+      shipping: 1,
+    })
     .lean();
 
-  if (!orders.length) return NextResponse.json({ success: false, message: "Orders not found" }, { status: 404 });
+  if (!orders.length) {
+    return NextResponse.json({ success: false, message: "Orders not found" }, { status: 404 });
+  }
 
   const toSend = [];
   const skipped = [];
@@ -91,13 +115,16 @@ export async function POST(req) {
       special_instruction: o?.metadata?.notes || o?.notes || undefined,
       item_quantity: Math.max(1, sumQty(o?.items)),
       item_weight: kgWeight(o),
-      amount_to_collect: codAmount(o), // <-- only COD shows total, others 0
+      amount_to_collect: codAmount(o), // COD totals; otherwise 0
       item_description: orderDescription(o),
     });
   }
 
   if (!toSend.length) {
-    return NextResponse.json({ success: false, message: "No orders eligible to send (address IDs missing).", details: { skipped } }, { status: 400 });
+    return NextResponse.json(
+      { success: false, message: "No orders eligible to send (address IDs missing).", details: { skipped } },
+      { status: 400 }
+    );
   }
 
   if (dryRun) {
@@ -114,7 +141,11 @@ export async function POST(req) {
       const payload = { orders: batch.map(({ _local_order_id, ...rest }) => rest) };
       const res = await pathaoPost("/aladdin/api/v1/orders/bulk", payload);
 
-      const ok = Number(res?.code) === 202 || res?.data === true || String(res?.type || "").toLowerCase() === "success";
+      const ok =
+        Number(res?.code) === 202 ||
+        res?.data === true ||
+        String(res?.type || "").toLowerCase() === "success";
+
       if (ok) accepted.push(...batch.map((b) => b._local_order_id));
       else failed.push({ ids: batch.map((b) => b._local_order_id), error: res });
     } catch (e) {
@@ -142,7 +173,10 @@ export async function POST(req) {
 
   return NextResponse.json({
     success: failedCount === 0,
-    message: failedCount === 0 ? `Pathao accepted ${accepted.length} order(s).` : `Accepted ${accepted.length}, failed ${failedCount}.`,
+    message:
+      failedCount === 0
+        ? `Pathao accepted ${accepted.length} order(s).`
+        : `Accepted ${accepted.length}, failed ${failedCount}.`,
     data: { accepted, failed, skipped, storeId },
   });
 }

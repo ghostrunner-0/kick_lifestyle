@@ -1,3 +1,4 @@
+// components/app-sidebar.jsx
 "use client";
 
 import * as React from "react";
@@ -15,7 +16,8 @@ import {
   SidebarMenuSubItem,
   SidebarMenuSubButton,
 } from "@/components/ui/sidebar";
-import { adminAppSiderbarMenu } from "@/lib/AdminSiderbarMenu";
+
+import { getAdminSidebar } from "@/lib/AdminSiderbarMenu";
 
 /* ---------- utils ---------- */
 const isActive = (pathname, url) => {
@@ -115,9 +117,38 @@ function ParentWithChildren({ item, defaultOpen, parentActive, pathname }) {
   );
 }
 
+/* ---------- Tiny skeleton while role is loading ---------- */
+function SidebarSkeleton() {
+  return (
+    <SidebarContent className="p-2">
+      <div className="space-y-2 p-2">
+        {[...Array(5)].map((_, i) => (
+          <div key={i} className="h-9 rounded-md bg-muted animate-pulse" />
+        ))}
+      </div>
+    </SidebarContent>
+  );
+}
+
 /* ---------- Main Sidebar ---------- */
-function AppSidebar({ menu = adminAppSiderbarMenu, brand = "Kick Lifestyle", ...props }) {
+/**
+ * Props:
+ *   - role: "admin" | "sales" | "editor" | "user"
+ *   - menu: optional pre-filtered menu (array). If passed, role is ignored for items.
+ *   - brand: header label
+ */
+function AppSidebar({ role, menu, brand = "Kick Lifestyle", ...props }) {
   const pathname = usePathname();
+
+  // Build the effective menu:
+  // 1) prefer an explicit menu prop,
+  // 2) else compute from role,
+  // 3) when role is still unknown -> show skeleton (return []).
+  const effectiveMenu = React.useMemo(() => {
+    if (Array.isArray(menu)) return menu;
+    if (!role) return []; // wait for role; prevents flashing full menu
+    return getAdminSidebar(role);
+  }, [menu, role]);
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
@@ -136,40 +167,45 @@ function AppSidebar({ menu = adminAppSiderbarMenu, brand = "Kick Lifestyle", ...
       </SidebarHeader>
 
       {/* Items */}
-      <SidebarContent className="p-2">
-        <SidebarMenu className="space-y-1">
-          {(menu || []).map((item, i) => {
-            const hasChildren = Array.isArray(item.subMenu) && item.subMenu.length > 0;
-            const parentActive =
-              isActive(pathname, item.url) || (hasChildren && item.subMenu.some((s) => isActive(pathname, s.url)));
-            const key = item.title || `menu-${i}`;
+      {effectiveMenu.length === 0 && !Array.isArray(menu) && !role ? (
+        <SidebarSkeleton />
+      ) : (
+        <SidebarContent className="p-2">
+          <SidebarMenu className="space-y-1">
+            {(effectiveMenu || []).map((item, i) => {
+              const hasChildren = Array.isArray(item.subMenu) && item.subMenu.length > 0;
+              const parentActive =
+                isActive(pathname, item.url) ||
+                (hasChildren && item.subMenu.some((s) => isActive(pathname, s.url)));
+              const key = item.title || `menu-${i}`;
 
-            if (!hasChildren) {
+              if (!hasChildren) {
+                return (
+                  <SidebarMenuItem key={key}>
+                    <Link href={item.url || "#"} aria-current={parentActive ? "page" : undefined} className="block w-full">
+                      <Row active={parentActive}>
+                        <ItemIcon Comp={item.icon} />
+                        <span className="ml-2 truncate">{item.title}</span>
+                      </Row>
+                    </Link>
+                  </SidebarMenuItem>
+                );
+              }
+
               return (
-                <SidebarMenuItem key={key}>
-                  <Link href={item.url || "#"} aria-current={parentActive ? "page" : undefined} className="block w-full">
-                    <Row active={parentActive}>
-                      <ItemIcon Comp={item.icon} />
-                      <span className="ml-2 truncate">{item.title}</span>
-                    </Row>
-                  </Link>
+                <SidebarMenuItem key={key} className="overflow-hidden">
+                  <ParentWithChildren
+                    item={item}
+                    defaultOpen={parentActive}
+                    parentActive={parentActive}
+                    pathname={pathname}
+                  />
                 </SidebarMenuItem>
               );
-            }
-
-            return (
-              <SidebarMenuItem key={key} className="overflow-hidden">
-                <ParentWithChildren
-                  item={item}
-                  defaultOpen={parentActive}
-                  parentActive={parentActive}
-                  pathname={pathname}
-                />
-              </SidebarMenuItem>
-            );
-          })}
-        </SidebarMenu>
-      </SidebarContent>
+            })}
+          </SidebarMenu>
+        </SidebarContent>
+      )}
     </Sidebar>
   );
 }

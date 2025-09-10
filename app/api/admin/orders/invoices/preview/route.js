@@ -45,21 +45,34 @@ const esc = (s) =>
 
 /* -------- GET /preview?ids=a&ids=b (or ids=a,b) -------- */
 export async function GET(req) {
-  const admin = isAuthenticated("admin");
-  if (!admin) return NextResponse.json({ success:false, message:"admin not authenticated" }, { status:401 });
+  // ✅ allow both admin and sales and await the check
+  const allowed = await isAuthenticated(["admin", "sales"]);
+  if (!allowed) {
+    return NextResponse.json({ success:false, message:"not authorized" }, { status:401 });
+  }
 
   await connectDB();
 
   const { searchParams } = new URL(req.url);
   let ids = searchParams.getAll("ids");
-  if (ids.length === 1 && ids[0]?.includes(",")) ids = ids[0].split(",").map(s=>s.trim()).filter(Boolean);
-  const oids = ids.filter(id=>/^[0-9a-fA-F]{24}$/.test(String(id))).map(id=>new mongoose.Types.ObjectId(id));
-  if (!oids.length) return NextResponse.json({ success:false, message:"No valid order ids" }, { status:400 });
+  if (ids.length === 1 && ids[0]?.includes(",")) {
+    ids = ids[0].split(",").map(s=>s.trim()).filter(Boolean);
+  }
+  const oids = ids
+    .filter(id => /^[0-9a-fA-F]{24}$/.test(String(id)))
+    .map(id => new mongoose.Types.ObjectId(id));
+
+  if (!oids.length) {
+    return NextResponse.json({ success:false, message:"No valid order ids" }, { status:400 });
+  }
 
   const orders = await Order.find({ _id: { $in: oids } })
     .sort({ display_order_seq: 1, createdAt: 1 })
     .lean();
-  if (!orders.length) return NextResponse.json({ success:false, message:"Orders not found" }, { status:404 });
+
+  if (!orders.length) {
+    return NextResponse.json({ success:false, message:"Orders not found" }, { status:404 });
+  }
 
   return new NextResponse(renderHTML(orders), {
     status: 200,
@@ -105,7 +118,7 @@ function renderHTML(orders) {
     .num{width:44px;text-align:center}
     .qty{width:90px;text-align:center}
     .price,.amt{text-align:right;width:130px}
-    thead{display:table-header-group} /* repeat header on print pages */
+    thead{display:table-header-group}
 
     .total-row td{font-weight:800;background:#fafafa}
 

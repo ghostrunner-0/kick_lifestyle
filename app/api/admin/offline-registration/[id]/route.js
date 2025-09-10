@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import path from "node:path";
 import fs from "node:fs/promises";
+import mongoose from "mongoose";
+
 import { isAuthenticated } from "@/lib/Authentication";
 import { connectDB } from "@/lib/DB";
 import OfflineRegistrationRequest from "@/models/OfflineRegistrationRequest.model";
@@ -9,59 +11,82 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+const ALLOWED_STATUSES = new Set(["pending", "approved", "rejected"]);
+
 const digits10 = (s) =>
   (String(s || "").match(/\d+/g) || []).join("").slice(0, 10);
 
-// Map stored `/offline-registeration/uuid.ext` to absolute
+// map stored `/offline-registration/uuid.ext` or legacy `/offline-registeration/uuid.ext` to absolute
 function absFromStored(storedPath) {
-  const base = "/offline-registeration/";
-  if (!storedPath || !storedPath.startsWith(base)) return null;
+  const bases = ["/offline-registration/", "/offline-registeration/"];
+  const base = bases.find((b) => storedPath && storedPath.startsWith(b));
+  if (!base) return null;
   const filename = path.basename(storedPath);
-  return path.join(process.cwd(), "offline-registeration", filename);
+  // try primary then legacy
+  const absPrimary = path.join(process.cwd(), "offline-registration", filename);
+  const absLegacy = path.join(process.cwd(), "offline-registeration", filename);
+  return { absPrimary, absLegacy };
 }
 
 export async function PATCH(req, { params }) {
   try {
-    const admin = await isAuthenticated("admin");
-    if (!admin)
+    // ✅ allow admin + sales
+    const allowed = await isAuthenticated(["admin", "sales"]);
+    if (!allowed) {
       return NextResponse.json(
-        { success: false, message: "Unauthorized" },
-        { status: 403 }
+        { success: false, message: "admin not authenticated" },
+        { status: 401 }
       );
+    }
 
     await connectDB();
     const param = await params;
-    const id = param?.id;
-    const body = await req.json();
-
-    if (!id)
+    const id = String(param?.id || "");
+    if (!mongoose.isValidObjectId(id)) {
       return NextResponse.json(
-        { success: false, message: "Bad request" },
+        { success: false, message: "Invalid id" },
         { status: 400 }
       );
+    }
 
+    const body = await req.json().catch(() => ({}));
     const doc = await OfflineRegistrationRequest.findById(id);
-    if (!doc)
+    if (!doc) {
       return NextResponse.json(
         { success: false, message: "Not found" },
         { status: 404 }
       );
+    }
 
-    // Editable fields
+    // ----- Editable fields -----
     if (body.name != null) doc.name = String(body.name).trim();
+
     if (body.email != null) doc.email = String(body.email).trim().toLowerCase();
+
     if (body.phone != null) {
       doc.phone = String(body.phone).trim();
       doc.phoneNormalized = digits10(doc.phone);
     }
-    if (body.productName != null)
+
+    if (body.productName != null) {
       doc.productName = String(body.productName).trim();
-    if (body.serial != null)
-      doc.serial = String(body.serial).trim().toUpperCase();
-    if (body.purchaseDate != null) {
-      const d = new Date(String(body.purchaseDate));
-      if (!Number.isNaN(d.valueOf())) doc.purchaseDate = d;
     }
+
+    if (body.serial != null) {
+      doc.serial = String(body.serial).trim().toUpperCase();
+    }
+
+    if (body.purchaseDate != null) {
+      // cap at today, ignore invalid
+      const d = new Date(String(body.purchaseDate));
+      if (!Number.isNaN(d.valueOf())) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (d > today) doc.purchaseDate = today;
+        else doc.purchaseDate = d;
+      }
+    }
+
     if (body.purchasedFrom != null) {
       const pf = String(body.purchasedFrom).toLowerCase();
       if (["kick", "daraz", "offline"].includes(pf)) doc.purchasedFrom = pf;
@@ -72,25 +97,29 @@ export async function PATCH(req, { params }) {
       doc.shopName = "";
     }
 
-    // Status change → delete image
+    // ----- Status change → optionally delete image -----
     if (body.status != null) {
       const next = String(body.status).toLowerCase();
-      if (["pending", "approved", "rejected"].includes(next)) {
+      if (ALLOWED_STATUSES.has(next)) {
         const prev = doc.status || "pending";
         doc.status = next;
 
         if (prev === "pending" && next !== "pending") {
-          // delete image file if exists
           const stored = doc?.purchaseProof?.path || "";
           if (stored) {
             try {
-              const abs = absFromStored(stored);
-              if (abs) await fs.unlink(abs).catch(() => {});
+              const absPair = absFromStored(stored);
+              if (absPair) {
+                // try primary, then legacy
+                await fs.unlink(absPair.absPrimary).catch(async () => {
+                  await fs.unlink(absPair.absLegacy).catch(() => {});
+                });
+              }
             } catch (e) {
-              console.warn("Failed to delete warranty image:", e);
+              console.warn("Failed to delete warranty image:", e?.message || e);
             }
           }
-          // clear reference
+          // clear reference after decision
           doc.purchaseProof = undefined;
         }
       }
@@ -98,7 +127,7 @@ export async function PATCH(req, { params }) {
 
     await doc.save();
 
-    // Return a trimmed doc for UI update
+    // minimal payload for UI
     const payload = {
       _id: doc._id,
       name: doc.name,
@@ -110,7 +139,7 @@ export async function PATCH(req, { params }) {
       purchasedFrom: doc.purchasedFrom,
       shopName: doc.shopName,
       status: doc.status,
-      purchaseProof: doc.purchaseProof || null, // likely null after decision
+      purchaseProof: doc.purchaseProof || null,
       createdAt: doc.createdAt,
       updatedAt: doc.updatedAt,
     };

@@ -1,3 +1,4 @@
+// app/api/admin/student-discount/image/file/[filename]/route.js
 import { NextResponse } from "next/server";
 import path from "node:path";
 import fs from "node:fs/promises";
@@ -17,25 +18,37 @@ function guessContentType(filename = "") {
 
 export async function GET(_req, { params }) {
   try {
-    const admin = await isAuthenticated("admin");
-    if (!admin) {
-      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
+    // allow both admin and sales (viewer/approver roles)
+    const allowed = await isAuthenticated(["admin", "sales"]);
+    if (!allowed) {
+      return NextResponse.json(
+        { success: false, message: "admin not authenticated" },
+        { status: 401 }
+      );
     }
+
     const param = await params;
     const raw = param?.filename || "";
     if (!raw) {
-      return NextResponse.json({ success: false, message: "Bad request" }, { status: 400 });
+      return NextResponse.json(
+        { success: false, message: "Bad request" },
+        { status: 400 }
+      );
     }
 
-    // decode + normalize windows slashes + strip any leading folder prefix
-    let cleaned = decodeURIComponent(raw).replace(/\\/g, "/");                 // "student-id-cards\abc.png" -> "student-id-cards/abc.png"
-    cleaned = cleaned.replace(/^student-id-cards\//i, "")                      // drop accidental folder prefix
-                     .replace(/^uploads\/student-discounts\//i, "");           // legacy prefix, if any
+    // decode + normalize slashes + strip any leading folder prefix
+    let cleaned = decodeURIComponent(raw).replace(/\\/g, "/");
+    cleaned = cleaned
+      .replace(/^student-id-cards\//i, "")
+      .replace(/^uploads\/student-discounts\//i, ""); // legacy prefix
 
-    // now take just the base filename to prevent traversal
+    // take only the basename to prevent traversal
     const base = path.posix.basename(cleaned);
     if (!base || base.includes("..")) {
-      return NextResponse.json({ success: false, message: "Bad filename" }, { status: 400 });
+      return NextResponse.json(
+        { success: false, message: "Bad filename" },
+        { status: 400 }
+      );
     }
 
     // primary store: /student-id-cards/<file>
@@ -51,7 +64,13 @@ export async function GET(_req, { params }) {
       return new NextResponse(buf, { status: 200, headers });
     } catch {
       // optional legacy fallback: /public/uploads/student-discounts/<file>
-      const legacy = path.join(process.cwd(), "public", "uploads", "student-discounts", base);
+      const legacy = path.join(
+        process.cwd(),
+        "public",
+        "uploads",
+        "student-discounts",
+        base
+      );
       try {
         const buf2 = await fs.readFile(legacy);
         const headers = new Headers({
@@ -61,11 +80,17 @@ export async function GET(_req, { params }) {
         });
         return new NextResponse(buf2, { status: 200, headers });
       } catch {
-        return NextResponse.json({ success: false, message: "Not found" }, { status: 404 });
+        return NextResponse.json(
+          { success: false, message: "Not found" },
+          { status: 404 }
+        );
       }
     }
   } catch (e) {
     console.error("GET /api/admin/student-discount/image/file error:", e);
-    return NextResponse.json({ success: false, message: "Failed to load image" }, { status: 500 });
+    return NextResponse.json(
+      { success: false, message: "Failed to load image" },
+      { status: 500 }
+    );
   }
 }

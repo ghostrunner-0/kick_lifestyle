@@ -29,10 +29,11 @@ const esc = (s) =>
     (also accepts CSV ?ids=a,b,c)
 */
 export async function GET(req) {
-  const admin = isAuthenticated("admin");
-  if (!admin) {
+  // ✅ allow admin and sales
+  const allowed = await isAuthenticated(["admin", "sales"]);
+  if (!allowed) {
     return NextResponse.json(
-      { success: false, message: "admin not authenticated" },
+      { success: false, message: "not authorized" },
       { status: 401 }
     );
   }
@@ -82,7 +83,10 @@ export async function GET(req) {
 
   return new NextResponse(html, {
     status: 200,
-    headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+    },
   });
 }
 
@@ -102,8 +106,7 @@ function aggregateLines(orders) {
         qty: 0,
       };
       prev.qty += Number(it?.qty || 0);
-      // keep first non-empty image/name/variantName
-      if (!prev.image && (it?.image || (it?.images?.[0]))) {
+      if (!prev.image && (it?.image || it?.images?.[0])) {
         prev.image = it.image || it.images[0];
       }
       if (!prev.name && it?.name) prev.name = it.name;
@@ -111,7 +114,6 @@ function aggregateLines(orders) {
       map.set(key, prev);
     }
   }
-  // sort by name asc
   return Array.from(map.values()).sort((a, b) =>
     (a.name || "").localeCompare(b.name || "")
   );

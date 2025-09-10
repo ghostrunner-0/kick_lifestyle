@@ -1,11 +1,10 @@
 // app/api/admin/orders/counts/route.js
-import { NextResponse } from "next/server";
+export const dynamic = "force-dynamic";
+
 import { connectDB } from "@/lib/DB";
 import { response } from "@/lib/helperFunctions";
 import { isAuthenticated } from "@/lib/Authentication";
 import Order from "@/models/Orders.model";
-
-export const dynamic = "force-dynamic";
 
 const ALLOWED_STATUSES = [
   "processing",
@@ -20,21 +19,22 @@ const ALLOWED_STATUSES = [
 
 export async function GET() {
   try {
-    const admin = isAuthenticated("admin");
-    if (!admin) return response(false, 401, "admin not authenticated");
+    // ✅ allow both admin and sales to view order counts
+    const allowed = await isAuthenticated(["admin", "sales"]);
+    if (!allowed) return response(false, 401, "admin not authenticated");
 
     await connectDB();
 
-    const counts = Object.fromEntries(
-      await Promise.all(
-        ALLOWED_STATUSES.map(async (s) => {
-          const n = await Order.countDocuments({ status: s });
-          return [s, n];
-        })
-      )
-    );
+    // one round-trip to DB, then normalize to include zeroes
+    const agg = await Order.aggregate([
+      { $match: { status: { $in: ALLOWED_STATUSES } } },
+      { $group: { _id: "$status", n: { $sum: 1 } } },
+    ]);
 
-    return NextResponse.json({ success: true, data: { counts } });
+    const counts = Object.fromEntries(ALLOWED_STATUSES.map((s) => [s, 0]));
+    for (const row of agg) counts[row._id] = row.n ?? 0;
+
+    return response(true, 200, { counts });
   } catch (e) {
     return response(false, 500, e?.message || "Server error");
   }

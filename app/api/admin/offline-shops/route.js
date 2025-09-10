@@ -1,3 +1,4 @@
+// app/api/admin/offline-shops/route.js
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -8,27 +9,37 @@ import OfflineShop from "@/models/OfflineShop.model";
 
 const json = (ok, status, payload) =>
   NextResponse.json(
-    ok ? { success: true, data: payload } : { success: false, message: payload },
+    ok
+      ? { success: true, data: payload }
+      : { success: false, message: payload },
     { status }
   );
 
 const trim = (v) => (typeof v === "string" ? v.trim() : v);
 
+/* -------------------- GET (list) -------------------- */
 export async function GET(req) {
   try {
-    const admin = isAuthenticated("admin");
-    if (!admin) return json(false, 401, "admin not authenticated");
+    const allowed = await isAuthenticated(["admin", "sales"]);
+    if (!allowed) return json(false, 401, "admin not authenticated");
 
     await connectDB();
 
     const url = new URL(req.url);
-    const q = trim(url.searchParams.get("q") || url.searchParams.get("search") || "");
+    const q = trim(
+      url.searchParams.get("q") || url.searchParams.get("search") || ""
+    );
     const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
-    const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit") || "20", 10)));
+    const limit = Math.min(
+      100,
+      Math.max(1, parseInt(url.searchParams.get("limit") || "20", 10))
+    );
 
     const sortParam = url.searchParams.get("sort") || "createdAt:desc";
     const [sf, so] = sortParam.split(":");
-    const sort = { [sf || "createdAt"]: (so || "desc").toLowerCase() === "asc" ? 1 : -1 };
+    const sort = {
+      [sf || "createdAt"]: (so || "desc").toLowerCase() === "asc" ? 1 : -1,
+    };
 
     const phoneDigits = q ? q.replace(/\D+/g, "") : "";
     const filter = q
@@ -38,13 +49,19 @@ export async function GET(req) {
             { location: { $regex: q, $options: "i" } },
             { contactPerson: { $regex: q, $options: "i" } },
             { phone: { $regex: q, $options: "i" } },
-            ...(phoneDigits ? [{ phone: { $regex: phoneDigits, $options: "i" } }] : []),
+            ...(phoneDigits
+              ? [{ phone: { $regex: phoneDigits, $options: "i" } }]
+              : []),
           ],
         }
       : {};
 
     const [items, total] = await Promise.all([
-      OfflineShop.find(filter).sort(sort).skip((page - 1) * limit).limit(limit).lean(),
+      OfflineShop.find(filter)
+        .sort(sort)
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
       OfflineShop.countDocuments(filter),
     ]);
 
@@ -59,10 +76,11 @@ export async function GET(req) {
   }
 }
 
+/* -------------------- POST (create) -------------------- */
 export async function POST(req) {
   try {
-    const admin = isAuthenticated("admin");
-    if (!admin) return json(false, 401, "admin not authenticated");
+    const allowed = await isAuthenticated(["admin", "sales"]);
+    if (!allowed) return json(false, 401, "admin not authenticated");
 
     await connectDB();
 
@@ -77,10 +95,20 @@ export async function POST(req) {
     // Optional duplicate guard: same name + phone
     if (name && phone) {
       const dupe = await OfflineShop.findOne({ name, phone }).lean();
-      if (dupe) return json(false, 409, "A shop with the same name and phone already exists");
+      if (dupe)
+        return json(
+          false,
+          409,
+          "A shop with the same name and phone already exists"
+        );
     }
 
-    const created = await OfflineShop.create({ name, phone, location, contactPerson });
+    const created = await OfflineShop.create({
+      name,
+      phone,
+      location,
+      contactPerson,
+    });
     return json(true, 201, created.toObject());
   } catch (e) {
     return json(false, 500, e?.message || "Server error");

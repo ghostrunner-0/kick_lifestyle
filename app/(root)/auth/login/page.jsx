@@ -32,12 +32,35 @@ import { Login } from "@/store/reducer/AuthReducer";
 import { Button } from "@/components/ui/button";
 import AuthShell from "@/components/application/AuthShell";
 
+// Admin routes
 import {
-  USER_DASHABOARD,
-  WEBSITE_FORGOT_PASSWORD,
-  WEBSITE_REGISTER,
-} from "@/routes/WebsiteRoutes";
-import { ADMIN_DASHBOARD } from "@/routes/AdminRoutes";
+  ADMIN_DASHBOARD,
+  ADMIN_ORDERS_ALL,
+  ADMIN_BANNERS_ALL,
+} from "@/routes/AdminRoutes";
+
+// Website routes (we won't use the old my-account constant anymore)
+import { WEBSITE_FORGOT_PASSWORD, WEBSITE_REGISTER } from "@/routes/WebsiteRoutes";
+
+/* ---------------- helpers ---------------- */
+const toInternal = (url) => {
+  // normalize legacy my-account -> account
+  if (!url) return "/account";
+  return url.replace(/\/my-account\/?$/i, "/account");
+};
+
+const routeForRole = (role) => {
+  switch ((role || "user").toLowerCase()) {
+    case "admin":
+      return ADMIN_DASHBOARD;
+    case "sales":
+      return ADMIN_ORDERS_ALL;
+    case "editor":
+      return ADMIN_BANNERS_ALL;
+    default:
+      return "/account";
+  }
+};
 
 export default function LoginPage() {
   const dispatch = useDispatch();
@@ -45,16 +68,19 @@ export default function LoginPage() {
   const router = useRouter();
   const sp = useSearchParams();
 
+  // if already authenticated, dispatch and redirect quickly
   useEffect(() => {
     if (session?.user) dispatch(Login(session.user));
   }, [session, dispatch]);
 
   useEffect(() => {
     if (status === "authenticated" && session?.user) {
-      const callbackUrl = sp.get("callback");
-      if (callbackUrl) router.replace(callbackUrl);
-      else if (session.user.role === "admin") router.replace(ADMIN_DASHBOARD);
-      else router.replace(USER_DASHABOARD);
+      const cb = sp.get("callback");
+      if (cb) {
+        router.replace(toInternal(cb));
+      } else {
+        router.replace(routeForRole(session.user.role));
+      }
     }
   }, [status, session, router, sp]);
 
@@ -73,6 +99,7 @@ export default function LoginPage() {
     defaultValues: { email: "", password: "" },
   });
 
+  /* ---------- OTP submit (Credentials) ---------- */
   const handleOtpSubmit = async (values) => {
     try {
       setOtpLoading(true);
@@ -89,10 +116,12 @@ export default function LoginPage() {
       showToast("success", "OTP verified successfully");
       setOtpEmail(null);
 
-      const callbackUrl = sp.get("callback");
-      if (callbackUrl) router.push(callbackUrl);
-      else if (s?.user?.role === "admin") router.push(ADMIN_DASHABOARD);
-      else router.push(USER_DASHABOARD);
+      const cb = sp.get("callback");
+      if (cb) {
+        router.push(toInternal(cb));
+      } else {
+        router.push(routeForRole(s?.user?.role));
+      }
     } catch (e) {
       showToast("error", e?.message || "Failed to verify OTP");
     } finally {
@@ -100,6 +129,7 @@ export default function LoginPage() {
     }
   };
 
+  /* ---------- Login form submit (send OTP) ---------- */
   const handleLoginSubmit = async (values) => {
     try {
       setLoading(true);
@@ -115,12 +145,14 @@ export default function LoginPage() {
     }
   };
 
+  /* ---------- Google ---------- */
   const handleGoogleClick = async (e) => {
     e.preventDefault();
     if (googleLoading) return;
     setGoogleLoading(true);
     try {
-      const callbackUrl = sp.get("callback") || "/";
+      // If a callback is provided, normalize it; else go to /account
+      const callbackUrl = toInternal(sp.get("callback") || "/account");
       await signIn("google", { callbackUrl });
     } catch (err) {
       showToast("error", err?.message || "Google sign-in failed");
@@ -145,10 +177,7 @@ export default function LoginPage() {
 
         {!otpEmail ? (
           <Form {...form}>
-            <form
-              onSubmit={form.handleSubmit(handleLoginSubmit)}
-              className="space-y-5"
-            >
+            <form onSubmit={form.handleSubmit(handleLoginSubmit)} className="space-y-5">
               {/* Email */}
               <FormField
                 control={form.control}
@@ -165,7 +194,7 @@ export default function LoginPage() {
                           type="email"
                           placeholder="you@example.com"
                           autoComplete="email"
-                          className="h-11 rounded-xl pl-10  focus-visible:ring-2 focus-visible:ring-[#fcba17]"
+                          className="h-11 rounded-xl pl-10 focus-visible:ring-2 focus-visible:ring-[#fcba17]"
                           {...field}
                         />
                       </FormControl>
@@ -199,9 +228,7 @@ export default function LoginPage() {
                         type="button"
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
                         onClick={() => setIsPasswordVisible((p) => !p)}
-                        aria-label={
-                          isPasswordVisible ? "Hide password" : "Show password"
-                        }
+                        aria-label={isPasswordVisible ? "Hide password" : "Show password"}
                       >
                         {isPasswordVisible ? <FaRegEye /> : <FaRegEyeSlash />}
                       </button>
@@ -214,10 +241,7 @@ export default function LoginPage() {
               {/* Meta row */}
               <div className="flex items-center justify-between text-sm">
                 <div className="text-slate-500 dark:text-slate-400" />
-                <Link
-                  href={WEBSITE_FORGOT_PASSWORD}
-                  className="text-[#b88a00] hover:underline"
-                >
+                <Link href={WEBSITE_FORGOT_PASSWORD} className="text-[#b88a00] hover:underline">
                   Forgot password?
                 </Link>
               </div>
@@ -257,21 +281,14 @@ export default function LoginPage() {
               {/* Register */}
               <p className="text-center text-sm text-slate-600 dark:text-slate-300">
                 Don’t have an account?{" "}
-                <Link
-                  href={WEBSITE_REGISTER}
-                  className="text-[#b88a00] hover:underline"
-                >
+                <Link href={WEBSITE_REGISTER} className="text-[#b88a00] hover:underline">
                   Create an account
                 </Link>
               </p>
             </form>
           </Form>
         ) : (
-          <OTPVerification
-            email={otpEmail}
-            loading={otpLoading}
-            onsubmit={handleOtpSubmit}
-          />
+          <OTPVerification email={otpEmail} loading={otpLoading} onsubmit={handleOtpSubmit} />
         )}
       </div>
     </AuthShell>

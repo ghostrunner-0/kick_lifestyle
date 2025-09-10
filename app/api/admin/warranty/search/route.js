@@ -9,20 +9,31 @@ import { isAuthenticated } from "@/lib/Authentication";
 import WarrantyRegistration from "@/models/WarrantyRegistration.model";
 
 const json = (ok, status, payload) =>
-  NextResponse.json(ok ? { success: true, data: payload } : { success: false, message: payload }, { status });
+  NextResponse.json(
+    ok
+      ? { success: true, data: payload }
+      : { success: false, message: payload },
+    { status }
+  );
 
 const esc = (s) => String(s || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const digits = (s) => (String(s || "").match(/\d+/g) || []).join("");
 
 export async function GET(req) {
   try {
-    const admin = isAuthenticated("admin");
-    if (!admin) return json(false, 401, "admin not authenticated");
+    // ✅ allow admin + sales; IMPORTANT: await it
+    const allowed = await isAuthenticated(["admin", "sales"]);
+    if (!allowed) return json(false, 401, "admin not authenticated");
+
     await connectDB();
 
     const { searchParams } = new URL(req.url);
     const q = (searchParams.get("q") || "").trim();
-    const limit = Math.max(1, Math.min(50, Number(searchParams.get("limit") || 25)));
+    const limit = Math.max(
+      1,
+      Math.min(50, Number(searchParams.get("limit") || 25))
+    );
+
     if (q.length < 2) return json(true, 200, []);
 
     const rx = new RegExp(esc(q), "i");
@@ -33,19 +44,24 @@ export async function GET(req) {
         { "customer.name": rx },
         ...(qDigits ? [{ "customer.phone": new RegExp("^" + qDigits) }] : []),
         { shopName: rx },
+        // keep this if you store it; otherwise harmless
         { displayOrderId: rx },
         { "items.serial": rx },
-        ...(mongoose.isValidObjectId(q) ? [{ orderId: new mongoose.Types.ObjectId(q) }] : []),
+        ...(mongoose.isValidObjectId(q)
+          ? [{ orderId: new mongoose.Types.ObjectId(q) }]
+          : []),
       ],
     };
 
-    // Use aggregation to compute itemsCount accurately without pulling whole items array to app
     const rows = await WarrantyRegistration.aggregate([
       { $match: match },
       { $sort: { createdAt: -1 } },
       { $limit: limit },
       {
         $project: {
+          _id: 1,
+          orderId: 1,
+          displayOrderId: 1,
           customerName: "$customer.name",
           customerPhone: "$customer.phone",
           itemsCount: { $size: { $ifNull: ["$items", []] } },

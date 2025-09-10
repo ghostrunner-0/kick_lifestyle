@@ -72,6 +72,18 @@ const toTitle = (s) =>
     .replace(/\s+/g, " ")
     .replace(/\b\w/g, (m) => m.toUpperCase());
 
+/* -------- Portal roles that should see /admin/dashboard -------- */
+const PORTAL_ROLES = new Set(["admin", "sales", "editor"]);
+const LS_ROLE_KEY = "auth.role";
+
+/* Extract role from different API shapes */
+const pickRole = (json) =>
+  json?.role ||
+  json?.data?.role ||
+  json?.user?.role ||
+  json?.data?.user?.role ||
+  null;
+
 export default function Header() {
   const router = useRouter();
   const pathname = usePathname();
@@ -86,38 +98,112 @@ export default function Header() {
 
   const { categories, isLoading } = useCategories();
 
+  /* -------- account link (fast + role-aware) -------- */
   const [accountHref, setAccountHref] = useState("/auth/login");
   const [accountLabel, setAccountLabel] = useState("Login / Register");
 
+  // 1) Instant boot from localStorage to avoid flicker
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const role = localStorage.getItem(LS_ROLE_KEY);
+      if (role && PORTAL_ROLES.has(role)) {
+        setAccountHref("/admin/dashboard");
+        setAccountLabel("Dashboard");
+      } else if (role === "user") {
+        setAccountHref("/account");
+        setAccountLabel("My Account");
+      }
+    } catch {}
+  }, []);
+
+  // 2) Refresh from API (robust shapes + fallback)
   useEffect(() => {
     let cancelled = false;
+    const ac = new AbortController();
+
     (async () => {
-      try {
-        const res = await fetch("/api/auth/me", { credentials: "include" });
-        if (!res.ok) throw new Error("not logged in");
-        const json = await res.json();
-        const user = json?.data || json?.user || null;
-        if (!user) throw new Error("no user");
-        const isAdmin =
-          user?.isAdmin === true ||
-          user?.role === "admin" ||
-          (Array.isArray(user?.roles) && user.roles.includes("admin"));
-        if (!cancelled) {
-          setAccountHref(isAdmin ? "/admin/dashboard" : "/account");
-          setAccountLabel(isAdmin ? "Admin Dashboard" : "My Account");
-        }
-      } catch {
-        if (!cancelled) {
+      const setForRole = (role) => {
+        if (!role) {
           setAccountHref("/auth/login");
           setAccountLabel("Login / Register");
+          return;
         }
+        if (PORTAL_ROLES.has(role)) {
+          setAccountHref("/admin/dashboard");
+          setAccountLabel("Dashboard");
+        } else if (role === "user") {
+          setAccountHref("/account");
+          setAccountLabel("My Account");
+        } else {
+          // Unknown role -> treat as logged in user
+          setAccountHref("/account");
+          setAccountLabel("My Account");
+        }
+      };
+
+      try {
+        // Preferred endpoint
+        const res = await fetch("/api/auth/check", {
+          credentials: "include",
+          cache: "no-store",
+          signal: ac.signal,
+        });
+        if (res.ok) {
+          const json = await res.json();
+          const role = pickRole(json);
+          if (!cancelled) {
+            setForRole(role);
+            try {
+              localStorage.setItem(LS_ROLE_KEY, role || "");
+            } catch {}
+          }
+          return;
+        }
+      } catch {}
+
+      // Fallback: /api/auth/me
+      try {
+        const res2 = await fetch("/api/auth/me", {
+          credentials: "include",
+          cache: "no-store",
+          signal: ac.signal,
+        });
+        if (res2.ok) {
+          const json2 = await res2.json();
+          // supports both {user:{role}} and {data:{role}}
+          const role =
+            pickRole(json2) ||
+            (json2?.data ? json2.data.role : json2?.user?.role) ||
+            null;
+
+          if (!cancelled) {
+            setForRole(role);
+            try {
+              localStorage.setItem(LS_ROLE_KEY, role || "");
+            } catch {}
+          }
+          return;
+        }
+      } catch {}
+
+      // Not logged in
+      if (!cancelled) {
+        setAccountHref("/auth/login");
+        setAccountLabel("Login / Register");
+        try {
+          localStorage.removeItem(LS_ROLE_KEY);
+        } catch {}
       }
     })();
+
     return () => {
       cancelled = true;
+      ac.abort();
     };
   }, []);
 
+  /* -------- sticky shade on home -------- */
   useEffect(() => {
     if (!isHome) return;
     const onScroll = () => setIsStickyShade(window.scrollY > 8);
@@ -136,6 +222,7 @@ export default function Header() {
       }));
   }, [categories]);
 
+  /* -------- search index (for SearchSidebar) -------- */
   useEffect(() => {
     let cancel = false;
     (async () => {
@@ -161,7 +248,7 @@ export default function Header() {
 
   const containerMaxW = "max-w-[1600px]";
 
-  /* ↓↓↓ z-index lowered to sit BELOW shadcn Sheet/Dialog (z-50) ↓↓↓ */
+  /* keep header beneath shadcn Sheet/Dialog (z-50) */
   const headerCls = isHome
     ? [
         "fixed inset-x-0 top-0 z-[40] transition-colors",
@@ -171,13 +258,10 @@ export default function Header() {
       ].join(" ")
     : "fixed inset-x-0 top-0 z-[40] bg-white/70 supports-[backdrop-filter]:bg-white/60 backdrop-blur";
 
-  const textCls = isHome
-    ? isStickyShade
-      ? "text-gray-900"
-      : "text-white"
-    : "text-gray-900";
+  const textCls = isHome ? (isStickyShade ? "text-gray-900" : "text-white") : "text-gray-900";
   const currentLogo = isHome && !isStickyShade ? LOGO_WHITE : LOGO_BLACK;
 
+  /* global listeners to open search/cart */
   useEffect(() => {
     const openSearch = () => setSearchOpen(true);
     const openCart = () => setCartOpen(true);
@@ -189,14 +273,12 @@ export default function Header() {
     };
   }, []);
 
+  /* expose header height CSS var */
   const headerRef = useRef(null);
   useLayoutEffect(() => {
     const setVar = () => {
       const h = headerRef.current?.getBoundingClientRect().height ?? 64;
-      document.documentElement.style.setProperty(
-        "--site-header-h",
-        `${Math.round(h)}px`
-      );
+      document.documentElement.style.setProperty("--site-header-h", `${Math.round(h)}px`);
       window.dispatchEvent(new Event("header:resize"));
     };
     setVar();
@@ -265,9 +347,7 @@ export default function Header() {
                 <nav className="p-3">
                   <ul className="space-y-2">
                     {isLoading && (
-                      <li className="px-4 py-2 text-sm text-muted-foreground">
-                        Loading…
-                      </li>
+                      <li className="px-4 py-2 text-sm text-muted-foreground">Loading…</li>
                     )}
 
                     {!isLoading &&
@@ -288,10 +368,7 @@ export default function Header() {
                       item.items ? (
                         <li key={item.label}>
                           <Accordion type="single" collapsible>
-                            <AccordionItem
-                              value={item.label}
-                              className="border-0"
-                            >
+                            <AccordionItem value={item.label} className="border-0">
                               <AccordionTrigger className="px-4 h-12 text-[15px] font-medium hover:no-underline rounded-lg data-[state=closed]:hover:bg-muted/60 data-[state=open]:bg-muted">
                                 {item.label}
                               </AccordionTrigger>
@@ -477,9 +554,7 @@ export default function Header() {
       </header>
 
       {/* Push content below fixed header (home keeps hero overlay) */}
-      {!isHome && (
-        <div style={{ height: "var(--site-header-h)" }} aria-hidden />
-      )}
+      {!isHome && <div style={{ height: "var(--site-header-h)" }} aria-hidden />}
 
       <CartSidebar open={cartOpen} onOpenChange={setCartOpen} />
       <SearchSidebar

@@ -1,14 +1,13 @@
 // app/api/admin/orders/bulk-status/route.js
+export const dynamic = "force-dynamic";
+
 import mongoose from "mongoose";
-import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/DB";
 import { response } from "@/lib/helperFunctions";
 import { isAuthenticated } from "@/lib/Authentication";
 import Order from "@/models/Orders.model";
 
-export const dynamic = "force-dynamic";
-
-const ALLOWED_STATUSES = [
+const ALLOWED_STATUSES = new Set([
   "processing",
   "pending payment",
   "payment Not Verified",
@@ -17,37 +16,48 @@ const ALLOWED_STATUSES = [
   "completed",
   "ready to pack",
   "ready to ship",
-];
+]);
 
 export async function POST(req) {
   try {
-    const admin = isAuthenticated("admin");
-    if (!admin) return response(false, 401, "admin not authenticated");
+    // ✅ allow admin & sales
+    const allowed = await isAuthenticated(["admin", "sales"]);
+    if (!allowed) return response(false, 401, "admin not authenticated");
 
     await connectDB();
 
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
     let { ids, status } = body || {};
-    if (!Array.isArray(ids) || ids.length === 0) {
-      return response(false, 400, "No ids provided");
-    }
-    if (!ALLOWED_STATUSES.includes(status)) {
+
+    // ✅ validate status
+    const nextStatus = typeof status === "string" ? status.trim() : "";
+    if (!ALLOWED_STATUSES.has(nextStatus)) {
       return response(false, 400, "Invalid status");
     }
 
-    // validate ids
-    ids = ids.filter((x) => mongoose.Types.ObjectId.isValid(String(x)));
-    if (ids.length === 0) return response(false, 400, "No valid ids");
+    // ✅ validate & normalize ids
+    const validIds = Array.isArray(ids)
+      ? [...new Set(ids.map(String))].filter((x) => mongoose.isValidObjectId(x))
+      : [];
+    if (validIds.length === 0) return response(false, 400, "No valid ids");
 
-    const res = await Order.updateMany(
-      { _id: { $in: ids } },
-      { $set: { status } }
+    // ✅ bulk update
+    const result = await Order.updateMany(
+      { _id: { $in: validIds } },
+      { $set: { status: nextStatus } }
     );
 
-    return NextResponse.json({
-      success: true,
-      data: { matched: res.matchedCount || res.n, modified: res.modifiedCount || res.nModified },
-    });
+    // support different mongoose result shapes
+    const matched =
+      typeof result.matchedCount === "number"
+        ? result.matchedCount
+        : result.n || 0;
+    const modified =
+      typeof result.modifiedCount === "number"
+        ? result.modifiedCount
+        : result.nModified || 0;
+
+    return response(true, 200, { matched, modified });
   } catch (e) {
     return response(false, 500, e?.message || "Server error");
   }

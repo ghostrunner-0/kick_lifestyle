@@ -9,18 +9,25 @@ export const revalidate = 0;
 
 export async function GET(req) {
   try {
-    const admin = await isAuthenticated("admin");
-    if (!admin) {
-      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 403 });
+    // ✅ allow admin + sales
+    const allowed = await isAuthenticated(["admin", "sales"]);
+    if (!allowed) {
+      return NextResponse.json(
+        { success: false, message: "admin not authenticated" },
+        { status: 401 }
+      );
     }
+
     await connectDB();
 
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status"); // pending|approved|rejected
-    const limit = Math.min(Number(searchParams.get("limit") || 50), 200);
+    const limit = Math.min(200, Math.max(1, Number(searchParams.get("limit") || 50)));
 
     const query = {};
-    if (status && ["pending", "approved", "rejected"].includes(status)) query.status = status;
+    if (status && ["pending", "approved", "rejected"].includes(status)) {
+      query.status = status;
+    }
 
     const items = await OfflineRegistrationRequest.find(query)
       .sort({ createdAt: -1 })
@@ -31,6 +38,9 @@ export async function GET(req) {
     return NextResponse.json({ success: true, data: { items } }, { status: 200 });
   } catch (e) {
     console.error("GET /api/admin/offline-registration error:", e);
-    return NextResponse.json({ success: false, message: "Failed to fetch registrations" }, { status: 500 });
+    return NextResponse.json(
+      { success: false, message: "Failed to fetch registrations" },
+      { status: 500 }
+    );
   }
 }
