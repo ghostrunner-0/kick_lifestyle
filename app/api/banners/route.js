@@ -1,4 +1,7 @@
 // app/api/banners/route.js
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 import { isAuthenticated } from "@/lib/Authentication";
 import { connectDB } from "@/lib/DB";
 import { response, catchError } from "@/lib/helperFunctions";
@@ -6,8 +9,9 @@ import Banner from "@/models/Banner.model";
 
 export async function GET(req) {
   try {
-    const admin = await isAuthenticated("admin");
-    if (!admin) return response(false, 401, "User Not Allowed");
+    // allow admin + editor
+    const allowed = await isAuthenticated(["admin", "editor"]);
+    if (!allowed) return response(false, 401, "User Not Allowed");
 
     await connectDB();
 
@@ -15,7 +19,6 @@ export async function GET(req) {
     const activeParam = searchParams.get("active");
 
     const filter = { deletedAt: null };
-
     if (activeParam && activeParam !== "all") {
       filter.active = activeParam === "true";
     }
@@ -24,6 +27,6 @@ export async function GET(req) {
 
     return response(true, 200, "Banners fetched successfully", banners);
   } catch (err) {
-    return catchError(err, "Failed to fetch banners");  
+    return catchError(err, "Failed to fetch banners");
   }
 }

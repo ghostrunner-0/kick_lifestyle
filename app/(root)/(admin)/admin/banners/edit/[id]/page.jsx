@@ -3,10 +3,10 @@
 import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
-import { useParams, useRouter } from "next/navigation";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import Image from "next/image";
+import NextImage from "next/image";
+import { useParams, useRouter } from "next/navigation";
 
 import BreadCrumb from "@/components/application/admin/BreadCrumb";
 import { ADMIN_DASHBOARD } from "@/routes/AdminRoutes";
@@ -30,14 +30,14 @@ import MediaSelector from "@/components/application/admin/MediaSelector";
 import { showToast } from "@/lib/ShowToast";
 
 /* ------------ ENV ------------ */
-const MAIN_DOMAIN = process.env.NEXT_PUBLIC_BASE_URL || "";
+const MAIN_DOMAIN = process.env.NEXT_PUBLIC_BASE_URL || ""; // e.g. http://localhost:3000
 
-/* --- Required dimensions --- */
+/* --- Required dimensions (same as create) --- */
 const DESKTOP_W = 1920;
 const DESKTOP_H = 650;
 const MOBILE_W = 600; // portrait
 const MOBILE_H = 900; // portrait
-const TOLERANCE = 0.03;
+const TOLERANCE = 0.03; // 3% aspect ratio tolerance
 
 /* --- Zod --- */
 const imageZ = z.object({
@@ -56,19 +56,31 @@ const hrefZ = z
     { message: "Use '#', an absolute URL, or a relative path" }
   );
 
+// HEX color: normalize and validate (#abc or #aabbcc)
+const hexColorRegex = /^#(?:[A-Fa-f0-9]{3}){1,2}$/;
+const bgColorZ = z
+  .string()
+  .trim()
+  .transform((v) => (v?.startsWith("#") ? v : `#${v || ""}`))
+  .refine((v) => hexColorRegex.test(v), {
+    message: "Enter a valid HEX color, e.g. #fcba17",
+  })
+  .default("#ffffff");
+
 const formSchema = z.object({
   desktopImage: imageZ,
   mobileImage: imageZ,
   href: hrefZ.default("#"),
   active: z.boolean().default(true),
   order: z.coerce.number().int().min(0, "Order must be 0 or greater"),
+  bgColor: bgColorZ, // NEW
 });
 
-/* --- Helpers --- */
+/* --- helpers --- */
 const sanitize = (file) => ({
-  _id: String(file._id),
+  _id: file._id,
   alt: file.alt || "",
-  path: String(file.path),
+  path: file.path,
 });
 
 function prettySize(w, h) {
@@ -85,7 +97,7 @@ function ratioOK(actualW, actualH, targetW, targetH, tol = TOLERANCE) {
 
 async function probeImageSize(src) {
   return new Promise((resolve) => {
-    const img = new Image();
+    const img = new window.Image();
     img.onload = () =>
       resolve({ width: img.naturalWidth, height: img.naturalHeight });
     img.onerror = () => resolve({ width: undefined, height: undefined });
@@ -109,12 +121,12 @@ const BreadCrumbData = [
   { href: "", label: "Edit" },
 ];
 
-export default function BannerEditPage() {
+export default function EditBannerPage() {
+  const { id } = useParams();
   const router = useRouter();
-  const { id } = useParams(); // from /banners/[id]/edit
 
-  const [loading, setLoading] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   const [deskMeta, setDeskMeta] = useState({ width: undefined, height: undefined });
   const [mobMeta, setMobMeta] = useState({ width: undefined, height: undefined });
@@ -124,76 +136,86 @@ export default function BannerEditPage() {
     defaultValues: {
       desktopImage: undefined,
       mobileImage: undefined,
-      href: "",
+      href: "#",
       active: true,
       order: 0,
+      bgColor: "#ffffff",
     },
   });
 
   const values = form.watch();
 
-  // Prefill
+  // Load existing banner
   useEffect(() => {
-    if (!id) {
-      showToast("error", "Missing banner id");
-      setInitialLoading(false);
-      return;
-    }
+    let alive = true;
     (async () => {
       try {
-        const { data: res } = await axios.get(`/api/banners/${id}`);
-        if (!res?.success || !res?.data) throw new Error(res?.message || "Not found");
-        const b = res.data;
+        const { data } = await axios.get(`/api/banners/${id}`);
+        const b = data?.data || data; // your response() already wraps in data
+        if (!b?._id) throw new Error("Banner not found");
 
-        const desk = b.desktopImage ? sanitize(b.desktopImage) : undefined;
-        const mob = b.mobileImage ? sanitize(b.mobileImage) : undefined;
-
-        form.reset({
-          desktopImage: desk,
-          mobileImage: mob,
-          href: b.href || "",
-          active: Boolean(b.active),
+        const payload = {
+          desktopImage: b.desktopImage,
+          mobileImage: b.mobileImage,
+          href: b.href || "#",
+          active: !!b.active,
           order: Number.isFinite(b.order) ? b.order : 0,
-        });
+          bgColor: b.bgColor || "#ffffff", // NEW
+        };
 
-        if (desk?.path) probeImageSize(desk.path).then(setDeskMeta);
-        if (mob?.path) probeImageSize(mob.path).then(setMobMeta);
+        if (!alive) return;
+        form.reset(payload);
+
+        // Probe sizes for badges
+        if (b.desktopImage?.path) {
+          const meta = await probeImageSize(b.desktopImage.path);
+          if (alive) setDeskMeta(meta);
+        }
+        if (b.mobileImage?.path) {
+          const meta = await probeImageSize(b.mobileImage.path);
+          if (alive) setMobMeta(meta);
+        }
       } catch (e) {
         showToast("error", e?.message || "Failed to load banner");
       } finally {
-        setInitialLoading(false);
+        if (alive) setLoading(false);
       }
     })();
+    return () => { alive = false; };
   }, [id, form]);
 
   const onSubmit = async (vals) => {
     try {
-      if (!id) throw new Error("Missing banner id");
-      setLoading(true);
-
+      setSaving(true);
       const payload = {
-        desktopImage: sanitize(vals.desktopImage),
-        mobileImage: sanitize(vals.mobileImage),
+        desktopImage: vals.desktopImage,
+        mobileImage: vals.mobileImage,
         href: resolveHref(vals.href),
         active: !!vals.active,
         order: Number(vals.order),
+        bgColor: vals.bgColor, // NEW — make sure your PUT route accepts this field
       };
-
       const { data: res } = await axios.put(`/api/banners/${id}`, payload);
-      if (!res?.success) throw new Error(res?.message || "Failed to update banner");
-
+      if (!res?.success) throw new Error(res?.message || "Update failed");
       showToast("success", "Banner updated!");
-      router.back(); // or push to list page
+      router.refresh();
     } catch (err) {
       showToast("error", err?.message || "Something went wrong");
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
   const previewHref = useMemo(() => resolveHref(values.href), [values.href]);
+
   const desktopOK = ratioOK(deskMeta.width, deskMeta.height, DESKTOP_W, DESKTOP_H);
   const mobileOK = ratioOK(mobMeta.width, mobMeta.height, MOBILE_W, MOBILE_H);
+
+  const gradientPreviewStyle = {
+    backgroundImage: `linear-gradient(180deg, ${values.bgColor || "#ffffff"} 0%, ${
+      values.bgColor || "#ffffff"
+    } 50%, #ffffff 100%)`,
+  };
 
   return (
     <div className="space-y-4">
@@ -205,14 +227,15 @@ export default function BannerEditPage() {
           <CardHeader className="py-0 px-3 border-b [.border-b]:pb-2">
             <h4 className="text-xl font-semibold mt-3">Edit Banner</h4>
           </CardHeader>
+
           <CardContent className="pb-5">
-            {initialLoading ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
+            {loading ? (
+              <div className="text-sm text-muted-foreground">Loading…</div>
             ) : (
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-                  {/* Active / Order / Href */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Row: Active / Order / Href / Color */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <FormField
                       control={form.control}
                       name="active"
@@ -263,7 +286,38 @@ export default function BannerEditPage() {
                           </FormControl>
                           <FormDescription className="text-xs">
                             Enter <code>#</code>, a full URL, or a relative path (e.g., <code>/sale</code>).
-                            It resolves against <strong>{MAIN_DOMAIN || "your domain"}</strong>.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    {/* bgColor (HEX) + native picker */}
+                    <FormField
+                      control={form.control}
+                      name="bgColor"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Top BG Color (HEX)</FormLabel>
+                          <div className="flex items-center gap-2">
+                            <FormControl>
+                              <Input
+                                type="text"
+                                placeholder="#fcba17"
+                                value={field.value || ""}
+                                onChange={(e) => field.onChange(e.target.value)}
+                              />
+                            </FormControl>
+                            <input
+                              type="color"
+                              className="h-9 w-9 rounded border"
+                              value={hexColorRegex.test(field.value || "") ? field.value : "#ffffff"}
+                              onChange={(e) => field.onChange(e.target.value)}
+                              aria-label="Pick color"
+                            />
+                          </div>
+                          <FormDescription className="text-xs">
+                            Used for the header-half gradient behind the banner.
                           </FormDescription>
                           <FormMessage />
                         </FormItem>
@@ -271,8 +325,8 @@ export default function BannerEditPage() {
                     />
                   </div>
 
-                  {/* Images section (dark wrapper) */}
-                  <div className="rounded-md bg-black/70 p-4 space-y-6">
+                  {/* Images Section */}
+                  <div className="space-y-6 rounded-md border p-3">
                     {/* Desktop */}
                     <FormField
                       control={form.control}
@@ -280,9 +334,11 @@ export default function BannerEditPage() {
                       render={({ field }) => (
                         <FormItem>
                           <div className="flex items-center justify-between">
-                            <FormLabel className="text-white">Desktop Image</FormLabel>
-                            <div className="flex items-center gap-2 text-xs text-gray-300">
-                              <Badge variant="outline">{DESKTOP_W}×{DESKTOP_H}</Badge>
+                            <FormLabel>Desktop Image</FormLabel>
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <Badge variant="outline">
+                                {DESKTOP_W}×{DESKTOP_H}
+                              </Badge>
                               {deskMeta.width && (
                                 <span className="ml-1">
                                   Actual: {prettySize(deskMeta.width, deskMeta.height)}
@@ -308,13 +364,13 @@ export default function BannerEditPage() {
                             }}
                           />
 
-                          <FormDescription className="text-xs text-gray-300">
+                          <FormDescription className="text-xs">
                             Recommended: <strong>{DESKTOP_W}×{DESKTOP_H}</strong> (≈ {(DESKTOP_W / DESKTOP_H).toFixed(2)}:1)
                           </FormDescription>
 
                           {deskMeta.width && (
                             <div className="pt-1">
-                              {desktopOK ? (
+                              {ratioOK(deskMeta.width, deskMeta.height, DESKTOP_W, DESKTOP_H) ? (
                                 <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Looks good</Badge>
                               ) : (
                                 <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100">
@@ -336,9 +392,11 @@ export default function BannerEditPage() {
                       render={({ field }) => (
                         <FormItem>
                           <div className="flex items-center justify-between">
-                            <FormLabel className="text-white">Mobile Image</FormLabel>
-                            <div className="flex items-center gap-2 text-xs text-gray-300">
-                              <Badge variant="outline">{MOBILE_W}×{MOBILE_H}</Badge>
+                            <FormLabel>Mobile Image</FormLabel>
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <Badge variant="outline">
+                                {MOBILE_W}×{MOBILE_H}
+                              </Badge>
                               {mobMeta.width && (
                                 <span className="ml-1">
                                   Actual: {prettySize(mobMeta.width, mobMeta.height)}
@@ -364,13 +422,13 @@ export default function BannerEditPage() {
                             }}
                           />
 
-                          <FormDescription className="text-xs text-gray-300">
+                          <FormDescription className="text-xs">
                             Recommended: <strong>{MOBILE_W}×{MOBILE_H}</strong> (≈ {(MOBILE_W / MOBILE_H).toFixed(2)}:1)
                           </FormDescription>
 
                           {mobMeta.width && (
                             <div className="pt-1">
-                              {mobileOK ? (
+                              {ratioOK(mobMeta.width, mobMeta.height, MOBILE_W, MOBILE_H) ? (
                                 <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Looks good</Badge>
                               ) : (
                                 <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100">
@@ -388,13 +446,14 @@ export default function BannerEditPage() {
 
                   {/* Actions */}
                   <div className="flex items-center gap-3">
-                    <ButtonLoading type="submit" text="Update Banner" loading={loading} />
+                    <ButtonLoading type="submit" text="Update Banner" loading={saving} />
                     <Button
                       type="button"
                       variant="ghost"
-                      onClick={() => router.back()}
+                      onClick={() => form.reset(form.getValues())}
+                      title="Reset changes"
                     >
-                      Cancel
+                      Reset
                     </Button>
                   </div>
                 </form>
@@ -415,11 +474,26 @@ export default function BannerEditPage() {
                 <Badge className={values.active ? "" : "bg-gray-200 text-gray-700 hover:bg-gray-200"}>
                   {values.active ? "Active" : "Inactive"}
                 </Badge>
+                <span className="inline-flex items-center gap-2 text-xs">
+                  <span>Color:</span>
+                  <span
+                    className="inline-block h-4 w-6 rounded border"
+                    style={{ backgroundColor: values.bgColor || "#ffffff" }}
+                    title={values.bgColor}
+                  />
+                  <code className="text-muted-foreground">{values.bgColor || "#ffffff"}</code>
+                </span>
               </div>
 
               <div className="text-sm">
                 <span className="font-medium">Href:</span>{" "}
-                <span className="text-muted-foreground break-all">{useMemo(() => resolveHref(values.href), [values.href]) || "#"}</span>
+                <span className="text-muted-foreground break-all">{previewHref || "#"}</span>
+              </div>
+
+              {/* gradient preview */}
+              <div>
+                <div className="mb-1 text-xs text-muted-foreground">Header-half gradient preview</div>
+                <div className="h-10 w-full rounded border" style={gradientPreviewStyle} />
               </div>
 
               {/* Desktop preview */}
@@ -429,7 +503,7 @@ export default function BannerEditPage() {
                 </div>
                 <div className="relative h-32 w-full overflow-hidden rounded border bg-muted">
                   {values.desktopImage?.path ? (
-                    <Image
+                    <NextImage
                       src={values.desktopImage.path}
                       alt={values.desktopImage.alt || "desktop preview"}
                       fill
@@ -451,7 +525,7 @@ export default function BannerEditPage() {
                 </div>
                 <div className="relative h-44 w-28 overflow-hidden rounded border bg-muted">
                   {values.mobileImage?.path ? (
-                    <Image
+                    <NextImage
                       src={values.mobileImage.path}
                       alt={values.mobileImage.alt || "mobile preview"}
                       fill

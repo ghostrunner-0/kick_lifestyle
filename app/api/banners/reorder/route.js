@@ -14,33 +14,26 @@ const reorderZ = z.array(
 
 export async function PUT(req) {
   try {
-    const admin = await isAuthenticated("admin");
-    if (!admin) return response(false, 401, "User Not Allowed");
+    // ✅ allow admin + editor
+    const allowed = await isAuthenticated(["admin", "editor"]);
+    if (!allowed) return response(false, 401, "User Not Allowed");
 
     await connectDB();
 
     const raw = await req.json();
     const parsed = reorderZ.safeParse(raw);
     if (!parsed.success) {
-      return response(
-        false,
-        400,
-        "Invalid or missing fields",
-        parsed.error.format()
-      );
+      return response(false, 400, "Invalid or missing fields", parsed.error.format());
     }
 
     const updates = parsed.data;
 
-    // Perform updates in bulk
-    const bulkOps = updates.map((item) => ({
-      updateOne: {
-        filter: { _id: item._id },
-        update: { $set: { order: item.order } },
-      },
+    // bulk update orders
+    const bulkOps = updates.map(({ _id, order }) => ({
+      updateOne: { filter: { _id }, update: { $set: { order } } },
     }));
 
-    if (bulkOps.length > 0) {
+    if (bulkOps.length) {
       await Banner.bulkWrite(bulkOps);
     }
 

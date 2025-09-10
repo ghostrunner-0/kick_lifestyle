@@ -46,20 +46,16 @@ const normalizeImage = (img) => ({
 
 export async function POST(req) {
   try {
-    const admin = await isAuthenticated("admin");
-    if (!admin) return response(false, 401, "User Not Allowed");
+    // ✅ allow admin + editor
+    const allowed = await isAuthenticated(["admin", "editor"]);
+    if (!allowed) return response(false, 401, "User Not Allowed");
 
     await connectDB();
 
     const raw = await req.json();
     const parsed = payloadZ.safeParse(raw);
     if (!parsed.success) {
-      return response(
-        false,
-        400,
-        "Invalid or missing fields",
-        parsed.error.format()
-      );
+      return response(false, 400, "Invalid or missing fields", parsed.error.format());
     }
 
     const data = parsed.data;
@@ -77,7 +73,7 @@ export async function POST(req) {
       href: data.href.trim(),
       active: typeof data.active === "boolean" ? data.active : true,
       order,
-      bgColor: data.bgColor || "#ffffff", // <— NEW
+      bgColor: data.bgColor || "#ffffff",
       deletedAt: null,
     };
 

@@ -5,19 +5,35 @@ import { connectDB } from "@/lib/DB";
 import { response, catchError } from "@/lib/helperFunctions";
 import Banner from "@/models/Banner.model";
 
-/* ---------------- Zod ---------------- */
+/* ---------------- Shared helpers (match create route) ---------------- */
 const imageZ = z.object({
   _id: z.string(),
   alt: z.string().optional().default(""),
   path: z.string(),
 });
 
+// Allow '#abc' or '#aabbcc'
+const hexColorRegex = /^#(?:[A-Fa-f0-9]{3}){1,2}$/;
+const normalizeHex = (v) => {
+  const val = String(v || "").trim();
+  return val.startsWith("#") ? val : `#${val}`;
+};
+
+/* ---------------- Zod payload for UPDATE (PUT) ---------------- */
 const payloadZ = z.object({
   desktopImage: imageZ.optional(),
   mobileImage: imageZ.optional(),
   href: z.string().trim().min(1).optional(),
   active: z.boolean().optional(),
   order: z.number().int().min(0).optional(),
+  bgColor: z
+    .string()
+    .trim()
+    .transform(normalizeHex)
+    .refine((v) => hexColorRegex.test(v), {
+      message: "Enter a valid HEX color, e.g. #fcba17",
+    })
+    .optional(),
 });
 
 const normalizeImage = (img) =>
@@ -26,14 +42,13 @@ const normalizeImage = (img) =>
     : undefined;
 
 /* --------------- GET /api/banners/:id --------------- */
-export async function GET(req, { params }) {
+export async function GET(_req, { params }) {
   try {
-    const admin = await isAuthenticated("admin");
-    if (!admin) return response(false, 401, "User Not Allowed");
+    const allowed = await isAuthenticated(["admin", "editor"]);
+    if (!allowed) return response(false, 401, "User Not Allowed");
 
     await connectDB();
-    const param = await params;
-    const { id } = param || {};
+    const { id } = (await params) || {};
     if (!id) return response(false, 400, "Missing banner id");
 
     const banner = await Banner.findById(id).lean();
@@ -48,23 +63,17 @@ export async function GET(req, { params }) {
 /* --------------- PUT /api/banners/:id --------------- */
 export async function PUT(req, { params }) {
   try {
-    const admin = await isAuthenticated("admin");
-    if (!admin) return response(false, 401, "User Not Allowed");
+    const allowed = await isAuthenticated(["admin", "editor"]);
+    if (!allowed) return response(false, 401, "User Not Allowed");
 
     await connectDB();
-    const param = await params;
-    const { id } = param || {};
+    const { id } = (await params) || {};
     if (!id) return response(false, 400, "Missing banner id");
 
     const raw = await req.json();
     const parsed = payloadZ.safeParse(raw);
     if (!parsed.success) {
-      return response(
-        false,
-        400,
-        "Invalid or missing fields",
-        parsed.error.format()
-      );
+      return response(false, 400, "Invalid or missing fields", parsed.error.format());
     }
     const data = parsed.data;
 
@@ -73,13 +82,13 @@ export async function PUT(req, { params }) {
     if (!current) return response(false, 404, "Banner not found");
 
     const update = {};
-    if (data.desktopImage)
-      update.desktopImage = normalizeImage(data.desktopImage);
+    if (data.desktopImage) update.desktopImage = normalizeImage(data.desktopImage);
     if (data.mobileImage) update.mobileImage = normalizeImage(data.mobileImage);
     if (typeof data.href === "string") update.href = data.href.trim();
     if (typeof data.active === "boolean") update.active = data.active;
+    if (typeof data.bgColor === "string") update.bgColor = data.bgColor; // normalized + validated
 
-    // Handle order changes (keep unique, gap-free)
+    // Handle order re-indexing (gap-free)
     if (typeof data.order === "number") {
       const oldOrder = Number.isFinite(current.order) ? current.order : 0;
       let newOrder = data.order;
@@ -96,19 +105,13 @@ export async function PUT(req, { params }) {
         if (newOrder < oldOrder) {
           // Moving up: shift down [newOrder, oldOrder-1]
           await Banner.updateMany(
-            {
-              _id: { $ne: current._id },
-              order: { $gte: newOrder, $lt: oldOrder },
-            },
+            { _id: { $ne: current._id }, order: { $gte: newOrder, $lt: oldOrder } },
             { $inc: { order: 1 } }
           );
         } else {
           // Moving down: shift up (oldOrder, newOrder]
           await Banner.updateMany(
-            {
-              _id: { $ne: current._id },
-              order: { $gt: oldOrder, $lte: newOrder },
-            },
+            { _id: { $ne: current._id }, order: { $gt: oldOrder, $lte: newOrder } },
             { $inc: { order: -1 } }
           );
         }
@@ -116,11 +119,7 @@ export async function PUT(req, { params }) {
       }
     }
 
-    const updated = await Banner.findByIdAndUpdate(
-      id,
-      { $set: update },
-      { new: true }
-    ).lean();
+    const updated = await Banner.findByIdAndUpdate(id, { $set: update }, { new: true }).lean();
     if (!updated) return response(false, 404, "Banner not found after update");
 
     return response(true, 200, "Banner updated successfully", updated);
@@ -130,14 +129,13 @@ export async function PUT(req, { params }) {
 }
 
 /* --------------- DELETE /api/banners/:id (HARD DELETE) --------------- */
-export async function DELETE(req, { params }) {
+export async function DELETE(_req, { params }) {
   try {
-    const admin = await isAuthenticated("admin");
-    if (!admin) return response(false, 401, "User Not Allowed");
+    const allowed = await isAuthenticated(["admin", "editor"]);
+    if (!allowed) return response(false, 401, "User Not Allowed");
 
     await connectDB();
-    const param = await params;
-    const { id } = param || {};
+    const { id } = (await params) || {};
     if (!id) return response(false, 400, "Missing banner id");
 
     // Fetch to know its order, then hard delete
@@ -147,10 +145,7 @@ export async function DELETE(req, { params }) {
     await Banner.deleteOne({ _id: id });
 
     // Shift down any items that were after the removed one
-    await Banner.updateMany(
-      { order: { $gt: toRemove.order } },
-      { $inc: { order: -1 } }
-    );
+    await Banner.updateMany({ order: { $gt: toRemove.order } }, { $inc: { order: -1 } });
 
     return response(true, 200, "Banner deleted successfully", { _id: id });
   } catch (err) {
