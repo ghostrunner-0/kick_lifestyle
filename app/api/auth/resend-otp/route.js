@@ -1,10 +1,12 @@
+// app/api/auth/send-otp/route.js
+export const runtime = "nodejs";
+
 import { connectDB } from "@/lib/DB";
 import { generateotp, response } from "@/lib/helperFunctions";
 import { zSchema } from "@/lib/zodSchema";
 import UserModel from "@/models/User.model";
 import OTP from "@/models/OTP.model";
-import { otpEmail } from "@/email/otpemail";
-import { sendMail } from "@/lib/sendMail";
+import { sendMail } from "@/lib/sendMail.js"; // template-only sender
 
 export async function POST(request) {
   try {
@@ -12,7 +14,7 @@ export async function POST(request) {
 
     const payload = await request.json();
 
-    // Only validate the `email` field
+    // Validate only email
     const validationSchema = zSchema.pick({ email: true });
     const { email } = validationSchema.parse(payload);
 
@@ -21,27 +23,47 @@ export async function POST(request) {
       return response(false, 404, "User not found");
     }
 
-    // Delete any existing OTPs for that email
+    // Remove existing OTPs
     await OTP.deleteMany({ email });
 
-    // Generate and save a new OTP
+    // Generate & save new OTP
     const otp = await generateotp();
-    const otpEntry = new OTP({ email, otp });
-    await otpEntry.save();
+    await new OTP({ email, otp }).save();
 
-    // Send the OTP email
-    const emailSent = await sendMail(
-      "Your Login OTP for Kick Lifestyle",
+    // Template-only send via Brevo
+    const templateIdOtp =
+      parseInt(process.env.BREVO_TEMPLATE_ID_OTP ?? "", 10) || 0;
+
+    console.log("[SEND OTP] templateId:", templateIdOtp);
+
+    if (!templateIdOtp) {
+      console.error("[SEND OTP] Missing BREVO_TEMPLATE_ID_OTP");
+      return response(false, 500, "OTP email template not configured");
+    }
+
+    const sendResult = await sendMail(
+      "Your Login OTP for Kick Lifestyle", // optional override
       email,
-      otpEmail(otp)
+      {
+        // In your Brevo template, use {{ params.otp }}
+        otp,
+        // Add extras only if your template references them:
+        // validityMinutes: 10,
+        // appName: "Kick Lifestyle",
+        // firstName: user.name,
+        // supportEmail: "support@kick.com.np",
+      },
+      { templateId: templateIdOtp, tags: ["login-otp"] }
     );
 
-    if (!emailSent) {
+    if (!sendResult?.success) {
+      console.error("[SEND OTP] Brevo send failed:", sendResult?.message);
       return response(false, 500, "Failed to send OTP email");
     }
 
     return response(true, 200, "OTP sent to your email successfully");
   } catch (error) {
+    console.error("[SEND OTP] Error:", error);
     return response(false, 500, error.message || "Internal Server Error");
   }
 }

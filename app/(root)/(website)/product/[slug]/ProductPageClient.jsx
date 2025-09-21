@@ -8,12 +8,12 @@ import React, {
   useEffect,
 } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import axios from "axios";
 
 /* data */
-import useFetch from "@/hooks/useFetch";
+// import useFetch from "@/hooks/useFetch"; // ❌ not needed here anymore
 import { addItem, setQty, removeItem, selectItemsMap } from "@/store/cartSlice";
 
 /* shadcn/ui */
@@ -496,18 +496,19 @@ function ReviewsTab({ productId, animateUI }) {
 }
 
 /* ===================== Product Page ===================== */
-export default function ProductPageClient() {
-  const { slug } = useParams();
+export default function ProductPageClient({
+  slug,
+  initialProduct,
+  initialReviewsSummary,
+  initialReviews,
+}) {
   const router = useRouter();
   const dispatch = useDispatch();
 
-  const { data, isLoading } = useFetch(
-    "product",
-    slug ? `/api/website/products/get-by-slug/${slug}` : null
-  );
-  const product = data?.success ? data.data : null;
+  // ✅ Use server-passed data; no client fetching
+  const product = initialProduct;
+  const dataReady = !!product;
 
-  const dataReady = !!product && !isLoading;
   const [animateUI, setAnimateUI] = useState(false);
   useEffect(() => {
     if (dataReady) {
@@ -519,31 +520,10 @@ export default function ProductPageClient() {
   }, [dataReady]);
 
   const [ratingSummary, setRatingSummary] = useState({
-    average: 0,
-    total: 0,
-    loaded: false,
+    average: Number(initialReviewsSummary?.average || 0),
+    total: Number(initialReviewsSummary?.total || 0),
+    loaded: true, // ✅ already hydrated from server
   });
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (!product?._id) return;
-      try {
-        const { data } = await api.get("/api/website/reviews/summary", {
-          params: { productId: product._id },
-        });
-        if (!cancelled && data?.success) {
-          const avg = Number(data.data?.average || 0);
-          const total = Number(data.data?.total || 0);
-          setRatingSummary({ average: avg, total, loaded: true });
-        }
-      } catch {
-        if (!cancelled) setRatingSummary((s) => ({ ...s, loaded: true }));
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [product?._id]);
 
   const variants = Array.isArray(product?.variants) ? product.variants : [];
   const [selectedIdx, setSelectedIdx] = useState(-1);
@@ -559,7 +539,7 @@ export default function ProductPageClient() {
     if (activeVariant?.productGallery?.length)
       return activeVariant.productGallery;
     const base = [];
-    if (product?.heroImage?.path) base.push(product.heroImage);
+    if (product?.heroImage?.path) base.push(product.heroImage); // ✅ hero first
     if (Array.isArray(product?.productMedia))
       base.push(...product.productMedia);
     return base;
@@ -959,7 +939,7 @@ export default function ProductPageClient() {
                   <Button
                     className="rounded-full h-9 px-4"
                     onClick={inCartLine ? goCheckout : handleAddToCart}
-                    disabled={!inStock || isLoading || !product}
+                    disabled={!inStock || !product}
                   >
                     <ShoppingCart className="mr-2 h-4 w-4" />
                     {inCartLine ? "Go to checkout" : "Add to cart"}
@@ -987,7 +967,7 @@ export default function ProductPageClient() {
                 <Button
                   className="rounded-full h-10 px-5 text-sm"
                   onClick={inCartLine ? goCheckout : handleAddToCart}
-                  disabled={!inStock || isLoading || !product}
+                  disabled={!inStock || !product}
                 >
                   {inCartLine ? "Go to checkout" : "Add to cart"}
                 </Button>
@@ -1111,8 +1091,8 @@ export default function ProductPageClient() {
                     <motion.div
                       className="thumbs-row flex pt-1 ps-1  gap-2.5 md:gap-3 pb-1 pe-4"
                       {...(animateUI ? fadeIn : {})}
-                    > 
-                      {gallery.map((g, i) => ( 
+                    >
+                      {gallery.map((g, i) => (
                         <motion.button
                           key={g?._id || g?.path || i}
                           type="button"
@@ -1278,7 +1258,7 @@ export default function ProductPageClient() {
               <Button
                 className="rounded-full w-full"
                 onClick={inCartLine ? goCheckout : handleAddToCart}
-                disabled={!inStock || isLoading || !product}
+                disabled={!inStock || !product}
               >
                 <ShoppingCart className="mr-2 h-4 w-4" />{" "}
                 {inCartLine ? "Go to checkout" : "Add to cart"}
@@ -1469,23 +1449,16 @@ export default function ProductPageClient() {
         }
         /* --- Thumbnails end-gutter fix --- */
         .product-gallery .thumbs-row {
-          /* Ensure the last item has breathing room inside the rounded container */
-          padding-inline-end: 1rem; /* tailwind pe-4 mirrors this, but keep as CSS backup */
+          padding-inline-end: 1rem;
         }
-
-        /* Add a flexible spacer after the last thumb so it never gets clipped */
         .product-gallery .thumbs-row::after {
           content: "";
           display: block;
-          flex: 0 0 14px; /* end buffer so the yellow ring never touches the edge */
+          flex: 0 0 14px;
         }
-
-        /* Make sure thumbs don’t shrink in weird layouts */
         .product-gallery .thumbs-row > button {
           flex: 0 0 auto;
         }
-
-        /* Stabilize scrollbar space so width doesn’t change on hover/scroll */
         .product-gallery .thumbs-scrollarea {
           scrollbar-gutter: stable both-edges;
         }

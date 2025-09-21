@@ -336,7 +336,9 @@ export default function ProductCard({
     onAddToCart?.(buildCartPayload(1));
     showToast(
       "success",
-      `${name}${activeVariant ? ` — ${activeVariant.variantName}` : ""} added to cart.`
+      `${name}${
+        activeVariant ? ` — ${activeVariant.variantName}` : ""
+      } added to cart.`
     );
   };
 
@@ -403,7 +405,13 @@ export default function ProductCard({
       const cur = emblaApi.selectedScrollSnap();
       const prev = prevSnapRef.current ?? cur;
 
-      if (emblaApi.options().loop && prev === last && cur === 0) {
+      // ✅ Handle both Embla variants: options() (function) and options (object)
+      const opts =
+        typeof emblaApi.options === "function"
+          ? emblaApi.options()
+          : emblaApi.options || {};
+
+      if (opts.loop && prev === last && cur === 0) {
         setWrapRunning(true);
         animControlsRef.current?.stop?.();
         animControlsRef.current = animate(1, 0, {
@@ -438,8 +446,8 @@ export default function ProductCard({
 
   useEffect(() => {
     if (emblaApi) {
-      emblaApi.reInit();
-      emblaApi.scrollTo(0, true);
+      emblaApi.reInit?.();
+      emblaApi.scrollTo?.(0, true);
       prevSnapRef.current = 0;
       setRenderProgress(0);
     }
@@ -661,7 +669,7 @@ export default function ProductCard({
 
       {/* INFO */}
       <div className="p-3 sm:p-4">
-        {/* Title + Variants — single row, consistent height, tooltip only if truncated */}
+        {/* Title + Variants */}
         <div className="mb-1 flex items-center gap-2 min-h-[28px]">
           {nameTruncated ? (
             <TooltipProvider delayDuration={200}>
@@ -834,7 +842,7 @@ export default function ProductCard({
                   aria-label="Increase quantity"
                   whileTap={{ scale: 0.95 }}
                   className={[
-                    "h-7 w-7 rounded-md border text-[16px] leading-none",
+                    "h-7 w-7 rounded-md border text:[16px] leading-none",
                     "border-slate-200 bg-white text-slate-700 shadow-sm",
                     "hover:bg-slate-50 active:scale-[0.98]",
                     "disabled:cursor-not-allowed disabled:opacity-50",
