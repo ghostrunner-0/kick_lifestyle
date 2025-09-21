@@ -11,9 +11,10 @@ import { useDispatch, useSelector } from "react-redux";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import axios from "axios";
+import { Pagination } from "swiper/modules";
+import "swiper/css/pagination";
 
-/* data */
-// import useFetch from "@/hooks/useFetch"; // ❌ not needed here anymore
+/* store */
 import { addItem, setQty, removeItem, selectItemsMap } from "@/store/cartSlice";
 
 /* shadcn/ui */
@@ -40,7 +41,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -55,6 +55,8 @@ import {
   Star,
   ChevronsUpDown,
   Check,
+  Truck,
+  Building2,
 } from "lucide-react";
 
 /* media */
@@ -123,27 +125,33 @@ const getVariantHero = (v, fallback) =>
   fallback ||
   "";
 
-/* animations */
-const fadeUp = {
-  initial: { opacity: 0, y: 12 },
-  animate: {
+/* ===== Animations ===== */
+const spring = { type: "spring", stiffness: 260, damping: 22, mass: 0.7 };
+
+const pageStagger = {
+  hidden: { opacity: 0 },
+  show: {
     opacity: 1,
-    y: 0,
-    transition: { duration: 0.35, ease: "easeOut" },
+    transition: { when: "beforeChildren", staggerChildren: 0.08 },
   },
 };
+
+const fadeUp = {
+  hidden: { opacity: 0, y: 12 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" } },
+};
 const fadeIn = {
-  initial: { opacity: 0 },
-  animate: { opacity: 1, transition: { duration: 0.3 } },
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { duration: 0.25 } },
 };
 const slideDown = {
-  initial: { opacity: 0, y: -8 },
-  animate: { opacity: 1, y: 0, transition: { duration: 0.25 } },
+  hidden: { opacity: 0, y: -8 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.25 } },
   exit: { opacity: 0, y: -8, transition: { duration: 0.2 } },
 };
 const slideUp = {
-  initial: { opacity: 0, y: 12 },
-  animate: { opacity: 1, y: 0, transition: { duration: 0.25 } },
+  hidden: { opacity: 0, y: 12 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.25 } },
   exit: { opacity: 0, y: 12, transition: { duration: 0.2 } },
 };
 
@@ -212,7 +220,128 @@ const fmtDate = (d) => {
   }
 };
 
-/* ===================== ReviewsTab ===================== */
+/* ===================== Desktop Right Side Panel (stacked) ===================== */
+function DesktopRightSidePanel({ summary, items }) {
+  const hasReviews = (summary?.total || 0) > 0;
+  const topFive = (items || []).slice(0, 5);
+
+  return (
+    <div className="hidden md:block space-y-4">
+      {/* TOP: Reviews (if any) OR Free Delivery */}
+      {hasReviews ? (
+        <div className="rounded-2xl border bg-white/70 dark:bg-neutral-900/70 backdrop-blur p-4 md:p-5 shadow-sm min-h-[128px]">
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-semibold">Ratings & reviews</div>
+            <div className="inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px]">
+              <Stars value={Number(summary?.average || 0)} size={12} />
+              <span className="tabular-nums font-medium">
+                {Number(summary?.average || 0).toFixed(1)}
+              </span>
+              <span className="text-muted-foreground">• {summary?.total}</span>
+            </div>
+          </div>
+
+          <div className="mt-3">
+            <Swiper
+              modules={[Pagination]}
+              pagination={{
+                clickable: true,
+                bulletClass: "rv-bullet",
+                bulletActiveClass: "rv-bullet-active",
+              }}
+              slidesPerView={1}
+              spaceBetween={12}
+              speed={260}
+              autoHeight
+              style={{ width: "100%" }}
+            >
+              {topFive.map((r) => (
+                <SwiperSlide key={r._id}>
+                  <div className="py-2">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Stars value={r.rating} size={12} />
+                      <span>{fmtDate(r.createdAt)}</span>
+                    </div>
+                    {r.title ? (
+                      <div className="mt-1 text-sm font-medium">{r.title}</div>
+                    ) : null}
+                    <p className="mt-1 text-sm leading-6 line-clamp-4">
+                      {r.review}
+                    </p>
+                  </div>
+                </SwiperSlide>
+              ))}
+            </Swiper>
+          </div>
+        </div>
+      ) : (
+        <div className="">
+          <div className="h-[72px] rounded-2xl px-4 py-3 border border-amber-200 bg-gradient-to-br from-amber-100 to-amber-50 flex items-center justify-between gap-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="h-9 w-9 rounded-full grid place-items-center bg-amber-300/90 text-amber-950 border border-amber-400">
+                <Truck className="h-4 w-4" />
+              </span>
+              <div className="min-w-0">
+                <div className="text-sm font-semibold">
+                  Free delivery on prepaid orders
+                </div>
+                <div className="text-xs text-amber-900/80 truncate">
+                  Save shipping when you pay online at checkout
+                </div>
+              </div>
+            </div>
+          </div>
+          {/* BOTTOM: Corporate (Nepal) — always */}
+          <div className="h-[72px] rounded-2xl border bg-white px-4 py-3 mt-4 flex items-center justify-between gap-3 shadow-sm">
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="h-9 w-9 rounded-full grid place-items-center bg-neutral-900 text-white">
+                <Building2 className="h-4 w-4" />
+              </span>
+              <div className="min-w-0">
+                <div className="text-sm font-semibold">Corporate orders</div>
+                <div className="text-xs text-muted-foreground truncate">
+                  Bulk pricing • Priority support
+                </div>
+              </div>
+            </div>
+
+            <Button
+              className="rounded-full h-8 px-3 bg-neutral-900 text-white hover:bg-neutral-800"
+              type="button"
+              onClick={() => (window.location.href = "/corporate-orders")}
+            >
+              Enquire
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* slider bullets styling */}
+      <style jsx global>{`
+        .rv-bullet {
+          width: 6px;
+          height: 6px;
+          border-radius: 9999px;
+          background: rgba(0, 0, 0, 0.22);
+          margin: 0 4px !important;
+          opacity: 1 !important;
+        }
+        .dark .rv-bullet {
+          background: rgba(255, 255, 255, 0.28);
+        }
+        .rv-bullet-active {
+          width: 18px;
+          background: #facc15;
+        }
+        .dark .rv-bullet-active {
+          background: #fbbf24;
+        }
+      `}</style>
+    </div>
+  );
+}
+
+/* ===================== Reviews Tab ===================== */
 function ReviewsTab({ productId, animateUI }) {
   const auth = useSelector((s) => s?.authStore?.auth);
   const isAuthed = !!auth;
@@ -226,7 +355,6 @@ function ReviewsTab({ productId, animateUI }) {
   const [ratingFilter] = React.useState("all");
   const [isLoadingList, setIsLoadingList] = React.useState(false);
 
-  // form
   const [openDialog, setOpenDialog] = React.useState(false);
   const [form, setForm] = React.useState({ rating: 5, title: "", review: "" });
   const [submitting, setSubmitting] = React.useState(false);
@@ -315,15 +443,17 @@ function ReviewsTab({ productId, animateUI }) {
 
   return (
     <motion.div
+      id="reviews"
       className="rounded-2xl border p-5 md:p-6 space-y-6"
-      {...(animateUI ? fadeIn : {})}
+      variants={animateUI ? fadeIn : undefined}
+      initial="hidden"
+      animate="show"
     >
-      {/* Summary */}
       {summary ? (
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
           <div className="md:col-span-4 rounded-xl border p-4">
             <div className="text-sm text-muted-foreground">Average rating</div>
-            <div className="mt-1 flex items-end gap-2">
+            <div className="mt-1 flex items	end gap-2">
               <div className="text-4xl font-semibold">
                 {Number(summary.average || 0).toFixed(1)}
               </div>
@@ -361,17 +491,21 @@ function ReviewsTab({ productId, animateUI }) {
         </div>
       ) : null}
 
-      {/* Controls */}
       <div className="flex flex-wrap items-center gap-3 justify-between">
         <div className="text-sm text-muted-foreground">
           {total} review{total === 1 ? "" : "s"}
         </div>
 
-        {/* Write review / Login prompt */}
         {isAuthed ? (
           <Dialog open={openDialog} onOpenChange={setOpenDialog}>
             <DialogTrigger asChild>
-              <Button size="sm" className="rounded-full" type="button">
+              <Button
+                size="sm"
+                className="rounded-full"
+                type="button"
+                as={motion.button}
+                whileHover={{ scale: 1.02 }}
+              >
                 Write a review
               </Button>
             </DialogTrigger>
@@ -385,16 +519,16 @@ function ReviewsTab({ productId, animateUI }) {
               </DialogHeader>
 
               <form onSubmit={handleSubmitReview} className="space-y-4">
-                {/* Rating */}
                 <div>
                   <div className="text-sm font-medium mb-1">Rating</div>
                   <div className="flex items-center gap-2">
                     {[1, 2, 3, 4, 5].map((r) => (
-                      <button
+                      <motion.button
                         type="button"
                         key={r}
                         onClick={() => setForm((f) => ({ ...f, rating: r }))}
                         aria-label={`Rate ${r} star${r === 1 ? "" : "s"}`}
+                        whileTap={{ scale: 0.9 }}
                       >
                         <Star
                           size={20}
@@ -404,7 +538,7 @@ function ReviewsTab({ productId, animateUI }) {
                               : "stroke-muted-foreground"
                           }
                         />
-                      </button>
+                      </motion.button>
                     ))}
                     <span className="ml-1 text-xs text-muted-foreground">
                       {form.rating}/5
@@ -412,7 +546,6 @@ function ReviewsTab({ productId, animateUI }) {
                   </div>
                 </div>
 
-                {/* Title */}
                 <div>
                   <div className="text-sm font-medium mb-1">Title</div>
                   <Input
@@ -425,7 +558,6 @@ function ReviewsTab({ productId, animateUI }) {
                   />
                 </div>
 
-                {/* Review */}
                 <div>
                   <div className="text-sm font-medium mb-1">Review</div>
                   <Textarea
@@ -444,10 +576,17 @@ function ReviewsTab({ productId, animateUI }) {
                     type="button"
                     variant="secondary"
                     onClick={() => setOpenDialog(false)}
+                    as={motion.button}
+                    whileTap={{ scale: 0.97 }}
                   >
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={submitting}>
+                  <Button
+                    type="submit"
+                    disabled={submitting}
+                    as={motion.button}
+                    whileTap={{ scale: 0.97 }}
+                  >
                     {submitting ? "Submitting..." : "Submit review"}
                   </Button>
                 </DialogFooter>
@@ -462,7 +601,6 @@ function ReviewsTab({ productId, animateUI }) {
         )}
       </div>
 
-      {/* List */}
       <motion.div
         className="space-y-4"
         variants={listStagger}
@@ -475,6 +613,7 @@ function ReviewsTab({ productId, animateUI }) {
             className="rounded-xl border p-4"
             variants={item}
             layout
+            transition={spring}
           >
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -505,7 +644,6 @@ export default function ProductPageClient({
   const router = useRouter();
   const dispatch = useDispatch();
 
-  // ✅ Use server-passed data; no client fetching
   const product = initialProduct;
   const dataReady = !!product;
 
@@ -519,11 +657,11 @@ export default function ProductPageClient({
     }
   }, [dataReady]);
 
-  const [ratingSummary, setRatingSummary] = useState({
+  const ratingSummary = {
     average: Number(initialReviewsSummary?.average || 0),
     total: Number(initialReviewsSummary?.total || 0),
-    loaded: true, // ✅ already hydrated from server
-  });
+    loaded: true,
+  };
 
   const variants = Array.isArray(product?.variants) ? product.variants : [];
   const [selectedIdx, setSelectedIdx] = useState(-1);
@@ -539,7 +677,7 @@ export default function ProductPageClient({
     if (activeVariant?.productGallery?.length)
       return activeVariant.productGallery;
     const base = [];
-    if (product?.heroImage?.path) base.push(product.heroImage); // ✅ hero first
+    if (product?.heroImage?.path) base.push(product.heroImage);
     if (Array.isArray(product?.productMedia))
       base.push(...product.productMedia);
     return base;
@@ -686,7 +824,6 @@ export default function ProductPageClient({
     </div>
   );
 
-  /* qty +/- */
   const decQty = () => {
     if (!inCartLine) return;
     const next = Math.max(0, (inCartLine.qty || STEP) - STEP);
@@ -739,20 +876,39 @@ export default function ProductPageClient({
     requestAnimationFrame(() => window.scrollTo(0, scrollLockRef.current));
   }, []);
 
+  /* shared layoutIds for animated rings */
+  const THUMB_RING_ID = "thumb-ring";
+  const VARIANT_RING_ID = "variant-ring";
+
   return (
-    <main className="overflow-x-clip">
+    <motion.main
+      className="overflow-x-clip"
+      variants={pageStagger}
+      initial="hidden"
+      animate="show"
+    >
       {/* Desktop TOP sticky pill */}
       <AnimatePresence>
         {animateUI && showStickyBar && (
           <motion.div
             className="fixed inset-x-0 hidden md:block z-[35] pointer-events-none"
             style={{ top: Math.max(0, headerOffset + 8) }}
-            {...slideDown}
+            variants={slideDown}
+            initial="hidden"
+            animate="show"
+            exit="exit"
           >
             <div className="mx-auto max-w-[1200px] px-4 sm:px-6 pointer-events-auto">
-              <div className="rounded-full border bg-white/95 dark:bg-neutral-900/95 supports-[backdrop-filter]:backdrop-blur shadow-md px-3 py-2 flex items-center justify-between gap-3">
+              <motion.div
+                className="rounded-full border bg-white/95 dark:bg-neutral-900/95 supports-[backdrop-filter]:backdrop-blur shadow-md px-3 py-2 flex items-center justify-between gap-3"
+                layout
+                transition={spring}
+              >
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="relative w-8 h-8 rounded-full overflow-hidden bg-muted shrink-0">
+                  <motion.div
+                    className="relative w-8 h-8 rounded-full overflow-hidden bg-muted shrink-0"
+                    layout
+                  >
                     {heroSrc ? (
                       <Image
                         src={heroSrc}
@@ -762,7 +918,7 @@ export default function ProductPageClient({
                         className="object-cover"
                       />
                     ) : null}
-                  </div>
+                  </motion.div>
                   <div className="truncate">
                     <div className="text-sm font-medium truncate">
                       {product?.name || "Product"}
@@ -790,7 +946,7 @@ export default function ProductPageClient({
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {/* Variant dropdown in sticky (keeps scroll) */}
+                  {/* Sticky Variant Dropdown (working) */}
                   {Array.isArray(variants) && variants.length > 0 ? (
                     <div className="hidden md:flex items-center">
                       <DropdownMenu
@@ -808,6 +964,8 @@ export default function ProductPageClient({
                             type="button"
                             aria-label="Select variant"
                             onClick={preserveScroll}
+                            as={motion.button}
+                            whileTap={{ scale: 0.97 }}
                           >
                             <span className="relative h-6 w-6 rounded-full overflow-hidden border shrink-0">
                               {getVariantHero(
@@ -919,18 +1077,28 @@ export default function ProductPageClient({
                       className="px-3 h-9 min-w-[40px]"
                       onClick={decQty}
                       aria-label="Decrease quantity"
+                      as={motion.button}
+                      whileTap={{ scale: 0.9 }}
                     >
                       –
                     </Button>
-                    <div className="px-3 py-1 text-sm font-medium w-8 text-center select-none tabular-nums">
+                    <motion.div
+                      className="px-3 py-1 text-sm font-medium w-8 text-center select-none tabular-nums"
+                      key={inCartLine ? inCartLine.qty || 0 : 0}
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.18 }}
+                    >
                       {inCartLine ? inCartLine.qty || 0 : 0}
-                    </div>
+                    </motion.div>
                     <Button
                       type="button"
                       variant="ghost"
                       className="px-3 h-9 min-w-[40px]"
                       onClick={incQty}
                       aria-label="Increase quantity"
+                      as={motion.button}
+                      whileTap={{ scale: 0.9 }}
                     >
                       +
                     </Button>
@@ -940,12 +1108,16 @@ export default function ProductPageClient({
                     className="rounded-full h-9 px-4"
                     onClick={inCartLine ? goCheckout : handleAddToCart}
                     disabled={!inStock || !product}
+                    as={motion.button}
+                    whileTap={{ scale: 0.97 }}
+                    whileHover={{ scale: 1.02 }}
+                    transition={spring}
                   >
                     <ShoppingCart className="mr-2 h-4 w-4" />
                     {inCartLine ? "Go to checkout" : "Add to cart"}
                   </Button>
                 </div>
-              </div>
+              </motion.div>
             </div>
           </motion.div>
         )}
@@ -957,7 +1129,10 @@ export default function ProductPageClient({
           <motion.div
             className="fixed inset-x-0 md:hidden z-[35]"
             style={{ bottom: Math.max(0, bottomNavOffset) }}
-            {...slideUp}
+            variants={slideUp}
+            initial="hidden"
+            animate="show"
+            exit="exit"
           >
             <div className="mx-auto max-w-[1200px] px-3 pb-[calc(env(safe-area-inset-bottom)+8px)]">
               <div className="rounded-full border bg-white/95 dark:bg-neutral-900/95 supports-[backdrop-filter]:backdrop-blur shadow-2xl px-4 py-2 flex items-center justify-between gap-3">
@@ -968,6 +1143,10 @@ export default function ProductPageClient({
                   className="rounded-full h-10 px-5 text-sm"
                   onClick={inCartLine ? goCheckout : handleAddToCart}
                   disabled={!inStock || !product}
+                  as={motion.button}
+                  whileTap={{ scale: 0.97 }}
+                  whileHover={{ scale: 1.02 }}
+                  transition={spring}
                 >
                   {inCartLine ? "Go to checkout" : "Add to cart"}
                 </Button>
@@ -977,11 +1156,11 @@ export default function ProductPageClient({
         )}
       </AnimatePresence>
 
-      {/* HEADER ROW */}
+      {/* HEADER ROW — hidden on mobile per request */}
       {dataReady ? (
         <motion.div
-          className="mx-auto max-w-[1200px] px-4 sm:px-6 pt-8 pb-2"
-          {...(animateUI ? fadeUp : {})}
+          className="mx-auto max-w-[1200px] px-4 sm:px-6 pt-8 pb-2 hidden md:block"
+          variants={fadeUp}
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -990,6 +1169,8 @@ export default function ProductPageClient({
                 size="sm"
                 onClick={() => router.back()}
                 className="h-8 px-2"
+                as={motion.button}
+                whileTap={{ scale: 0.95 }}
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
@@ -1004,7 +1185,7 @@ export default function ProductPageClient({
           </div>
         </motion.div>
       ) : (
-        <div className="mx-auto max-w-[1200px] px-4 sm:px-6 pt-8 pb-2">
+        <div className="mx-auto max-w-[1200px] px-4 sm:px-6 pt-8 pb-2 hidden md:block">
           <div className="h-6 w-32 bg-muted rounded animate-pulse" />
         </div>
       )}
@@ -1013,13 +1194,13 @@ export default function ProductPageClient({
       {dataReady ? (
         <motion.div
           className="mx-auto max-w-[1200px] px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-10"
-          {...(animateUI ? fadeUp : {})}
+          variants={pageStagger}
         >
           {/* LEFT: GALLERY */}
           <section className="lg:col-span-7" ref={galleryWrapRef}>
             <div className="bg-white dark:bg-neutral-900 rounded-2xl border overflow-hidden product-gallery">
               {/* main image */}
-              <motion.div className="relative" {...(animateUI ? fadeIn : {})}>
+              <motion.div variants={fadeIn}>
                 {Array.isArray(gallery) && gallery.length ? (
                   <Swiper
                     key={`${galleryKey}|${activeVariant?._id || ""}`}
@@ -1040,7 +1221,15 @@ export default function ProductPageClient({
                   >
                     {gallery.map((g, idx) => (
                       <SwiperSlide key={g?._id || g?.path || idx}>
-                        <div className="relative aspect-[4/3] bg-white slide-box">
+                        <motion.div
+                          className="relative aspect-[4/3] bg-white slide-box"
+                          initial={{ opacity: 0.6, scale: 0.98 }}
+                          animate={{
+                            opacity: idx === activeImg ? 1 : 0.9,
+                            scale: idx === activeImg ? 1 : 0.995,
+                          }}
+                          transition={spring}
+                        >
                           {g?.path ? (
                             <Image
                               src={g.path}
@@ -1064,6 +1253,8 @@ export default function ProductPageClient({
                                 setLightboxIndex(idx);
                                 setOpenLightbox(true);
                               }}
+                              as={motion.button}
+                              whileTap={{ scale: 0.95 }}
                             >
                               Zoom
                             </Button>
@@ -1073,7 +1264,7 @@ export default function ProductPageClient({
                               In cart • {inCartLine.qty || 0}
                             </Badge>
                           )}
-                        </div>
+                        </motion.div>
                       </SwiperSlide>
                     ))}
                   </Swiper>
@@ -1089,9 +1280,19 @@ export default function ProductPageClient({
                 <div className="p-5">
                   <ScrollArea className="w-full thumbs-scrollarea">
                     <motion.div
-                      className="thumbs-row flex pt-1 ps-1  gap-2.5 md:gap-3 pb-1 pe-4"
-                      {...(animateUI ? fadeIn : {})}
+                      className="relative thumbs-row flex pt-1 ps-1 gap-2.5 md:gap-3 pb-1 pe-4"
+                      variants={fadeIn}
                     >
+                      <AnimatePresence initial={false}>
+                        <motion.span
+                          key={`thumb-ring-${activeImg}`}
+                          layoutId={THUMB_RING_ID}
+                          className="absolute rounded-md pointer-events-none"
+                          style={{ top: 0, left: 0, width: 0, height: 0 }}
+                          transition={spring}
+                        />
+                      </AnimatePresence>
+
                       {gallery.map((g, i) => (
                         <motion.button
                           key={g?._id || g?.path || i}
@@ -1109,6 +1310,13 @@ export default function ProductPageClient({
                           }`}
                           aria-label={`View image ${i + 1}`}
                         >
+                          {i === activeImg && (
+                            <motion.span
+                              layoutId={THUMB_RING_ID}
+                              className="absolute inset-0 rounded-md ring-2 ring-yellow-300 ring-offset-1"
+                              transition={spring}
+                            />
+                          )}
                           {g?.path ? (
                             <Image
                               src={g.path}
@@ -1131,12 +1339,13 @@ export default function ProductPageClient({
             </div>
           </section>
 
-          {/* RIGHT: SUMMARY */}
-          <motion.aside
-            className="lg:col-span-5"
-            {...(animateUI ? fadeUp : {})}
-          >
-            <div className="bg-white dark:bg-neutral-900 rounded-2xl border p-5 md:p-6 space-y-5">
+          {/* RIGHT: SUMMARY + Desktop Right Panel */}
+          <motion.aside className="lg:col-span-5" variants={fadeUp}>
+            <motion.div
+              className="bg-white dark:bg-neutral-900 rounded-2xl border p-5 md:p-6 space-y-5"
+              layout
+              transition={spring}
+            >
               <div className="space-y-2">
                 <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">
                   {product?.name}
@@ -1145,7 +1354,10 @@ export default function ProductPageClient({
                   {product?.shortDescription}
                 </p>
                 {ratingSummary.loaded && ratingSummary.total > 0 && (
-                  <div className="flex items-center gap-2 text-sm">
+                  <motion.div
+                    className="flex items-center gap-2 text-sm"
+                    layout
+                  >
                     <Stars value={ratingSummary.average} />
                     <span className="font-medium tabular-nums">
                       {ratingSummary.average.toFixed(1)}
@@ -1153,7 +1365,7 @@ export default function ProductPageClient({
                     <span className="text-muted-foreground">
                       ({ratingSummary.total})
                     </span>
-                  </div>
+                  </motion.div>
                 )}
               </div>
 
@@ -1167,7 +1379,13 @@ export default function ProductPageClient({
                   </div>
                 )}
                 {off !== null && (
-                  <div className="text-sm text-emerald-600">{off}% OFF</div>
+                  <motion.div
+                    className="text-sm text-emerald-600"
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                  >
+                    {off}% OFF
+                  </motion.div>
                 )}
               </div>
 
@@ -1177,16 +1395,22 @@ export default function ProductPageClient({
                     inStock ? "bg-emerald-400" : "bg-rose-400"
                   }`}
                 />
-                <span
-                  className={`text-sm font-medium ${
-                    inStock ? "text-emerald-600" : "text-rose-600"
-                  }`}
-                >
-                  {inStock ? "In stock" : "Out of stock"}
-                </span>
+                <AnimatePresence mode="wait">
+                  <motion.span
+                    key={inStock ? "in" : "out"}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.18 }}
+                    className={`text-sm font-medium ${
+                      inStock ? "text-emerald-600" : "text-rose-600"
+                    }`}
+                  >
+                    {inStock ? "In stock" : "Out of stock"}
+                  </motion.span>
+                </AnimatePresence>
               </div>
 
-              {/* Variants + Counter (counter always visible) */}
               <div
                 className={`flex items-center gap-3 ${
                   variants.length > 0 ? "justify-between" : "justify-start"
@@ -1194,39 +1418,50 @@ export default function ProductPageClient({
               >
                 {variants.length > 0 && (
                   <div className="flex items-center gap-2 flex-1 flex-wrap">
-                    {variants.map((v, i) => {
-                      const img = getVariantHero(v, heroSrc);
-                      const selected = i === selectedIdx;
-                      return (
-                        <motion.button
-                          key={v?._id || i}
-                          type="button"
-                          onClick={() => onVariantClick(i)}
-                          whileHover={{ scale: 1.06 }}
-                          whileTap={{ scale: 0.97 }}
-                          className={`relative h-10 w-10 rounded-full overflow-hidden border transition ${
-                            selected
-                              ? "ring-2 ring-yellow-400 ring-offset-2 ring-offset-white dark:ring-offset-neutral-900"
-                              : ""
-                          }`}
-                          aria-pressed={selected}
-                          title={v?.variantName || v?.sku || `Option ${i + 1}`}
-                        >
-                          {img ? (
-                            <Image
-                              src={img}
-                              alt={v?.variantName || `variant-${i}`}
-                              fill
-                              sizes="40px"
-                              className="object-cover select-none pointer-events-none"
-                              draggable={false}
-                            />
-                          ) : (
-                            <div className="h-full w-full bg-muted" />
-                          )}
-                        </motion.button>
-                      );
-                    })}
+                    <AnimatePresence initial={false}>
+                      {variants.map((v, i) => {
+                        const img = getVariantHero(v, heroSrc);
+                        const selected = i === selectedIdx;
+                        return (
+                          <motion.button
+                            key={v?._id || i}
+                            type="button"
+                            onClick={() => onVariantClick(i)}
+                            whileHover={{ scale: 1.06 }}
+                            whileTap={{ scale: 0.97 }}
+                            className={`relative h-10 w-10 rounded-full overflow-hidden border transition ${
+                              selected
+                                ? "ring-2 ring-yellow-400 ring-offset-2 ring-offset-white dark:ring-offset-neutral-900"
+                                : ""
+                            }`}
+                            aria-pressed={selected}
+                            title={
+                              v?.variantName || v?.sku || `Option ${i + 1}`
+                            }
+                          >
+                            {selected && (
+                              <motion.span
+                                layoutId={VARIANT_RING_ID}
+                                className="absolute inset-0 rounded-full ring-2 ring-yellow-400 ring-offset-2 ring-offset-white dark:ring-offset-neutral-900"
+                                transition={spring}
+                              />
+                            )}
+                            {img ? (
+                              <Image
+                                src={img}
+                                alt={v?.variantName || `variant-${i}`}
+                                fill
+                                sizes="40px"
+                                className="object-cover select-none pointer-events-none"
+                                draggable={false}
+                              />
+                            ) : (
+                              <div className="h-full w-full bg-muted" />
+                            )}
+                          </motion.button>
+                        );
+                      })}
+                    </AnimatePresence>
                   </div>
                 )}
 
@@ -1237,18 +1472,28 @@ export default function ProductPageClient({
                     className="px-3 min-w-[44px]"
                     onClick={decQty}
                     aria-label="Decrease quantity"
+                    as={motion.button}
+                    whileTap={{ scale: 0.9 }}
                   >
                     –
                   </Button>
-                  <div className="px-3 py-2 text-sm font-medium select-none tabular-nums w-[36px] text-center">
+                  <motion.div
+                    className="px-3 py-2 text-sm font-medium select-none tabular-nums w-[36px] text-center"
+                    key={inCartLine ? inCartLine.qty || 0 : 0}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.18 }}
+                  >
                     {inCartLine ? inCartLine.qty || 0 : 0}
-                  </div>
+                  </motion.div>
                   <Button
                     type="button"
                     variant="ghost"
                     className="px-3 min-w-[44px]"
                     onClick={incQty}
                     aria-label="Increase quantity"
+                    as={motion.button}
+                    whileTap={{ scale: 0.9 }}
                   >
                     +
                   </Button>
@@ -1259,10 +1504,22 @@ export default function ProductPageClient({
                 className="rounded-full w-full"
                 onClick={inCartLine ? goCheckout : handleAddToCart}
                 disabled={!inStock || !product}
+                as={motion.button}
+                whileTap={{ scale: 0.98 }}
+                whileHover={{ scale: 1.01 }}
+                transition={spring}
               >
                 <ShoppingCart className="mr-2 h-4 w-4" />{" "}
                 {inCartLine ? "Go to checkout" : "Add to cart"}
               </Button>
+            </motion.div>
+
+            {/* DESKTOP white-space section (stacked) */}
+            <div className="mt-4">
+              <DesktopRightSidePanel
+                summary={initialReviewsSummary}
+                items={initialReviews?.items}
+              />
             </div>
           </motion.aside>
         </motion.div>
@@ -1274,7 +1531,7 @@ export default function ProductPageClient({
       {dataReady ? (
         <motion.div
           className="mx-auto max-w-[1200px] px-4 sm:px-6 pb-16"
-          {...(animateUI ? fadeUp : {})}
+          variants={fadeUp}
         >
           <Tabs defaultValue="overview">
             <TabsList className="grid w-full grid-cols-3 md:w-auto">
@@ -1287,7 +1544,7 @@ export default function ProductPageClient({
               {product?.longDescription ? (
                 <motion.div
                   className="prose dark:prose-invert max-w-none text-sm leading-7"
-                  {...(animateUI ? fadeIn : {})}
+                  variants={fadeIn}
                 >
                   <p>{product.longDescription}</p>
                 </motion.div>
@@ -1301,7 +1558,7 @@ export default function ProductPageClient({
                         img?.path ? (
                           <motion.img
                             key={img?._id || i}
-                            {...(animateUI ? fadeIn : {})}
+                            variants={fadeIn}
                             src={img.path}
                             alt={img?.alt || `desc-${i}`}
                             loading="lazy"
@@ -1322,7 +1579,7 @@ export default function ProductPageClient({
               product.additionalInfo.length > 0 ? (
                 <motion.div
                   className="rounded-2xl border overflow-hidden overflow-x-auto"
-                  {...(animateUI ? fadeIn : {})}
+                  variants={fadeIn}
                 >
                   <Table className="text-sm min-w-[560px]">
                     <TableHeader className="bg-muted/40">
@@ -1392,7 +1649,7 @@ export default function ProductPageClient({
         }}
       />
 
-      {/* global styles to eliminate extra width/scroll + gallery safety */}
+      {/* global styles */}
       <style jsx global>{`
         html,
         body {
@@ -1431,23 +1688,14 @@ export default function ProductPageClient({
           user-select: none;
           -webkit-user-drag: none;
         }
-
-        /* Swiper safety: ensure slides follow content height */
-        .product-gallery .swiper {
-          height: auto !important;
-        }
-        .product-gallery .swiper-wrapper {
-          height: auto !important;
-        }
+        .product-gallery .swiper,
+        .product-gallery .swiper-wrapper,
         .product-gallery .swiper-slide {
           height: auto !important;
         }
-
-        /* Defensive sizing for main box */
         .product-gallery .slide-box {
           min-height: 200px;
         }
-        /* --- Thumbnails end-gutter fix --- */
         .product-gallery .thumbs-row {
           padding-inline-end: 1rem;
         }
@@ -1463,6 +1711,6 @@ export default function ProductPageClient({
           scrollbar-gutter: stable both-edges;
         }
       `}</style>
-    </main>
+    </motion.main>
   );
 }
