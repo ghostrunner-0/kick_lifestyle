@@ -14,8 +14,8 @@ export async function GET(_req, { params }) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 
     await connectDB();
-
-    const orderId = params?.orderId;
+    const param = await params;
+    const orderId = param?.orderId;
     if (!orderId) {
       return NextResponse.json({ error: "Missing orderId" }, { status: 400 });
     }
