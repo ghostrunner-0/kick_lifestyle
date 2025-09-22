@@ -24,23 +24,17 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ShoppingCart, ChevronLeft, ChevronRight } from "lucide-react";
+import { ShoppingCart } from "lucide-react";
 import { PRODUCT_VIEW_ROUTE } from "@/routes/WebsiteRoutes";
 import useEmblaCarousel from "embla-carousel-react";
-import { motion, AnimatePresence, animate } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 
 /* Brand + helpers */
 const BRAND = "#fcba17";
 const BRAND_HOVER = "#e9ae12";
 const PLACEHOLDER_SRC = "/placeholder.png";
 
-/* Progress colors */
-const PROGRESS_BG = "rgba(0,0,0,0.10)";
-const PROGRESS_FILL = BRAND;
-const PROGRESS_GLOW = "rgba(252,186,23,0.18)";
-
 const toNum = (v) => (typeof v === "string" ? Number(v) : v);
-
 const formatPrice = (value) => {
   const n = toNum(value);
   if (!Number.isFinite(n)) return "";
@@ -54,7 +48,6 @@ const formatPrice = (value) => {
     return `Rs.${Number(n || 0).toLocaleString("en-IN")}`;
   }
 };
-
 const percentOff = (mrp, sp) => {
   const m = toNum(mrp);
   const s = toNum(sp);
@@ -63,7 +56,7 @@ const percentOff = (mrp, sp) => {
     : null;
 };
 
-// Normalize stock from common fields
+// Normalize stock
 const readStock = (obj) => {
   if (!obj) return null;
   const raw =
@@ -77,17 +70,15 @@ const readStock = (obj) => {
   return Number.isFinite(n) ? n : null;
 };
 
-/* ============ Hook: detect actual truncation (ellipsis) ============ */
+/* detect truncation */
 function useIsTruncated() {
   const ref = React.useRef(null);
   const [truncated, setTruncated] = React.useState(false);
-
   const check = React.useCallback(() => {
     const el = ref.current;
     if (!el) return;
     setTruncated(el.scrollWidth > el.clientWidth);
   }, []);
-
   React.useEffect(() => {
     check();
     const ro = new ResizeObserver(check);
@@ -98,50 +89,15 @@ function useIsTruncated() {
       window.removeEventListener("resize", check);
     };
   }, [check]);
-
   return [ref, truncated, check];
 }
 
-/* ------------------ Minimal animated arrow button ------------------ */
-const ArrowButton = ({ side, onClick }) => {
-  const isLeft = side === "left";
-  return (
-    <motion.button
-      type="button"
-      onClick={onClick}
-      whileHover={{ scale: 1.04 }}
-      whileTap={{ scale: 0.92 }}
-      className={[
-        "hidden md:flex absolute",
-        isLeft ? "left-2" : "right-2",
-        "top-1/2 -translate-y-1/2 z-30 h-9 w-9 items-center justify-center",
-        "rounded-full border border-black/10 bg-white/90 text-slate-700 shadow-sm",
-        "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition",
-        "backdrop-blur",
-      ].join(" ")}
-      aria-label={isLeft ? "Previous image" : "Next image"}
-    >
-      <motion.span
-        aria-hidden
-        className="absolute inset-0 rounded-full"
-        initial={false}
-        whileHover={{ boxShadow: "0 0 0 6px rgba(252,186,23,0.18)" }}
-        transition={{ duration: 0.22 }}
-      />
-      <motion.span
-        className="pointer-events-none"
-        whileHover={{ x: isLeft ? -2.5 : 2.5 }}
-        transition={{ type: "spring", stiffness: 600, damping: 28 }}
-      >
-        {isLeft ? (
-          <ChevronLeft className="h-4 w-4" />
-        ) : (
-          <ChevronRight className="h-4 w-4" />
-        )}
-      </motion.span>
-    </motion.button>
-  );
-};
+/* ====== Minimal pill sizing/colors (smaller + simple black) ====== */
+const PILL_W = 50;          // slimmer
+const PILL_H = 8;           // thinner
+const PILL_EDGE_GAP = 14;   // side padding so it never clips
+const PILL_BG = "rgba(0,0,0,0.95)"; // solid black feel
+const PILL_SHADOW = "0 1px 4px rgba(0,0,0,0.25)";
 
 export default function ProductCard({
   product,
@@ -151,7 +107,6 @@ export default function ProductCard({
 }) {
   const dispatch = useDispatch();
   const swatchGroupRef = useRef(null);
-
   if (!product) return null;
 
   const {
@@ -346,7 +301,6 @@ export default function ProductCard({
     if (!canAdd) return;
     dispatch(addItem(buildCartPayload(1)));
   };
-
   const handleDecrement = () => {
     if (currentQty <= 0) return;
     const next = currentQty - 1;
@@ -370,67 +324,20 @@ export default function ProductCard({
   /* ==================== EMBLA ==================== */
   const galleryKey = activeVariant?._id || slug || "base";
   const [emblaRef, emblaApi] = useEmblaCarousel({
-    loop: gallery.length > 1,
+    loop: false, // infinite OFF
     align: "start",
     containScroll: "trimSnaps",
-    dragFree: false,
+    dragFree: false, // one image at a time
+    slidesToScroll: 1,
   });
 
-  // Progress handling with wrap-back animation
-  const prevSnapRef = useRef(0);
-  const animControlsRef = useRef(null);
-  const [wrapRunning, setWrapRunning] = useState(false);
+  // simple progress
   const [renderProgress, setRenderProgress] = useState(0);
-
-  const scrollToRender = useCallback(
-    (p) => {
-      if (!wrapRunning) setRenderProgress(p);
-    },
-    [wrapRunning]
-  );
-
   const onScroll = useCallback(() => {
     if (!emblaApi) return;
     const p = emblaApi.scrollProgress();
     const clamped = Number.isFinite(p) ? Math.max(0, Math.min(1, p)) : 0;
-    scrollToRender(clamped);
-  }, [emblaApi, scrollToRender]);
-
-  useEffect(() => {
-    if (!emblaApi) return;
-    const snaps = emblaApi.scrollSnapList().length;
-    const last = Math.max(0, snaps - 1);
-
-    const onSelect = () => {
-      const cur = emblaApi.selectedScrollSnap();
-      const prev = prevSnapRef.current ?? cur;
-
-      // ✅ Handle both Embla variants: options() (function) and options (object)
-      const opts =
-        typeof emblaApi.options === "function"
-          ? emblaApi.options()
-          : emblaApi.options || {};
-
-      if (opts.loop && prev === last && cur === 0) {
-        setWrapRunning(true);
-        animControlsRef.current?.stop?.();
-        animControlsRef.current = animate(1, 0, {
-          duration: 0.35,
-          ease: [0.4, 0, 0.2, 1],
-          onUpdate: (v) => setRenderProgress(v),
-          onComplete: () => setWrapRunning(false),
-        });
-      }
-
-      prevSnapRef.current = cur;
-    };
-
-    prevSnapRef.current = emblaApi.selectedScrollSnap();
-    emblaApi.on("select", onSelect);
-    return () => {
-      emblaApi.off("select", onSelect);
-      animControlsRef.current?.stop?.();
-    };
+    setRenderProgress(clamped);
   }, [emblaApi]);
 
   useEffect(() => {
@@ -448,14 +355,13 @@ export default function ProductCard({
     if (emblaApi) {
       emblaApi.reInit?.();
       emblaApi.scrollTo?.(0, true);
-      prevSnapRef.current = 0;
       setRenderProgress(0);
     }
   }, [emblaApi, galleryKey, gallery.length]);
 
-  const pct = Math.max(0, Math.min(1, renderProgress)) * 100;
+  const pct = Math.max(0, Math.min(1, renderProgress)); // 0..1
 
-  // Click guard to avoid navigating while swiping
+  // Click guard
   const onSlideLinkClick = useCallback(
     (e) => {
       if (emblaApi && !emblaApi.clickAllowed()) {
@@ -465,10 +371,6 @@ export default function ProductCard({
     },
     [emblaApi]
   );
-
-  // Arrow actions
-  const scrollPrev = useCallback(() => emblaApi?.scrollPrev(), [emblaApi]);
-  const scrollNext = useCallback(() => emblaApi?.scrollNext(), [emblaApi]);
 
   /* ========= Name tooltip only when truncated ========= */
   const [nameRef, nameTruncated, checkNameTrunc] = useIsTruncated();
@@ -522,25 +424,15 @@ export default function ProductCard({
           `,
         }}
       >
-        {/* Discount badge */}
         {off !== null && (
           <div className="absolute right-3 top-3 z-20">
             <Badge
               variant="outline"
-              className="rounded-full bg-white text-black border border-black/10 shadow-sm px-2.5 py-1 text-[11px] font-extrabold leading-none hover:bg-white focus-visible:ring-2 focus-visible:ring-[#fcba17]/40"
+              className="rounded-full bg-white text-black border border-black/10 shadow-sm px-2.5 py-1 text-[11px] font-extrabold leading-none"
               aria-label={`${off}% OFF`}
             >
               {off}% OFF
             </Badge>
-          </div>
-        )}
-
-        {/* OOS badge */}
-        {(variantOutOfStock || productOutOfStock) && (
-          <div className="absolute left-3 top-3 z-20">
-            <span className="rounded-full bg-red-600/90 px-2.5 py-1 text-[11px] font-bold text-white shadow">
-              Out of stock
-            </span>
           </div>
         )}
 
@@ -607,61 +499,42 @@ export default function ProductCard({
               </motion.div>
             </AnimatePresence>
 
-            {/* Minimal, noticeable progress rail */}
+            {/* Minimal, small, black pill (no rail bg) */}
             {gallery.length > 1 && (
-              <div className="absolute bottom-2 left-3 right-3 z-20 pointer-events-none">
+              <div
+                className="absolute z-20 pointer-events-none"
+                style={{
+                  left: 8,
+                  right: 8,
+                  bottom: 12,
+                  paddingInline: 8,
+                }}
+              >
                 <div
-                  className="relative h-[6px] rounded-full overflow-hidden"
-                  style={{ background: PROGRESS_BG }}
+                  className="relative mx-5"
+                  style={{
+                    height: 12,
+                    paddingInlineStart: PILL_W / 2 + PILL_EDGE_GAP,
+                    paddingInlineEnd: PILL_W / 2 + PILL_EDGE_GAP,
+                    overflow: "visible",
+                  }}
                 >
-                  {(() => {
-                    const THUMB = 10;
-                    const fillWidth = `calc(${pct}% + ${THUMB / 2}px)`;
-                    return (
-                      <>
-                        <motion.div
-                          className="absolute inset-y-0 left-0 rounded-full"
-                          style={{
-                            width: fillWidth,
-                            background: PROGRESS_FILL,
-                            boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.06)",
-                          }}
-                          transition={{
-                            type: "spring",
-                            stiffness: 240,
-                            damping: 28,
-                          }}
-                          aria-hidden
-                        />
-                        <motion.div
-                          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rounded-full"
-                          style={{
-                            left: `${pct}%`,
-                            width: THUMB,
-                            height: THUMB,
-                            background: PROGRESS_FILL,
-                            boxShadow: `0 2px 8px rgba(0,0,0,0.22), 0 0 0 4px ${PROGRESS_GLOW}`,
-                          }}
-                          transition={{
-                            type: "spring",
-                            stiffness: 320,
-                            damping: 26,
-                          }}
-                          aria-hidden
-                        />
-                      </>
-                    );
-                  })()}
+                  <motion.span
+                    className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2"
+                    style={{
+                      left: `${(pct * 100).toFixed(2)}%`,
+                      width: PILL_W,
+                      height: PILL_H,
+                      borderRadius: 9999,
+                      background: PILL_BG,
+                      boxShadow: PILL_SHADOW,
+                      willChange: "left, transform",
+                    }}
+                    transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
+                    aria-hidden
+                  />
                 </div>
               </div>
-            )}
-
-            {/* Desktop arrows with micro-interactions */}
-            {gallery.length > 1 && (
-              <>
-                <ArrowButton side="left" onClick={scrollPrev} />
-                <ArrowButton side="right" onClick={scrollNext} />
-              </>
             )}
           </div>
         </div>
@@ -671,18 +544,40 @@ export default function ProductCard({
       <div className="p-3 sm:p-4">
         {/* Title + Variants */}
         <div className="mb-1 flex items-center gap-2 min-h-[28px]">
-          {nameTruncated ? (
-            <TooltipProvider delayDuration={200}>
-              <Tooltip>
-                <TooltipTrigger asChild>{NameBlock}</TooltipTrigger>
-                <TooltipContent side="top" className="max-w-[280px] text-xs">
-                  {name}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          ) : (
-            NameBlock
-          )}
+          {(() => {
+            const [nameRef2, nameTruncated2] = useIsTruncated();
+            const block = (
+              <div className="flex-1 min-w-0">
+                {productHref ? (
+                  <Link
+                    href={productHref}
+                    className="hover:underline underline-offset-2 block"
+                    aria-label={name ? `View ${name}` : "View product"}
+                  >
+                    <span ref={nameRef2} className="block truncate">
+                      {name}
+                    </span>
+                  </Link>
+                ) : (
+                  <span ref={nameRef2} className="block truncate">
+                    {name}
+                  </span>
+                )}
+              </div>
+            );
+            return nameTruncated2 ? (
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>{block}</TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[280px] text-xs">
+                    {name}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
+              block
+            );
+          })()}
 
           {variants.length > 0 && (
             <ScrollArea
@@ -704,38 +599,31 @@ export default function ProductCard({
               >
                 <TooltipProvider delayDuration={200}>
                   {variants.map((v, i) => {
-                    const s = {
-                      key:
-                        v?._id ||
-                        v?.sku ||
-                        `${v?.variantName || "variant"}-${i}`,
-                      img:
-                        v?.swatchImage?.path ||
-                        v?.productGallery?.[0]?.path ||
-                        null,
-                      name: v?.variantName || "Variant",
-                      index: i,
-                    };
-                    const selected = s.index === selectedIdx;
+                    const key =
+                      v?._id || v?.sku || `${v?.variantName || "variant"}-${i}`;
+                    const img =
+                      v?.swatchImage?.path || v?.productGallery?.[0]?.path;
+                    const selected = i === selectedIdx;
+                    const title = v?.variantName || "Variant";
                     return (
-                      <Tooltip key={s.key}>
+                      <Tooltip key={key}>
                         <TooltipTrigger asChild>
                           <motion.button
-                            id={`${groupId}-opt-${s.index}`}
+                            id={`${groupId}-opt-${i}`}
                             type="button"
                             role="radio"
                             aria-checked={selected}
                             tabIndex={
                               selectedIdx === -1
-                                ? s.index === 0
+                                ? i === 0
                                   ? 0
                                   : -1
                                 : selected
                                 ? 0
                                 : -1
                             }
-                            onClick={() => selectVariant(s.index)}
-                            title={s.name}
+                            onClick={() => selectVariant(i)}
+                            title={title}
                             whileHover={{ scale: 1.05 }}
                             whileTap={{ scale: 0.97 }}
                             className={[
@@ -748,10 +636,10 @@ export default function ProductCard({
                                 : "border border-black/10",
                             ].join(" ")}
                           >
-                            {s.img ? (
+                            {img ? (
                               <Image
-                                src={s.img}
-                                alt={s.name || "variant"}
+                                src={img}
+                                alt={title || "variant"}
                                 fill
                                 sizes="28px"
                                 className="object-cover"
@@ -762,8 +650,11 @@ export default function ProductCard({
                             )}
                           </motion.button>
                         </TooltipTrigger>
-                        <TooltipContent side="top" className="px-2 py-1 text-xs">
-                          {s.name}
+                        <TooltipContent
+                          side="top"
+                          className="px-2 py-1 text-xs"
+                        >
+                          {title}
                         </TooltipContent>
                       </Tooltip>
                     );
@@ -808,7 +699,6 @@ export default function ProductCard({
               transition={{ type: "spring", stiffness: 420, damping: 28 }}
               className="flex items-center justify-between gap-3"
             >
-              {/* Stepper */}
               <div className="inline-flex items-center gap-1.5">
                 <motion.button
                   type="button"
@@ -855,7 +745,6 @@ export default function ProductCard({
                 </motion.button>
               </div>
 
-              {/* Subtotal */}
               <div className="inline-flex items-baseline gap-2 leading-tight">
                 <span className="text-[10px] font-medium text-slate-500 dark:text-neutral-400">
                   Subtotal
@@ -886,7 +775,6 @@ export default function ProductCard({
                   "w-full rounded-full px-3 py-1.5 text-[11px] font-bold text-white transition-colors",
                   "min-h-[34px]",
                   "focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#fcba17]",
-                  needsVariantSelection ? "ring-1 ring-amber-300" : "",
                   !canAdd ? "opacity-70 cursor-not-allowed" : "",
                 ].join(" ")}
                 style={{ backgroundColor: BRAND }}
@@ -898,20 +786,8 @@ export default function ProductCard({
                 }}
                 onClick={handleAddToCart}
                 aria-disabled={!canAdd}
-                aria-label={
-                  needsVariantSelection
-                    ? "Select a color first"
-                    : !canAdd
-                    ? "Out of stock"
-                    : `Add ${name || "product"} to cart`
-                }
-                title={
-                  needsVariantSelection
-                    ? "Select a color first"
-                    : !canAdd
-                    ? "Out of stock"
-                    : "Add to cart"
-                }
+                aria-label={`Add ${name || "product"} to cart`}
+                title={canAdd ? "Add to cart" : "Out of stock"}
               >
                 <ShoppingCart className="mr-2 h-3.5 w-3.5" />
                 {buttonLabel}
