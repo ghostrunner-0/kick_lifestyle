@@ -26,7 +26,7 @@ function daysBetween(a, b) {
 
 export async function GET(_req, { params }) {
   try {
-    const admin = isAuthenticated("admin");
+    const admin = await isAuthenticated(["admin", "sales"]);
     if (!admin) return json(false, 401, "admin not authenticated");
 
     await connectDB();

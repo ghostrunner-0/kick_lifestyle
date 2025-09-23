@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 export async function GET(_req, { params }) {
   try {
     // Gate: only backoffice staff/admin can hit this
-    const staff = await isAuthenticated("admin"); // or "staff"
+    const staff = await  isAuthenticated(["admin", "sales"]);
     if (!staff) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }

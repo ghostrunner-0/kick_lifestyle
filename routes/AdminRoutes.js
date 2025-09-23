@@ -43,3 +43,6 @@ export const STUDENT_DISCOUNT = "/admin/student-discount";
 export const ADMIN_OFFLINE_REGISTRATIONS = "/admin/offline-registration";
 export const ADMIN_ORDERS_EDIT =(id) =>
   id ? `/admin/orders/${id}` : "";
+
+
+export const ADMIN_INTEGRATIONS = "/admin/integrations";
