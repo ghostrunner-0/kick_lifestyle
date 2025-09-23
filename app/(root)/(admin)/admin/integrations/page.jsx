@@ -61,7 +61,7 @@ export default function IntegrationsPage() {
 
   const onConnect = () => {
     // Sends to your OAuth starter; it will redirect to Daraz and back here.
-    window.location.href = "/api/daraz/authorize";
+    window.location.href = "/api/daraz/auth/start";
   };
 
   const onDisconnect = async () => {
