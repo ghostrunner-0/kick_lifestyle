@@ -92,12 +92,71 @@ function useIsTruncated() {
   return [ref, truncated, check];
 }
 
-/* ====== Minimal pill sizing/colors (smaller + simple black) ====== */
-const PILL_W = 50;          // slimmer
-const PILL_H = 8;           // thinner
-const PILL_EDGE_GAP = 14;   // side padding so it never clips
-const PILL_BG = "rgba(0,0,0,0.95)"; // solid black feel
-const PILL_SHADOW = "0 1px 4px rgba(0,0,0,0.25)";
+/* ---- Trackless Embla Scrollbar (subtle thumb only) ---- */
+/* ---- Trackless Embla Scrollbar (extra-thin thumb) ---- */
+function EmblaScrollbar({ api }) {
+  const trackRef = useRef(null);
+  const [progress, setProgress] = useState(0); // 0..1
+  const [count, setCount] = useState(1);
+
+  const update = useCallback(() => {
+    if (!api) return;
+    const p = api.scrollProgress();
+    setProgress(Number.isFinite(p) ? Math.max(0, Math.min(1, p)) : 0);
+  }, [api]);
+
+  useEffect(() => {
+    if (!api) return;
+    setCount(api.scrollSnapList().length || 1);
+    update();
+    api.on("scroll", update);
+    api.on("reInit", () => {
+      setCount(api.scrollSnapList().length || 1);
+      update();
+    });
+    return () => {
+      api.off("scroll", update);
+    };
+  }, [api, update]);
+
+  const onTrackClick = (e) => {
+    if (!api || !trackRef.current) return;
+    const rect = trackRef.current.getBoundingClientRect();
+    const ratio = (e.clientX - rect.left) / rect.width;
+    const snaps = api.scrollSnapList();
+    const idx = Math.round(ratio * (snaps.length - 1));
+    api.scrollTo(Math.max(0, Math.min(snaps.length - 1, idx)));
+  };
+
+  const thumbPct = 100 / (count || 1);
+  const leftPct = Math.max(0, Math.min(100 - thumbPct, progress * (100 - thumbPct)));
+
+  if ((count || 1) <= 1) return null;
+
+  return (
+    <div className="absolute z-20 left-2 right-2 bottom-2 pointer-events-auto select-none">
+      <div
+        ref={trackRef}
+        onClick={onTrackClick}
+        className="relative h-[6px] rounded-full cursor-pointer" // thinner track hit-area (still no bg)
+      >
+        {/* ultra-thin thumb only */}
+        <motion.div
+          className="absolute top-1/2 -translate-y-1/2 h-[2px] rounded-full bg-black/22 dark:bg-white/30 shadow-[0_0_0_0.5px_rgba(0,0,0,0.04)]"
+          style={{
+            width: `${thumbPct}%`,
+            left: `${leftPct}%`,
+            touchAction: "none",
+          }}
+          transition={{ type: "spring", stiffness: 420, damping: 30, mass: 0.6 }}
+        />
+      </div>
+    </div>
+  );
+}
+
+
+/* =================================================================== */
 
 export default function ProductCard({
   product,
@@ -118,7 +177,15 @@ export default function ProductCard({
     heroImage,
     productMedia,
     variants = [],
+    // flexible flags support
+    isFeatured: _isFeatured,
+    featured: _featured,
+    isNew: _isNew,
+    new: _newFlag,
   } = product;
+
+  const isFeatured = Boolean(_isFeatured ?? _featured ?? false);
+  const isNew = Boolean(_isNew ?? _newFlag ?? false);
 
   const productHref = PRODUCT_VIEW_ROUTE(slug);
   const cartLines = useSelector(selectItems);
@@ -140,17 +207,18 @@ export default function ProductCard({
         onVariantChange?.(variants[0]);
       }
     } else if (selectedIdx !== -1) {
-      setSelectedIdx(-1);
-      onVariantChange?.(null);
+        setSelectedIdx(-1);
+        onVariantChange?.(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug, variants]);
 
-  // --- Build gallery
+  // --- Build gallery (kept same background & carousel content) ---
   const variantHeroPath =
     activeVariant?.productGallery?.[0]?.path ||
     activeVariant?.swatchImage?.path ||
     null;
+  
   const heroPath =
     variantHeroPath || heroImage?.path || productMedia?.[0]?.path || null;
 
@@ -324,44 +392,14 @@ export default function ProductCard({
   /* ==================== EMBLA ==================== */
   const galleryKey = activeVariant?._id || slug || "base";
   const [emblaRef, emblaApi] = useEmblaCarousel({
-    loop: false, // infinite OFF
+    loop: false,
     align: "start",
     containScroll: "trimSnaps",
-    dragFree: false, // one image at a time
+    dragFree: false,
     slidesToScroll: 1,
   });
 
-  // simple progress
-  const [renderProgress, setRenderProgress] = useState(0);
-  const onScroll = useCallback(() => {
-    if (!emblaApi) return;
-    const p = emblaApi.scrollProgress();
-    const clamped = Number.isFinite(p) ? Math.max(0, Math.min(1, p)) : 0;
-    setRenderProgress(clamped);
-  }, [emblaApi]);
-
-  useEffect(() => {
-    if (!emblaApi) return;
-    onScroll();
-    emblaApi.on("scroll", onScroll);
-    emblaApi.on("reInit", onScroll);
-    return () => {
-      emblaApi.off("scroll", onScroll);
-      emblaApi.off("reInit", onScroll);
-    };
-  }, [emblaApi, onScroll]);
-
-  useEffect(() => {
-    if (emblaApi) {
-      emblaApi.reInit?.();
-      emblaApi.scrollTo?.(0, true);
-      setRenderProgress(0);
-    }
-  }, [emblaApi, galleryKey, gallery.length]);
-
-  const pct = Math.max(0, Math.min(1, renderProgress)); // 0..1
-
-  // Click guard
+  // Click guard for links inside embla
   const onSlideLinkClick = useCallback(
     (e) => {
       if (emblaApi && !emblaApi.clickAllowed()) {
@@ -372,31 +410,7 @@ export default function ProductCard({
     [emblaApi]
   );
 
-  /* ========= Name tooltip only when truncated ========= */
-  const [nameRef, nameTruncated, checkNameTrunc] = useIsTruncated();
-  useEffect(() => {
-    checkNameTrunc();
-  }, [checkNameTrunc, name, variants.length]);
-
-  const NameBlock = (
-    <div className="flex-1 min-w-0">
-      {productHref ? (
-        <Link
-          href={productHref}
-          className="hover:underline underline-offset-2 block"
-          aria-label={name ? `View ${name}` : "View product"}
-        >
-          <span ref={nameRef} className="block truncate">
-            {name}
-          </span>
-        </Link>
-      ) : (
-        <span ref={nameRef} className="block truncate">
-          {name}
-        </span>
-      )}
-    </div>
-  );
+  const [nameRef2] = useIsTruncated();
 
   return (
     <motion.div
@@ -409,7 +423,7 @@ export default function ProductCard({
         className,
       ].join(" ")}
     >
-      {/* Media — gradient backdrop */}
+      {/* ---------- Media (kept same gradient background) ---------- */}
       <div
         className="relative aspect-square md:aspect-[4/5]"
         style={{
@@ -424,8 +438,9 @@ export default function ProductCard({
           `,
         }}
       >
-        {off !== null && (
-          <div className="absolute right-3 top-3 z-20">
+        {/* Top-left info badges */}
+        <div className="absolute top-3 left-3 z-20 flex items-center gap-2">
+          {off !== null && (
             <Badge
               variant="outline"
               className="rounded-full bg-white text-black border border-black/10 shadow-sm px-2.5 py-1 text-[11px] font-extrabold leading-none"
@@ -433,10 +448,20 @@ export default function ProductCard({
             >
               {off}% OFF
             </Badge>
-          </div>
-        )}
+          )}
+          {isNew && (
+            <Badge className="rounded-full bg-black text-white px-2.5 py-1 text-[10px] font-semibold tracking-wide">
+              NEW
+            </Badge>
+          )}
+          {isFeatured && (
+            <Badge className="rounded-full bg-black/80 text-white px-2.5 py-1 text-[10px] font-semibold tracking-wide">
+              Featured
+            </Badge>
+          )}
+        </div>
 
-        {/* Slider */}
+        {/* Slider (same Embla core, images & links) */}
         <div className="absolute inset-0">
           <div className="embla h-full" aria-label="Product images">
             <AnimatePresence mode="wait">
@@ -499,89 +524,37 @@ export default function ProductCard({
               </motion.div>
             </AnimatePresence>
 
-            {/* Minimal, small, black pill (no rail bg) */}
-            {gallery.length > 1 && (
-              <div
-                className="absolute z-20 pointer-events-none"
-                style={{
-                  left: 8,
-                  right: 8,
-                  bottom: 12,
-                  paddingInline: 8,
-                }}
-              >
-                <div
-                  className="relative mx-5"
-                  style={{
-                    height: 12,
-                    paddingInlineStart: PILL_W / 2 + PILL_EDGE_GAP,
-                    paddingInlineEnd: PILL_W / 2 + PILL_EDGE_GAP,
-                    overflow: "visible",
-                  }}
-                >
-                  <motion.span
-                    className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2"
-                    style={{
-                      left: `${(pct * 100).toFixed(2)}%`,
-                      width: PILL_W,
-                      height: PILL_H,
-                      borderRadius: 9999,
-                      background: PILL_BG,
-                      boxShadow: PILL_SHADOW,
-                      willChange: "left, transform",
-                    }}
-                    transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.6 }}
-                    aria-hidden
-                  />
-                </div>
-              </div>
-            )}
+            {/* Trackless, subtle scrollbar */}
+            {gallery.length > 1 && <EmblaScrollbar api={emblaApi} />}
           </div>
         </div>
       </div>
 
-      {/* INFO */}
+      {/* ------------------------ INFO ------------------------ */}
       <div className="p-3 sm:p-4">
-        {/* Title + Variants */}
+        {/* Title & Variants row */}
         <div className="mb-1 flex items-center gap-2 min-h-[28px]">
-          {(() => {
-            const [nameRef2, nameTruncated2] = useIsTruncated();
-            const block = (
-              <div className="flex-1 min-w-0">
-                {productHref ? (
-                  <Link
-                    href={productHref}
-                    className="hover:underline underline-offset-2 block"
-                    aria-label={name ? `View ${name}` : "View product"}
-                  >
-                    <span ref={nameRef2} className="block truncate">
-                      {name}
-                    </span>
-                  </Link>
-                ) : (
-                  <span ref={nameRef2} className="block truncate">
-                    {name}
-                  </span>
-                )}
-              </div>
-            );
-            return nameTruncated2 ? (
-              <TooltipProvider delayDuration={200}>
-                <Tooltip>
-                  <TooltipTrigger asChild>{block}</TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-[280px] text-xs">
-                    {name}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+          <div className="flex-1 min-w-0">
+            {productHref ? (
+              <Link
+                href={productHref}
+                className="hover:underline underline-offset-2 block"
+                aria-label={name ? `View ${name}` : "View product"}
+              >
+                <span ref={nameRef2} className="block truncate font-medium">
+                  {name}
+                </span>
+              </Link>
             ) : (
-              block
-            );
-          })()}
+              <span ref={nameRef2} className="block truncate font-medium">
+                {name}
+              </span>
+            )}
+          </div>
 
           {variants.length > 0 && (
             <ScrollArea
-              className="shrink-0 max-w-[50%] overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] me-0.5"
+              className="shrink-0 max-w-[55%] overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] me-0.5"
               aria-label="Choose color"
               style={{ WebkitOverflowScrolling: "touch" }}
             >
@@ -650,10 +623,7 @@ export default function ProductCard({
                             )}
                           </motion.button>
                         </TooltipTrigger>
-                        <TooltipContent
-                          side="top"
-                          className="px-2 py-1 text-xs"
-                        >
+                        <TooltipContent side="top" className="px-2 py-1 text-xs">
                           {title}
                         </TooltipContent>
                       </Tooltip>
@@ -665,13 +635,13 @@ export default function ProductCard({
           )}
         </div>
 
-        {/* Price row */}
+        {/* Price */}
         <motion.div
           key={`${priceNow}-${priceWas ?? "na"}`}
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: "spring", stiffness: 400, damping: 30 }}
-          className="mt-2 flex items-baseline justify-between"
+          className="mt-2 flex items-center justify-between"
         >
           <div className="flex items-baseline gap-2">
             <span className="text-[18px] font-semibold tracking-tight text-slate-900 dark:text-white">
@@ -687,9 +657,10 @@ export default function ProductCard({
               </span>
             )}
           </div>
+          {/* removed fast delivery chip */}
         </motion.div>
 
-        {/* CTA — minimal stepper + subtotal */}
+        {/* CTA — stepper / add */}
         <div className="mt-2">
           {currentQty > 0 ? (
             <motion.div
