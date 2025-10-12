@@ -1,7 +1,7 @@
 // snippet inside /app/api/daraz/order/[orderId]/route.js after you build lineItems
-import DarazProductMap from "@/models/DarazProductMap";
-import Product from "@/models/Product";
-import ProductVariant from "@/models/ProductVariant";
+import DarazProductMap from "@/models/DarazProductMap.model";
+import Product from "@/models/Product.model";
+import ProductVariant from "@/models/ProductVariant.model";
 
 const hydrated = [];
 for (const li of lineItems) {
