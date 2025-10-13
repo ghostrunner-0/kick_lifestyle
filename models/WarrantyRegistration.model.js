@@ -37,7 +37,7 @@ const WarrantyRegistrationSchema = new Schema(
 
     // MULTIPLE products in one registration
     items: { type: [ItemSchema], default: [], validate: v => Array.isArray(v) && v.length > 0 },
-
+    darazOrderId: { type: String, default: "", trim: true, index: true },
     notes: { type: String, default: "" },
   },
   { timestamps: true }
