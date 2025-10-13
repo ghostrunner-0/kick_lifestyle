@@ -26,7 +26,7 @@ const WarrantyRegistrationSchema = new Schema(
   {
     userId:  { type: Types.ObjectId, ref: "User",  index: true, default: null },
     orderId: { type: Types.ObjectId, ref: "Order", index: true, default: null }, // one doc per order
-    channel: { type: String, enum: ["kick", "daraz", "offline"], required: true, index: true },
+    channel: { type: String, enum: ["kick", "daraz", "offline","khalti"], required: true, index: true },
     shopName:{ type: String, required: true, trim: true },
     offlineShopId: { type: Types.ObjectId, ref: "OfflineShop", default: null, index: true },
 
