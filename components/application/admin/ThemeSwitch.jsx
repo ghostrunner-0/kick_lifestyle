@@ -1,34 +1,46 @@
 "use client";
-import { IoSunnyOutline } from "react-icons/io5";
-import { IoMoonOutline } from "react-icons/io5";
+import { useEffect, useState } from "react";
+import { IoSunnyOutline, IoMoonOutline } from "react-icons/io5";
 import { useTheme } from "next-themes";
 
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-const ThemeSwitch = ({}) => {
-  const { setTheme } = useTheme();
+
+const ThemeSwitch = () => {
+  const { setTheme, theme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger>
+      {/* Prevent <button> inside <button> */}
+      <DropdownMenuTrigger asChild>
         <Button
           type="button"
-          variant={"ghost"}
-          className={"cursor-pointer"}
-          size={"icon"}
+          variant="ghost"
+          size="icon"
+          className="cursor-pointer"
+          aria-label="Toggle theme"
         >
-          <IoSunnyOutline className="dark:hidden" />
-          <IoMoonOutline className="dark:block hidden" />
+          {/* Avoid hydration mismatch for icon: render both only after mount */}
+          {mounted ? (
+            <>
+              <IoSunnyOutline className="dark:hidden h-5 w-5" />
+              <IoMoonOutline className="hidden dark:block h-5 w-5" />
+            </>
+          ) : (
+            // SSR fallback icon
+            <IoSunnyOutline className="h-5 w-5" />
+          )}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent>
+
+      <DropdownMenuContent align="end" className="w-36">
         <DropdownMenuItem onClick={() => setTheme("light")}>
           Light
         </DropdownMenuItem>

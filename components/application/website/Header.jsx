@@ -34,6 +34,8 @@ import {
   SheetContent,
   SheetTrigger,
   SheetClose,
+  SheetHeader,
+  SheetTitle,
 } from "@/components/ui/sheet";
 import {
   Accordion,
@@ -117,7 +119,7 @@ export default function Header() {
     } catch {}
   }, []);
 
-  // 2) Refresh from API (robust shapes + fallback)
+  // 2) Refresh from API
   useEffect(() => {
     let cancelled = false;
     const ac = new AbortController();
@@ -136,14 +138,12 @@ export default function Header() {
           setAccountHref("/account");
           setAccountLabel("My Account");
         } else {
-          // Unknown role -> treat as logged in user
           setAccountHref("/account");
           setAccountLabel("My Account");
         }
       };
 
       try {
-        // Preferred endpoint
         const res = await fetch("/api/auth/check", {
           credentials: "include",
           cache: "no-store",
@@ -162,7 +162,6 @@ export default function Header() {
         }
       } catch {}
 
-      // Fallback: /api/auth/me
       try {
         const res2 = await fetch("/api/auth/me", {
           credentials: "include",
@@ -171,7 +170,6 @@ export default function Header() {
         });
         if (res2.ok) {
           const json2 = await res2.json();
-          // supports both {user:{role}} and {data:{role}}
           const role =
             pickRole(json2) ||
             (json2?.data ? json2.data.role : json2?.user?.role) ||
@@ -187,7 +185,6 @@ export default function Header() {
         }
       } catch {}
 
-      // Not logged in
       if (!cancelled) {
         setAccountHref("/auth/login");
         setAccountLabel("Login / Register");
@@ -317,6 +314,11 @@ export default function Header() {
                 side="left"
                 className="w-[80%] sm:w-[380px] p-0 flex flex-col [&>button.absolute.right-4.top-4]:hidden"
               >
+                {/* Required for Radix a11y */}
+                <SheetHeader className="sr-only">
+                  <SheetTitle>Main navigation</SheetTitle>
+                </SheetHeader>
+
                 <div className="flex items-center justify-between px-4 py-3 border-b bg-white">
                   <Image
                     src={LOGO_BLACK}

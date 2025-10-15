@@ -14,6 +14,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 
+/* shadcn/ui */
 import {
   Accordion,
   AccordionItem,
@@ -21,12 +22,19 @@ import {
   AccordionContent,
 } from "@/components/ui/accordion";
 
-/* ---------- Data ---------- */
-const CATEGORIES = [
-  { label: "Smartwatch", href: "category/smart-watch" },
-  { label: "True Wireless Earbuds", href: "category/true-wireless-earbuds" },
-];
+/* Pull categories exactly like in Header */
+import { useMemo } from "react";
+import { useCategories } from "@/components/providers/CategoriesProvider";
+import { CATEGORY_VIEW_ROUTE } from "@/routes/WebsiteRoutes";
 
+/* ---------- Helpers ---------- */
+const toTitle = (s) =>
+  (s || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/\b\w/g, (m) => m.toUpperCase());
+
+/* ---------- Static Data ---------- */
 const USEFUL = [
   { label: "About", href: "/about" },
   { label: "Register", href: "/auth/register" },
@@ -42,17 +50,9 @@ const HELP = [
 
 const SOCIAL = [
   { label: "Facebook", href: "https://facebook.com/yourbrand", Icon: Facebook },
-  {
-    label: "Instagram",
-    href: "https://instagram.com/yourbrand",
-    Icon: Instagram,
-  },
+  { label: "Instagram", href: "https://instagram.com/yourbrand", Icon: Instagram },
   { label: "YouTube", href: "https://youtube.com/@yourbrand", Icon: Youtube },
-  {
-    label: "Twitter / X",
-    href: "https://twitter.com/yourbrand",
-    Icon: Twitter,
-  },
+  { label: "Twitter / X", href: "https://twitter.com/yourbrand", Icon: Twitter },
 ];
 
 /* ---------- Reusable link ---------- */
@@ -63,8 +63,8 @@ function ListLink({ href, children }) {
         href={href}
         className="group flex items-center gap-2 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
-        <ChevronRight className="h-3.5 w-3.5 opacity-40 transition-transform group-hover:translate-x-0.5" />
-        <span className="underline-offset-4 hover:underline">{children}</span>
+        <ChevronRight className="h-4 w-4 opacity-40 transition-transform group-hover:translate-x-0.5" />
+        <span className="underline-offset-4 group-hover:underline">{children}</span>
       </Link>
     </li>
   );
@@ -73,20 +73,33 @@ function ListLink({ href, children }) {
 export default function Footer() {
   const year = new Date().getFullYear();
 
+  // Fetch categories just like Header
+  const { categories, isLoading } = useCategories();
+  const catLinks = useMemo(() => {
+    const list = Array.isArray(categories) ? categories : [];
+    return list
+      .filter((c) => c?.showOnWebsite)
+      .map((c) => ({
+        label: toTitle(c?.name),
+        href: CATEGORY_VIEW_ROUTE(c?.slug),
+      }));
+  }, [categories]);
+
   return (
-    <footer className="border-t bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/70">
-      <div className="mx-auto max-w-[1600px] [padding-inline:clamp(1rem,5vw,6rem)] py-10">
+    <footer className="w-full border-t bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/70 dark:bg-neutral-950/60">
+      {/* match header widths */}
+      <div className="mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-10 2xl:px-16 py-10">
         {/* Mobile View */}
         <div className="lg:hidden space-y-6">
-          {/* Brand + Social (always visible) */}
+          {/* Brand + Social */}
           <div>
-            <Link href="/" className="inline-block">
+            <Link href="/" className="inline-block" aria-label="KICK Home">
               <Image
                 src={Logo}
                 alt="KICK"
                 width={200}
                 height={60}
-                className="w-32"
+                className="w-32 h-auto"
                 priority
               />
             </Link>
@@ -100,10 +113,11 @@ export default function Footer() {
                   href={href}
                   aria-label={label}
                   target="_blank"
-                  rel="noreferrer"
-                  className="group grid h-9 w-9 place-items-center rounded-full border bg-white/60 shadow-sm transition hover:shadow-md hover:bg-white"
+                  rel="noopener noreferrer"
+                  className="group grid h-9 w-9 place-items-center rounded-full border bg-white/60 shadow-sm transition hover:shadow-md hover:bg-white dark:bg-neutral-900/60 dark:hover:bg-neutral-900"
                 >
-                  <Icon className="h-4.5 w-4.5 text-foreground/80 transition-transform duration-200 group-hover:-translate-y-0.5" />
+                  <Icon className="h-4 w-4 text-foreground/80 transition-transform duration-200 group-hover:-translate-y-0.5" />
+                  <span className="sr-only">{label}</span>
                 </Link>
               ))}
             </div>
@@ -111,18 +125,29 @@ export default function Footer() {
 
           {/* Accordion Sections */}
           <Accordion type="multiple" className="space-y-3">
+            {/* Categories from Provider */}
             <AccordionItem value="categories">
               <AccordionTrigger className="text-sm font-medium tracking-wide">
                 Categories
               </AccordionTrigger>
               <AccordionContent>
-                <ul className="mt-3 space-y-1.5">
-                  {CATEGORIES.map((item) => (
-                    <ListLink key={item.label} href={item.href}>
-                      {item.label}
-                    </ListLink>
-                  ))}
-                </ul>
+                {isLoading ? (
+                  <div className="mt-2 text-sm text-muted-foreground">Loading…</div>
+                ) : (
+                  <ul className="mt-3 space-y-1.5">
+                    {catLinks?.length
+                      ? catLinks.map((item) => (
+                          <ListLink key={item.label} href={item.href}>
+                            {item.label}
+                          </ListLink>
+                        ))
+                      : (
+                        <li className="py-1.5 text-sm text-muted-foreground">
+                          No categories available
+                        </li>
+                      )}
+                  </ul>
+                )}
               </AccordionContent>
             </AccordionItem>
 
@@ -163,31 +188,25 @@ export default function Footer() {
               <AccordionContent>
                 <ul className="mt-3 space-y-3 text-sm">
                   <li className="flex items-start gap-3">
-                    <Mail className="mt-0.5 h-4.5 w-4.5 text-muted-foreground" />
+                    <Mail className="mt-0.5 h-4 w-4 text-muted-foreground" />
                     <div>
                       <div className="text-muted-foreground">Email</div>
-                      <Link
-                        href="mailto:info@kick.com.np"
-                        className="hover:underline"
-                      >
+                      <Link href="mailto:info@kick.com.np" className="hover:underline">
                         info@kick.com.np
                       </Link>
                     </div>
                   </li>
                   <li className="flex items-start gap-3">
-                    <Phone className="mt-0.5 h-4.5 w-4.5 text-muted-foreground" />
+                    <Phone className="mt-0.5 h-4 w-4 text-muted-foreground" />
                     <div>
                       <div className="text-muted-foreground">Phone</div>
-                      <Link
-                        href="tel:+9779820810020"
-                        className="hover:underline"
-                      >
+                      <Link href="tel:+9779820810020" className="hover:underline">
                         +977 9820810020
                       </Link>
                     </div>
                   </li>
                   <li className="flex items-start gap-3">
-                    <MapPin className="mt-0.5 h-4.5 w-4.5 text-muted-foreground" />
+                    <MapPin className="mt-0.5 h-4 w-4 text-muted-foreground" />
                     <div>
                       <div className="text-muted-foreground">Address</div>
                       <p>
@@ -196,6 +215,8 @@ export default function Footer() {
                         <Link
                           href="https://maps.app.goo.gl/3VVPwH56bnSftizMA"
                           className="hover:underline"
+                          target="_blank"
+                          rel="noopener noreferrer"
                         >
                           Get directions →
                         </Link>
@@ -212,13 +233,13 @@ export default function Footer() {
         <div className="hidden lg:grid gap-10 lg:grid-cols-5">
           {/* Brand + Social */}
           <div>
-            <Link href="/" className="inline-block">
+            <Link href="/" className="inline-block" aria-label="KICK Home">
               <Image
                 src={Logo}
                 alt="KICK"
                 width={200}
                 height={60}
-                className="w-32"
+                className="w-32 h-auto"
                 priority
               />
             </Link>
@@ -232,25 +253,36 @@ export default function Footer() {
                   href={href}
                   aria-label={label}
                   target="_blank"
-                  rel="noreferrer"
-                  className="group grid h-9 w-9 place-items-center rounded-full border bg-white/60 shadow-sm transition hover:shadow-md hover:bg-white"
+                  rel="noopener noreferrer"
+                  className="group grid h-9 w-9 place-items-center rounded-full border bg-white/60 shadow-sm transition hover:shadow-md hover:bg-white dark:bg-neutral-900/60 dark:hover:bg-neutral-900"
                 >
-                  <Icon className="h-4.5 w-4.5 text-foreground/80 transition-transform duration-200 group-hover:-translate-y-0.5" />
+                  <Icon className="h-4 w-4 text-foreground/80 transition-transform duration-200 group-hover:-translate-y-0.5" />
+                  <span className="sr-only">{label}</span>
                 </Link>
               ))}
             </div>
           </div>
 
-          {/* Categories */}
+          {/* Categories (live) */}
           <div>
             <h4 className="text-sm font-medium tracking-wide">Categories</h4>
-            <ul className="mt-3 space-y-1.5">
-              {CATEGORIES.map((item) => (
-                <ListLink key={item.label} href={item.href}>
-                  {item.label}
-                </ListLink>
-              ))}
-            </ul>
+            {isLoading ? (
+              <div className="mt-3 text-sm text-muted-foreground">Loading…</div>
+            ) : (
+              <ul className="mt-3 space-y-1.5">
+                {catLinks?.length
+                  ? catLinks.map((item) => (
+                      <ListLink key={item.label} href={item.href}>
+                        {item.label}
+                      </ListLink>
+                    ))
+                  : (
+                    <li className="py-1.5 text-sm text-muted-foreground">
+                      No categories available
+                    </li>
+                  )}
+              </ul>
+            )}
           </div>
 
           {/* Useful */}
@@ -282,19 +314,16 @@ export default function Footer() {
             <h4 className="text-sm font-medium tracking-wide">Contact</h4>
             <ul className="mt-3 space-y-3 text-sm">
               <li className="flex items-start gap-3">
-                <Mail className="mt-0.5 h-4.5 w-4.5 text-muted-foreground" />
+                <Mail className="mt-0.5 h-4 w-4 text-muted-foreground" />
                 <div>
                   <div className="text-muted-foreground">Email</div>
-                  <Link
-                    href="mailto:info@kick.com.np"
-                    className="hover:underline"
-                  >
+                  <Link href="mailto:info@kick.com.np" className="hover:underline">
                     info@kick.com.np
                   </Link>
                 </div>
               </li>
               <li className="flex items-start gap-3">
-                <Phone className="mt-0.5 h-4.5 w-4.5 text-muted-foreground" />
+                <Phone className="mt-0.5 h-4 w-4 text-muted-foreground" />
                 <div>
                   <div className="text-muted-foreground">Phone</div>
                   <Link href="tel:+9779820810020" className="hover:underline">
@@ -303,7 +332,7 @@ export default function Footer() {
                 </div>
               </li>
               <li className="flex items-start gap-3">
-                <MapPin className="mt-0.5 h-4.5 w-4.5 text-muted-foreground" />
+                <MapPin className="mt-0.5 h-4 w-4 text-muted-foreground" />
                 <div>
                   <div className="text-muted-foreground">Address</div>
                   <p>Kick Lifestyle, Kathmandu, Nepal</p>

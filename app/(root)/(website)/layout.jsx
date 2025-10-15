@@ -1,22 +1,20 @@
-// app/(website)/layout.jsx (or your layout file shown)
+// app/(website)/layout.jsx
 import Footer from "@/components/application/website/Footer";
 import Header from "@/components/application/website/Header";
 import React from "react";
-import { Poppins } from "next/font/google";
 
 import ReactQueryProvider from "@/components/providers/ReactQueryProvider";
 import { CategoriesProvider } from "@/components/providers/CategoriesProvider";
 import { ProductProvider } from "@/components/providers/ProductProvider";
 import BottomNav from "@/components/application/website/BottomNav";
 import { deriveKey } from "@/components/providers/ProductProvider";
-import AuthHydrator from "@/components/providers/AuthHydrator"; // <-- add this
+import AuthHydrator from "@/components/providers/AuthHydrator";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
-const poppins = Poppins({
-  subsets: ["latin"],
-  display: "swap",
-  weight: ["400", "500", "600", "700"],
-});
+// If you truly need a different font *just for this subtree*,
+// import it and apply on a wrapper <div>. Do NOT render <html>/<body> here.
+// import { Poppins } from "next/font/google";
+// const poppins = Poppins({ subsets: ["latin"], display: "swap", weight: ["400","500","600","700"] });
 
 const SITE_URL =
   process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || "";
@@ -51,26 +49,26 @@ export default async function Layout({ children }) {
   } catch {}
 
   return (
-    <html lang="en">
-      <body className={poppins.className}>
-        <ReactQueryProvider>
-          {/* <-- Hydrate Redux from NextAuth session if needed */}
-          <AuthHydrator />
+    // If you want the local font, wrap like:
+    // <div className={poppins.className}>
+    <>
+      <ReactQueryProvider>
+        <AuthHydrator />
 
-          <CategoriesProvider initialCategories={initialCategories}>
-            <ProductProvider
-              initialActiveKey={initialActiveKey}
-              initialProducts={initialProducts}
-            >
-              <Header />
-              <main className="pb-16 md:pb-0">{children}</main>
-              <SpeedInsights />
-              <Footer />
-              <BottomNav />
-            </ProductProvider>
-          </CategoriesProvider>
-        </ReactQueryProvider>
-      </body>
-    </html>
+        <CategoriesProvider initialCategories={initialCategories}>
+          <ProductProvider
+            initialActiveKey={initialActiveKey}
+            initialProducts={initialProducts}
+          >
+            <Header />
+            <main className="pb-16 md:pb-0">{children}</main>
+            <SpeedInsights />
+            <Footer />
+            <BottomNav />
+          </ProductProvider>
+        </CategoriesProvider>
+      </ReactQueryProvider>
+    </>
+    // </div>
   );
 }

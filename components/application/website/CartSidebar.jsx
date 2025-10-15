@@ -2,9 +2,7 @@
 import React, { useMemo, useEffect } from "react";
 import Image from "next/image";
 import { useDispatch, useSelector } from "react-redux";
-// at top of file (if not already)
 import { ShoppingCart } from "lucide-react";
-// at top of file
 import Link from "next/link";
 
 import {
@@ -17,7 +15,12 @@ import {
 } from "@/store/cartSlice";
 import { Button } from "@/components/ui/button";
 import { Minus, Plus, Trash2 } from "lucide-react";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 
 const formatNpr = (v) => {
   const n = Number(v || 0);
@@ -37,6 +40,7 @@ export default function CartSidebar({ open, onOpenChange }) {
   const items = useSelector(selectItems) || [];
   const subtotal = useSelector(selectSubtotal) || 0;
   const repricing = useSelector(selectRepricing);
+
   const itemCount = useMemo(
     () => items.reduce((n, it) => n + (Number(it.qty) || 0), 0),
     [items]
@@ -86,11 +90,15 @@ export default function CartSidebar({ open, onOpenChange }) {
         side="right"
         className="w-[92vw] sm:w-[440px] p-0 flex flex-col h-dvh max-h-dvh"
       >
-        {/* Header (no price shown here) */}
+        {/* Required for Radix a11y: keep title, hide visually */}
+        <SheetHeader className="sr-only">
+          <SheetTitle>Shopping cart</SheetTitle>
+        </SheetHeader>
+
+        {/* Header */}
         <div className="border-b px-4 py-4 shrink-0 bg-white/80 backdrop-blur">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              {/* Cart icon with count badge */}
               <div className="relative">
                 <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl border bg-white shadow-sm">
                   <ShoppingCart
@@ -101,7 +109,6 @@ export default function CartSidebar({ open, onOpenChange }) {
                 <span className="sr-only">Cart</span>
               </div>
 
-              {/* Status line */}
               <p className="text-xs text-muted-foreground">
                 {repricing
                   ? "Refreshing prices & stock…"
@@ -111,7 +118,7 @@ export default function CartSidebar({ open, onOpenChange }) {
           </div>
         </div>
 
-        {/* Scrollable items */}
+        {/* Items */}
         <div className="flex-1 overflow-y-auto px-4 py-3">
           {items.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center gap-3 text-center px-4">
@@ -219,7 +226,7 @@ export default function CartSidebar({ open, onOpenChange }) {
           )}
         </div>
 
-        {/* Footer (no subtotal card; total only in button) */}
+        {/* Footer */}
         <div className="shrink-0 px-4 pb-4 pt-2 bg-white/80 backdrop-blur border-t">
           {repricing ? (
             <Button
@@ -237,7 +244,6 @@ export default function CartSidebar({ open, onOpenChange }) {
               <Link
                 href="/checkout"
                 onClick={() => {
-                  // optionally close the sheet if parent passed a handler
                   try {
                     onOpenChange?.(false);
                   } catch {}
