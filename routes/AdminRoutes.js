@@ -41,6 +41,7 @@ export const ADMIN_ORDERS_ALL = "/admin/orders";
 export const ADMIN_DARAZ_MAPPING = "/admin/mapping";
 export const ADMIN_DARAZ_WARRANTY = "/admin/daraz-warranty";
 export const ADMIN_MANUAL_WARRANTY = "/admin/warranty";
+export const ADMIN_COST_SHEET = "/admin/customer-service/cost-sheet";
 export const ADMIN_WARRANTY = "/admin/warranty/list";
 export const ADMIN_HOME_MID_BANNER = "/admin/homebanner";
 export const STUDENT_DISCOUNT = "/admin/student-discount";
