@@ -78,6 +78,9 @@ import { showToast } from "@/lib/ShowToast";
 /* ------------ helpers ------------ */
 const api = axios.create({ baseURL: "/", withCredentials: true });
 
+/* Motion wrapper for shadcn Button so we can use whileTap/whileHover */
+const MotionButton = motion(Button);
+
 /* step for +/-, default = 1 */
 const STEP = 1;
 
@@ -276,22 +279,31 @@ function DesktopRightSidePanel({ summary, items }) {
         </div>
       ) : (
         <div className="">
-          <div className="h-[72px] rounded-2xl px-4 py-3 border border-amber-200 bg-gradient-to-br from-amber-100 to-amber-50 flex items-center justify-between gap-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+          {/* FREE delivery card with #fcba17 gradient */}
+          <div
+            className="h-[72px] rounded-2xl px-4 py-3 border flex items-center justify-between gap-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]"
+            style={{
+              background:
+                "linear-gradient(135deg, #fcba17 0%, #ffd166 52%, #fff2b3 100%)",
+              borderColor: "#f6c245",
+            }}
+          >
             <div className="flex items-center gap-3 min-w-0">
-              <span className="h-9 w-9 rounded-full grid place-items-center bg-amber-300/90 text-amber-950 border border-amber-400">
+              <span className="h-9 w-9 rounded-full grid place-items-center bg-white/80 text-amber-900 border border-amber-300">
                 <Truck className="h-4 w-4" />
               </span>
               <div className="min-w-0">
-                <div className="text-sm font-semibold">
+                <div className="text-sm font-semibold text-amber-900">
                   Free delivery on prepaid orders
                 </div>
-                <div className="text-xs text-amber-900/80 truncate">
+                <div className="text-xs text-amber-900/90 truncate">
                   Save shipping when you pay online at checkout
                 </div>
               </div>
             </div>
           </div>
-          {/* BOTTOM: Corporate (Nepal) — always */}
+
+          {/* Corporate orders card */}
           <div className="h-[72px] rounded-2xl border bg-white px-4 py-3 mt-4 flex items-center justify-between gap-3 shadow-sm">
             <div className="flex items-center gap-3 min-w-0">
               <span className="h-9 w-9 rounded-full grid place-items-center bg-neutral-900 text-white">
@@ -499,15 +511,14 @@ function ReviewsTab({ productId, animateUI }) {
         {isAuthed ? (
           <Dialog open={openDialog} onOpenChange={setOpenDialog}>
             <DialogTrigger asChild>
-              <Button
+              <MotionButton
                 size="sm"
                 className="rounded-full"
                 type="button"
-                as={motion.button}
                 whileHover={{ scale: 1.02 }}
               >
                 Write a review
-              </Button>
+              </MotionButton>
             </DialogTrigger>
             <DialogContent
               className="sm:max-w-md"
@@ -572,23 +583,21 @@ function ReviewsTab({ productId, animateUI }) {
                 </div>
 
                 <DialogFooter className="gap-2">
-                  <Button
+                  <MotionButton
                     type="button"
                     variant="secondary"
                     onClick={() => setOpenDialog(false)}
-                    as={motion.button}
                     whileTap={{ scale: 0.97 }}
                   >
                     Cancel
-                  </Button>
-                  <Button
+                  </MotionButton>
+                  <MotionButton
                     type="submit"
                     disabled={submitting}
-                    as={motion.button}
                     whileTap={{ scale: 0.97 }}
                   >
                     {submitting ? "Submitting..." : "Submit review"}
-                  </Button>
+                  </MotionButton>
                 </DialogFooter>
               </form>
             </DialogContent>
@@ -753,6 +762,10 @@ export default function ProductPageClient({
   const [headerOffset, setHeaderOffset] = useState(0);
   const [bottomNavOffset, setBottomNavOffset] = useState(0);
 
+  // NEW: show mobile sticky only after main ATC leaves viewport
+  const atcRef = useRef(null);
+  const [showStickyMobile, setShowStickyMobile] = useState(false);
+
   useEffect(() => {
     const header = document.querySelector("header");
     if (!header) return;
@@ -797,6 +810,30 @@ export default function ProductPageClient({
     obs.observe(el);
     return () => obs.disconnect();
   }, [galleryKey, headerOffset]);
+
+  // Observe main "Add to cart" button to toggle mobile sticky
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const btn = atcRef.current;
+    if (!btn) return;
+
+    let frame = 0;
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        cancelAnimationFrame(frame);
+        frame = requestAnimationFrame(() => {
+          setShowStickyMobile(!entry.isIntersecting);
+        });
+      },
+      { root: null, threshold: 0, rootMargin: "0px 0px -8px 0px" }
+    );
+
+    io.observe(btn);
+    return () => {
+      cancelAnimationFrame(frame);
+      io.disconnect();
+    };
+  }, []);
 
   const Skeleton = () => (
     <div className="mx-auto max-w-[1200px] px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-10">
@@ -946,7 +983,7 @@ export default function ProductPageClient({
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {/* Sticky Variant Dropdown (working) */}
+                  {/* Sticky Variant Dropdown */}
                   {Array.isArray(variants) && variants.length > 0 ? (
                     <div className="hidden md:flex items-center">
                       <DropdownMenu
@@ -957,14 +994,13 @@ export default function ProductPageClient({
                         }}
                       >
                         <DropdownMenuTrigger asChild>
-                          <Button
+                          <MotionButton
                             variant="outline"
                             size="sm"
                             className="rounded-full h-9 pl-2 pr-2.5 gap-2 flex items-center"
                             type="button"
                             aria-label="Select variant"
                             onClick={preserveScroll}
-                            as={motion.button}
                             whileTap={{ scale: 0.97 }}
                           >
                             <span className="relative h-6 w-6 rounded-full overflow-hidden border shrink-0">
@@ -998,7 +1034,7 @@ export default function ProductPageClient({
                             </span>
 
                             <ChevronsUpDown className="ml-1 h-4 w-4 opacity-60" />
-                          </Button>
+                          </MotionButton>
                         </DropdownMenuTrigger>
 
                         <DropdownMenuContent
@@ -1071,17 +1107,16 @@ export default function ProductPageClient({
                   ) : null}
 
                   <div className="inline-flex items-center rounded-full border bg-background h-9">
-                    <Button
+                    <MotionButton
                       type="button"
                       variant="ghost"
                       className="px-3 h-9 min-w-[40px]"
                       onClick={decQty}
                       aria-label="Decrease quantity"
-                      as={motion.button}
                       whileTap={{ scale: 0.9 }}
                     >
                       –
-                    </Button>
+                    </MotionButton>
                     <motion.div
                       className="px-3 py-1 text-sm font-medium w-8 text-center select-none tabular-nums"
                       key={inCartLine ? inCartLine.qty || 0 : 0}
@@ -1091,31 +1126,29 @@ export default function ProductPageClient({
                     >
                       {inCartLine ? inCartLine.qty || 0 : 0}
                     </motion.div>
-                    <Button
+                    <MotionButton
                       type="button"
                       variant="ghost"
                       className="px-3 h-9 min-w-[40px]"
                       onClick={incQty}
                       aria-label="Increase quantity"
-                      as={motion.button}
                       whileTap={{ scale: 0.9 }}
                     >
                       +
-                    </Button>
+                    </MotionButton>
                   </div>
 
-                  <Button
+                  <MotionButton
                     className="rounded-full h-9 px-4"
                     onClick={inCartLine ? goCheckout : handleAddToCart}
                     disabled={!inStock || !product}
-                    as={motion.button}
                     whileTap={{ scale: 0.97 }}
                     whileHover={{ scale: 1.02 }}
                     transition={spring}
                   >
                     <ShoppingCart className="mr-2 h-4 w-4" />
                     {inCartLine ? "Go to checkout" : "Add to cart"}
-                  </Button>
+                  </MotionButton>
                 </div>
               </motion.div>
             </div>
@@ -1123,33 +1156,38 @@ export default function ProductPageClient({
         )}
       </AnimatePresence>
 
-      {/* Mobile bottom sticky */}
+      {/* Mobile bottom sticky — shows ONLY after main ATC leaves viewport */}
       <AnimatePresence>
-        {animateUI && (
+        {animateUI && showStickyMobile && (
           <motion.div
             className="fixed inset-x-0 md:hidden z-[35]"
             style={{ bottom: Math.max(0, bottomNavOffset) }}
-            variants={slideUp}
-            initial="hidden"
-            animate="show"
-            exit="exit"
+            initial={{ y: 64, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 64, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 420, damping: 34, mass: 0.6 }}
           >
             <div className="mx-auto max-w-[1200px] px-3 pb-[calc(env(safe-area-inset-bottom)+8px)]">
-              <div className="rounded-full border bg-white/95 dark:bg-neutral-900/95 supports-[backdrop-filter]:backdrop-blur shadow-2xl px-4 py-2 flex items-center justify-between gap-3">
+              <div
+                className="rounded-full border supports-[backdrop-filter]:backdrop-blur shadow-2xl px-4 py-2 flex items-center justify-between gap-3"
+                style={{
+                  background:
+                    "linear-gradient(135deg, rgba(255,255,255,0.96) 0%, rgba(255,255,255,0.92) 100%)",
+                }}
+              >
                 <div className="text-base font-semibold">
                   <AnimatedPrice value={formatPrice(priceNow)} />
                 </div>
-                <Button
-                  className="rounded-full h-10 px-5 text-sm"
+                <MotionButton
+                  className="rounded-full h-10 px-5 text-sm bg-[#fcba17] hover:bg-[#e6ab11] text-black"
                   onClick={inCartLine ? goCheckout : handleAddToCart}
                   disabled={!inStock || !product}
-                  as={motion.button}
                   whileTap={{ scale: 0.97 }}
                   whileHover={{ scale: 1.02 }}
                   transition={spring}
                 >
                   {inCartLine ? "Go to checkout" : "Add to cart"}
-                </Button>
+                </MotionButton>
               </div>
             </div>
           </motion.div>
@@ -1163,24 +1201,17 @@ export default function ProductPageClient({
           variants={fadeUp}
         >
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => router.back()}
-                className="h-8 px-2"
-                as={motion.button}
-                whileTap={{ scale: 0.95 }}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <div className="text-sm text-muted-foreground">
-                {product?.category?.name || "Category"}
-              </div>
-            </div>
+            <MotionButton
+              variant="ghost"
+              size="sm"
+              onClick={() => router.back()}
+              className="h-8 px-2"
+              whileTap={{ scale: 0.95 }}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </MotionButton>
             <div className="text-sm text-muted-foreground">
-              SKU:{" "}
-              <span className="font-medium">{product?.modelNumber || "-"}</span>
+              SKU: <span className="font-medium">{product?.modelNumber || "-"}</span>
             </div>
           </div>
         </motion.div>
@@ -1244,7 +1275,7 @@ export default function ProductPageClient({
                             <div className="w-full h-full bg-muted" />
                           )}
                           <div className="absolute top-3 right-3">
-                            <Button
+                            <MotionButton
                               size="sm"
                               variant="secondary"
                               type="button"
@@ -1253,11 +1284,10 @@ export default function ProductPageClient({
                                 setLightboxIndex(idx);
                                 setOpenLightbox(true);
                               }}
-                              as={motion.button}
                               whileTap={{ scale: 0.95 }}
                             >
                               Zoom
-                            </Button>
+                            </MotionButton>
                           </div>
                           {inCartLine && idx === activeImg && (
                             <Badge className="absolute top-3 left-3 bg-yellow-50 text-yellow-900">
@@ -1466,17 +1496,16 @@ export default function ProductPageClient({
                 )}
 
                 <div className="inline-flex items-center rounded-md border bg-background shrink-0">
-                  <Button
+                  <MotionButton
                     type="button"
                     variant="ghost"
                     className="px-3 min-w-[44px]"
                     onClick={decQty}
                     aria-label="Decrease quantity"
-                    as={motion.button}
                     whileTap={{ scale: 0.9 }}
                   >
                     –
-                  </Button>
+                  </MotionButton>
                   <motion.div
                     className="px-3 py-2 text-sm font-medium select-none tabular-nums w-[36px] text-center"
                     key={inCartLine ? inCartLine.qty || 0 : 0}
@@ -1486,32 +1515,31 @@ export default function ProductPageClient({
                   >
                     {inCartLine ? inCartLine.qty || 0 : 0}
                   </motion.div>
-                  <Button
+                  <MotionButton
                     type="button"
                     variant="ghost"
                     className="px-3 min-w-[44px]"
                     onClick={incQty}
                     aria-label="Increase quantity"
-                    as={motion.button}
                     whileTap={{ scale: 0.9 }}
                   >
                     +
-                  </Button>
+                  </MotionButton>
                 </div>
               </div>
 
-              <Button
-                className="rounded-full w-full"
+              <MotionButton
+                ref={atcRef} /* <-- observed for mobile sticky toggle */
+                className="rounded-full w-full bg-[#fcba17] hover:bg-[#e6ab11] text-black"
                 onClick={inCartLine ? goCheckout : handleAddToCart}
                 disabled={!inStock || !product}
-                as={motion.button}
                 whileTap={{ scale: 0.98 }}
                 whileHover={{ scale: 1.01 }}
                 transition={spring}
               >
                 <ShoppingCart className="mr-2 h-4 w-4" />{" "}
                 {inCartLine ? "Go to checkout" : "Add to cart"}
-              </Button>
+              </MotionButton>
             </motion.div>
 
             {/* DESKTOP white-space section (stacked) */}
