@@ -817,7 +817,7 @@ export default function CategoryPageClient({ params }) {
                 type="button"
               >
                 <Funnel className="h-4 w-4 ms-2" />
-                Filters
+                Filters 
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="w-[88vw] p-0">
