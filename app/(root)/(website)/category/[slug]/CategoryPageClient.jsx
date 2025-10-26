@@ -49,38 +49,15 @@ import TitleCard from "@/components/application/TitleCard";
 import ProductCard from "@/components/application/website/ProductCard";
 import { useCategories } from "@/components/providers/CategoriesProvider";
 
-/* ---------------- helpers ---------------- */
+/* -------- helpers -------- */
 const ACCENT = "#fcba17";
 const toTitle = (s = "") =>
-  s
-    .replace(/[-_]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/\b\w/g, (m) => m.toUpperCase());
-const priceOf = (p) =>
-  Number.isFinite(p?.specialPrice)
-    ? Number(p.specialPrice)
-    : Number(p?.mrp ?? 0);
-const fmtRs = (n) =>
-  Number.isFinite(n) ? `Rs. ${n.toLocaleString("en-IN")}` : "";
-const isDefaultPrice = (range, min, max) =>
-  Number(range?.[0]) === Number(min) && Number(range?.[1]) === Number(max);
+  s.replace(/[-_]/g, " ").replace(/\s+/g, " ").trim().replace(/\b\w/g, (m) => m.toUpperCase());
+const priceOf = (p) => (Number.isFinite(p?.specialPrice) ? Number(p.specialPrice) : Number(p?.mrp ?? 0));
+const fmtRs = (n) => (Number.isFinite(n) ? `Rs. ${n.toLocaleString("en-IN")}` : "");
+const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
+const arraysEqual = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 
-/* animations */
-const fadeUp = {
-  hidden: { opacity: 0, y: 8 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.24 } },
-};
-const listIn = {
-  hidden: { opacity: 0, y: 6 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.18 } },
-};
-const chipIn = {
-  hidden: { opacity: 0, y: 4 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.16 } },
-};
-
-/* sorting */
 const SORTS = {
   relevance: { label: "Relevance" },
   price_asc: { label: "Price: Low to High" },
@@ -88,7 +65,6 @@ const SORTS = {
   newest: { label: "Newest" },
 };
 
-/* debounce */
 function useDebounced(value, delay = 250) {
   const [v, setV] = useState(value);
   useEffect(() => {
@@ -98,14 +74,20 @@ function useDebounced(value, delay = 250) {
   return v;
 }
 
-/* variant hero */
 const heroOfVariant = (v) =>
-  v?.heroImage?.path ||
-  v?.productGallery?.[0]?.path ||
-  v?.swatchImage?.path ||
-  "";
+  v?.heroImage?.path || v?.productGallery?.[0]?.path || v?.swatchImage?.path || "";
 
-/* ---------------- Filter Panel (shared for desktop + drawer) ---------------- */
+/* stable QS builder (keys sorted) */
+function toSortedQS(obj) {
+  const sp = new URLSearchParams();
+  Object.keys(obj)
+    .filter((k) => obj[k] !== undefined && obj[k] !== null && obj[k] !== "")
+    .sort()
+    .forEach((k) => sp.set(k, obj[k]));
+  return sp.toString();
+}
+
+/* ---------------- Filter Panel (desktop + drawer) ---------------- */
 function FilterPanel({
   minPrice,
   maxPrice,
@@ -126,15 +108,14 @@ function FilterPanel({
 }) {
   return (
     <>
-      <Accordion type="multiple" defaultValue={["price", "warranty"]}>
+      <Accordion type="multiple" defaultValue={["price", "warranty", "variant"]}>
         {/* Price */}
         <AccordionItem value="price" className="border-b-0">
           <AccordionTrigger className="py-2 text-base">Price</AccordionTrigger>
           <AccordionContent className="pt-2">
             <div className="flex items-center justify-between">
               <Badge variant="secondary">
-                {fmtRs(Math.max(minPrice, priceRange[0]))} –{" "}
-                {fmtRs(Math.min(maxPrice, priceRange[1]))}
+                {fmtRs(Math.max(minPrice, priceRange[0]))} – {fmtRs(Math.min(maxPrice, priceRange[1]))}
               </Badge>
             </div>
             <Slider
@@ -142,7 +123,9 @@ function FilterPanel({
               max={maxPrice}
               step={100}
               value={priceRange}
-              onValueChange={setPriceRange}
+              onValueChange={(v) =>
+                setPriceRange([clamp(v[0], minPrice, maxPrice), clamp(v[1], minPrice, maxPrice)])
+              }
               className="mt-3"
             />
             <div className="mt-3 grid grid-cols-2 gap-2">
@@ -152,9 +135,10 @@ function FilterPanel({
                 min={minPrice}
                 max={priceRange[1]}
                 value={priceRange[0]}
-                onChange={(e) =>
-                  setPriceRange([Number(e.target.value || 0), priceRange[1]])
-                }
+                onChange={(e) => {
+                  const n = Number(e.target.value || 0);
+                  setPriceRange(([_, hi]) => [clamp(n, minPrice, hi), hi]);
+                }}
               />
               <input
                 className="h-9 rounded-md border bg-background px-3 text-sm outline-none"
@@ -162,9 +146,10 @@ function FilterPanel({
                 min={priceRange[0]}
                 max={maxPrice}
                 value={priceRange[1]}
-                onChange={(e) =>
-                  setPriceRange([priceRange[0], Number(e.target.value || 0)])
-                }
+                onChange={(e) => {
+                  const n = Number(e.target.value || 0);
+                  setPriceRange(([lo, _]) => [lo, clamp(n, lo, maxPrice)]);
+                }}
               />
             </div>
           </AccordionContent>
@@ -172,51 +157,33 @@ function FilterPanel({
 
         <Separator className="my-2" />
 
-        {/* Warranty & stock */}
+        {/* Warranty & Stock */}
         <AccordionItem value="warranty" className="border-b-0">
-          <AccordionTrigger className="py-2 text-base">
-            Warranty & stock
-          </AccordionTrigger>
+          <AccordionTrigger className="py-2 text-base">Warranty & stock</AccordionTrigger>
           <AccordionContent className="pt-2">
             <div className="mb-3">
               <div className="text-sm mb-2">Warranty</div>
               <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant={warranty === 6 ? "default" : "outline"}
-                  onClick={() => setWarranty(warranty === 6 ? 0 : 6)}
-                >
+                <Button size="sm" variant={warranty === 6 ? "default" : "outline"} onClick={() => setWarranty(warranty === 6 ? 0 : 6)}>
                   ≥ 6m
                 </Button>
-                <Button
-                  size="sm"
-                  variant={warranty === 12 ? "default" : "outline"}
-                  onClick={() => setWarranty(warranty === 12 ? 0 : 12)}
-                >
+                <Button size="sm" variant={warranty === 12 ? "default" : "outline"} onClick={() => setWarranty(warranty === 12 ? 0 : 12)}>
                   ≥ 12m
                 </Button>
               </div>
             </div>
             <div className="flex items-center justify-between">
-              <Label htmlFor="instock-sb" className="text-sm">
-                In stock only
-              </Label>
-              <Switch
-                id="instock-sb"
-                checked={inStockOnly}
-                onCheckedChange={setInStockOnly}
-              />
+              <Label htmlFor="instock-sb" className="text-sm">In stock only</Label>
+              <Switch id="instock-sb" checked={inStockOnly} onCheckedChange={setInStockOnly} />
             </div>
           </AccordionContent>
         </AccordionItem>
 
         <Separator className="my-2" />
 
-        {/* Variants */}
+        {/* Variants + Colors */}
         <AccordionItem value="variant" className="border-b-0">
-          <AccordionTrigger className="py-2 text-base">
-            Variant options
-          </AccordionTrigger>
+          <AccordionTrigger className="py-2 text-base">Variant options</AccordionTrigger>
           <AccordionContent className="pt-3 ps-2">
             <TooltipProvider delayDuration={80}>
               <div className="flex flex-wrap gap-3">
@@ -229,27 +196,17 @@ function FilterPanel({
                           type="button"
                           onClick={() =>
                             setSelVariant((curr) =>
-                              curr.includes(v.label)
-                                ? curr.filter((x) => x !== v.label)
-                                : [...curr, v.label]
+                              curr.includes(v.label) ? curr.filter((x) => x !== v.label) : [...curr, v.label]
                             )
                           }
                           className={`relative h-10 w-10 rounded-full border overflow-hidden transition ring-offset-2 ${
-                            active
-                              ? "ring-2 ring-yellow-400"
-                              : "hover:opacity-90"
+                            active ? "ring-2 ring-yellow-400" : "hover:opacity-90"
                           }`}
                           title={v.label}
                         >
                           {v.image ? (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={v.image}
-                              alt={v.label}
-                              className="h-full w-full object-cover"
-                              loading="lazy"
-                              draggable={false}
-                            />
+                            <img src={v.image} alt={v.label} className="h-full w-full object-cover" loading="lazy" draggable={false} />
                           ) : (
                             <div className="h-full w-full grid place-items-center text-[10px]">
                               {v.label.slice(0, 2).toUpperCase()}
@@ -277,9 +234,7 @@ function FilterPanel({
                         variant={active ? "default" : "outline"}
                         onClick={() =>
                           setSelColor((curr) =>
-                            curr.includes(c.label)
-                              ? curr.filter((x) => x !== c.label)
-                              : [...curr, c.label]
+                            curr.includes(c.label) ? curr.filter((x) => x !== c.label) : [...curr, c.label]
                           )
                         }
                       >
@@ -297,20 +252,14 @@ function FilterPanel({
       {/* Active chips + Reset */}
       <AnimatePresence>
         {chips.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            className="mt-5"
-          >
+          <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="mt-5">
             <div className="flex flex-wrap gap-2">
               {chips.map((chip) => (
                 <motion.button
                   key={chip.key}
-                  variants={chipIn}
-                  initial="hidden"
-                  animate="show"
-                  exit="hidden"
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 4 }}
                   onClick={chip.clear}
                   className="inline-flex items-center h-8 rounded-full bg-secondary px-3 text-xs hover:bg-secondary/80"
                   title={`Remove ${chip.label}`}
@@ -319,12 +268,7 @@ function FilterPanel({
                 </motion.button>
               ))}
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="mt-3"
-              onClick={onReset}
-            >
+            <Button variant="ghost" size="sm" className="mt-3" onClick={onReset}>
               <RotateCcw className="h-4 w-4 mr-2" /> Reset
             </Button>
           </motion.div>
@@ -334,27 +278,24 @@ function FilterPanel({
   );
 }
 
-/* ------------------------------------------------------------ */
-
+/* ----------------------- Page ----------------------- */
 export default function CategoryPageClient({ params }) {
   const slug = params?.slug;
   const router = useRouter();
   const pathname = usePathname();
   const search = useSearchParams();
 
-  /* category header */
+  const searchStr = search.toString();      // stable string snapshot
+  const lastWrittenQS = useRef(null);       // remember our last router.replace() qs
+
+  /* header */
   const { categories } = useCategories();
-  const category = useMemo(
-    () => categories?.find((c) => c.slug === slug) || null,
-    [categories, slug]
-  );
+  const category = useMemo(() => categories?.find((c) => c.slug === slug) || null, [categories, slug]);
   const title = category?.name || toTitle(slug);
   const bannerSrc = category?.banner?.path || undefined;
-  const subtitle =
-    (category?.description && category.description.trim()) ||
-    `Explore the best ${title} at KICK`;
+  const subtitle = (category?.description && category.description.trim()) || `Explore the best ${title} at KICK`;
 
-  /* ---- base data fetch (with abort) ---- */
+  /* data fetch */
   const [loading, setLoading] = useState(true);
   const [baseProducts, setBaseProducts] = useState([]);
   const abortRef = useRef(null);
@@ -365,129 +306,133 @@ export default function CategoryPageClient({ params }) {
     const ctrl = new AbortController();
     abortRef.current = ctrl;
 
-    fetch(`/api/website/products?category=${encodeURIComponent(slug)}`, {
-      cache: "no-store",
-      signal: ctrl.signal,
-    })
+    fetch(`/api/website/products?category=${encodeURIComponent(slug)}`, { cache: "no-store", signal: ctrl.signal })
       .then((r) => (r.ok ? r.json() : Promise.reject(r)))
       .then((j) => setBaseProducts(Array.isArray(j?.data) ? j.data : []))
       .catch((err) => {
-        if (err?.name !== "AbortError")
-          console.error("Products fetch failed:", err);
+        if (err?.name !== "AbortError") console.error("Products fetch failed:", err);
       })
-      .finally(() => {
-        if (!ctrl.signal.aborted) setLoading(false);
-      });
+      .finally(() => !ctrl.signal.aborted && setLoading(false));
 
     return () => ctrl.abort();
   }, [slug]);
 
-  /* ---- dynamic price bounds ---- */
+  /* price bounds */
   const { minPrice, maxPrice } = useMemo(() => {
     if (!baseProducts.length) return { minPrice: 0, maxPrice: 10000 };
-    let min = Infinity,
-      max = -Infinity;
+    let min = Infinity, max = -Infinity;
     for (const p of baseProducts) {
       const pr = priceOf(p);
-      if (Number.isFinite(pr)) {
-        if (pr < min) min = pr;
-        if (pr > max) max = pr;
-      }
+      if (Number.isFinite(pr)) { if (pr < min) min = pr; if (pr > max) max = pr; }
     }
-    if (!Number.isFinite(min) || !Number.isFinite(max))
-      return { minPrice: 0, maxPrice: 10000 };
+    if (!Number.isFinite(min) || !Number.isFinite(max)) return { minPrice: 0, maxPrice: 10000 };
     const pad = Math.round((max - min) * 0.05);
     return { minPrice: Math.max(0, min - pad), maxPrice: max + pad };
   }, [baseProducts]);
+  const boundsReady = Number.isFinite(minPrice) && Number.isFinite(maxPrice);
 
-  /* ---- URL -> UI state ---- */
-  const qPrice = search.get("price"); // a-b
-  const qWarranty = Number(search.get("warranty")); // 6 | 12
-  const qStock = search.get("stock"); // "in"
-  const qSort = search.get("sort") || "relevance";
-  const qVariant = (search.get("variant") || "").split(",").filter(Boolean);
-  const qColor = (search.get("color") || "").split(",").filter(Boolean);
+  /* read params */
+  const sp = useMemo(() => new URLSearchParams(searchStr), [searchStr]);
+  const qPrice = sp.get("price"); // a-b
+  const qWarranty = Number(sp.get("warranty")); // 6|12
+  const qStock = sp.get("stock"); // "in"
+  const qSort = sp.get("sort") || "relevance";
+  const qVariant = (sp.get("variant") || "").split(",").filter(Boolean);
+  const qColor = (sp.get("color") || "").split(",").filter(Boolean);
 
+  /* UI state */
   const [priceRange, setPriceRange] = useState([minPrice, maxPrice]);
-  const [warranty, setWarranty] = useState(
-    qWarranty === 6 || qWarranty === 12 ? qWarranty : 0
-  );
+  const [warranty, setWarranty] = useState(qWarranty === 6 || qWarranty === 12 ? qWarranty : 0);
   const [inStockOnly, setInStockOnly] = useState(qStock === "in");
   const [sortKey, setSortKey] = useState(qSort);
   const [selVariant, setSelVariant] = useState(qVariant);
   const [selColor, setSelColor] = useState(qColor);
 
-  /* keep state synced if URL/bounds change */
+  /* URL utils (defined BEFORE chips to avoid TDZ) */
+  const clearParam = (key) => {
+    const spNow = new URLSearchParams(searchStr);
+    spNow.delete(key);
+    const qs = spNow.toString();
+    lastWrittenQS.current = qs; // mark as ours
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  };
+  const clearAll = () => {
+    lastWrittenQS.current = ""; // mark as ours
+    router.replace(pathname, { scroll: false });
+  };
+
+  /* apply URL -> UI only when searchStr actually changes AND it's not our own write */
   useEffect(() => {
+    if (!boundsReady) return;
+    if (lastWrittenQS.current === searchStr) return; // ignore our own write
+
+    let nextPrice = [minPrice, maxPrice];
     if (qPrice?.includes("-")) {
       const [a, b] = qPrice.split("-").map(Number);
-      if (Number.isFinite(a) && Number.isFinite(b)) setPriceRange([a, b]);
-      else setPriceRange([minPrice, maxPrice]);
-    } else {
-      setPriceRange([minPrice, maxPrice]);
+      if (Number.isFinite(a) && Number.isFinite(b)) nextPrice = [clamp(a, minPrice, maxPrice), clamp(b, minPrice, maxPrice)];
     }
-    setWarranty(qWarranty === 6 || qWarranty === 12 ? qWarranty : 0);
-    setInStockOnly(qStock === "in");
-    setSortKey(qSort || "relevance");
-    setSelVariant(qVariant);
-    setSelColor(qColor);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [minPrice, maxPrice, qPrice, qWarranty, qStock, qSort, search]);
 
-  /* ---- URL writer (no loops) ---- */
-  const priceDebounced = useDebounced(priceRange, 250);
+    // set only if changed
+    setPriceRange((prev) => (prev[0] !== nextPrice[0] || prev[1] !== nextPrice[1] ? nextPrice : prev));
+    const nextWarranty = (qWarranty === 6 || qWarranty === 12) ? qWarranty : 0;
+    setWarranty((prev) => (prev !== nextWarranty ? nextWarranty : prev));
+    const nextStock = qStock === "in";
+    setInStockOnly((prev) => (prev !== nextStock ? nextStock : prev));
+    const nextSort = qSort || "relevance";
+    setSortKey((prev) => (prev !== nextSort ? nextSort : prev));
+    setSelVariant((prev) => (arraysEqual(prev, qVariant) ? prev : qVariant));
+    setSelColor((prev) => (arraysEqual(prev, qColor) ? prev : qColor));
+  }, [boundsReady, searchStr, qPrice, qWarranty, qStock, qSort, qVariant, qColor, minPrice, maxPrice]);
+
+  /* write UI -> URL only when UI state changes to a new qs */
+  const priceDebounced = useDebounced(priceRange, 220);
   useEffect(() => {
-    const sp = new URLSearchParams(search.toString());
+    if (!boundsReady) return;
 
-    // price
-    if (isDefaultPrice(priceDebounced, minPrice, maxPrice)) sp.delete("price");
-    else sp.set("price", `${priceDebounced[0]}-${priceDebounced[1]}`);
+    const desired = {
+      ...(priceDebounced[0] === minPrice && priceDebounced[1] === maxPrice
+        ? {}
+        : { price: `${clamp(priceDebounced[0], minPrice, maxPrice)}-${clamp(priceDebounced[1], minPrice, maxPrice)}` }),
+      ...(warranty === 6 || warranty === 12 ? { warranty: String(warranty) } : {}),
+      ...(inStockOnly ? { stock: "in" } : {}),
+      ...(sortKey ? { sort: sortKey } : {}),
+      ...(selVariant.length ? { variant: selVariant.join(",") } : {}),
+      ...(selColor.length ? { color: selColor.join(",") } : {}),
+    };
 
-    // warranty
-    if (warranty === 6 || warranty === 12) sp.set("warranty", String(warranty));
-    else sp.delete("warranty");
+    const desiredQS = toSortedQS(desired);
+    const normDesired = toSortedQS(Object.fromEntries(new URLSearchParams(desiredQS)));
+    const normCurrent = toSortedQS(Object.fromEntries(new URLSearchParams(searchStr)));
 
-    // stock
-    if (inStockOnly) sp.set("stock", "in");
-    else sp.delete("stock");
-
-    // sort
-    if (sortKey) sp.set("sort", sortKey);
-    else sp.delete("sort");
-
-    // variant
-    if (selVariant.length) sp.set("variant", selVariant.join(","));
-    else sp.delete("variant");
-
-    // color
-    if (selColor.length) sp.set("color", selColor.join(","));
-    else sp.delete("color");
-
-    const next = `${pathname}?${sp.toString()}`;
-    const curr = `${pathname}?${search.toString()}`;
-    if (next !== curr) router.replace(next, { scroll: false });
+    if (normDesired !== normCurrent) {
+      const nextUrl = desiredQS ? `${pathname}?${desiredQS}` : pathname;
+      lastWrittenQS.current = desiredQS; // mark as ours
+      router.replace(nextUrl, { scroll: false });
+    }
   }, [
+    boundsReady,
     pathname,
     router,
-    search,
+    searchStr,
     minPrice,
     maxPrice,
-    priceDebounced,
+    priceDebounced[0],
+    priceDebounced[1],
     warranty,
     inStockOnly,
     sortKey,
-    selVariant,
-    selColor,
+    selVariant.join(","),
+    selColor.join(","),
   ]);
 
-  /* ---- aggregates for variant filters ---- */
+  /* aggregates for variant filters */
   const { variantAgg, colorAgg } = useMemo(() => {
-    const vMap = new Map(); // key -> {label, image, count}
-    const cMap = new Map(); // color -> count
+    const vMap = new Map();
+    const cMap = new Map();
     for (const p of baseProducts) {
       const variants = Array.isArray(p?.variants) ? p.variants : [];
       for (const v of variants) {
-        const label = v?.variantName || v?.sku || "";
+        const label = (v?.variantName || v?.sku || "").toString().trim();
         if (label) {
           const img = heroOfVariant(v);
           const prev = vMap.get(label) || { label, image: img, count: 0 };
@@ -499,106 +444,48 @@ export default function CategoryPageClient({ params }) {
         if (color) cMap.set(color, (cMap.get(color) || 0) + 1);
       }
     }
-    return {
-      variantAgg: Array.from(vMap.values()),
-      colorAgg: Array.from(cMap.entries()).map(([label, count]) => ({
-        label,
-        count,
-      })),
-    };
+    return { variantAgg: Array.from(vMap.values()), colorAgg: Array.from(cMap, ([label, count]) => ({ label, count })) };
   }, [baseProducts]);
 
-  /* ---- chips from URL ---- */
+  /* chips */
   const chips = useMemo(() => {
     const list = [];
     if (qPrice?.includes("-")) {
       const [a, b] = qPrice.split("-").map(Number);
-      const def =
-        Number(a) === Number(minPrice) && Number(b) === Number(maxPrice);
-      if (!def && Number.isFinite(a) && Number.isFinite(b)) {
-        list.push({
-          key: "price",
-          label: `${fmtRs(a)} – ${fmtRs(b)}`,
-          clear: () => clearParam("price"),
-        });
-      }
+      if (Number.isFinite(a) && Number.isFinite(b)) list.push({ key: "price", label: `${fmtRs(a)} – ${fmtRs(b)}`, clear: () => clearParam("price") });
     }
-    if (qWarranty === 6 || qWarranty === 12) {
-      list.push({
-        key: "warranty",
-        label: `Warranty ≥ ${qWarranty}m`,
-        clear: () => clearParam("warranty"),
-      });
-    }
-    if (qStock === "in") {
-      list.push({
-        key: "stock",
-        label: "In stock",
-        clear: () => clearParam("stock"),
-      });
-    }
-    for (const v of selVariant) {
-      list.push({
-        key: `v:${v}`,
-        label: v,
-        clear: () => setSelVariant((s) => s.filter((x) => x !== v)),
-      });
-    }
-    for (const c of selColor) {
-      list.push({
-        key: `c:${c}`,
-        label: c,
-        clear: () => setSelColor((s) => s.filter((x) => x !== c)),
-      });
-    }
+    if (qWarranty === 6 || qWarranty === 12) list.push({ key: "warranty", label: `Warranty ≥ ${qWarranty}m`, clear: () => clearParam("warranty") });
+    if (qStock === "in") list.push({ key: "stock", label: "In stock", clear: () => clearParam("stock") });
+    for (const v of selVariant) list.push({ key: `v:${v}`, label: v, clear: () => setSelVariant((s) => s.filter((x) => x !== v)) });
+    for (const c of selColor) list.push({ key: `c:${c}`, label: c, clear: () => setSelColor((s) => s.filter((x) => x !== c)) });
     return list;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [qPrice, qWarranty, qStock, selVariant, selColor, minPrice, maxPrice]);
+  }, [qPrice, qWarranty, qStock, selVariant, selColor]);
 
   const isFilterActive = chips.length > 0;
 
-  /* ---- filter + sort ---- */
+  /* filter + sort */
   const items = useMemo(() => {
     let list = baseProducts.slice();
-
     const [low, high] = priceRange;
     list = list.filter((p) => {
       const pr = priceOf(p);
       return Number.isFinite(pr) && pr >= low && pr <= high;
     });
-
-    if (warranty === 6 || warranty === 12) {
-      list = list.filter((p) => Number(p?.warrantyMonths) >= warranty);
-    }
-
-    if (inStockOnly) {
-      list = list.filter((p) => Number(p?.stock) > 0);
-    }
-
+    if (warranty === 6 || warranty === 12) list = list.filter((p) => Number(p?.warrantyMonths) >= warranty);
+    if (inStockOnly) list = list.filter((p) => Number(p?.stock) > 0);
     if (selVariant.length) {
       list = list.filter((p) => {
-        const variants = Array.isArray(p?.variants) ? p.variants : [];
-        const names = new Set(
-          variants
-            .map((v) => (v?.variantName || v?.sku || "").toString().trim())
-            .filter(Boolean)
-        );
+        const names = new Set((p?.variants || []).map((v) => (v?.variantName || v?.sku || "").toString().trim()).filter(Boolean));
         return selVariant.every((v) => names.has(v));
       });
     }
-
     if (selColor.length) {
       list = list.filter((p) => {
-        const variants = Array.isArray(p?.variants) ? p.variants : [];
-        const colors = new Set(
-          variants
-            .map((v) => (v?.color || v?.colour || "").toString().trim())
-            .filter(Boolean)
-        );
+        const colors = new Set((p?.variants || []).map((v) => (v?.color || v?.colour || "").toString().trim()).filter(Boolean));
         return selColor.every((c) => colors.has(c));
       });
     }
-
     switch (sortKey) {
       case "price_asc":
         list.sort((a, b) => priceOf(a) - priceOf(b));
@@ -607,31 +494,16 @@ export default function CategoryPageClient({ params }) {
         list.sort((a, b) => priceOf(b) - priceOf(a));
         break;
       case "newest":
-        list.sort(
-          (a, b) => new Date(b?.createdAt || 0) - new Date(a?.createdAt || 0)
-        );
+        list.sort((a, b) => new Date(b?.createdAt || 0) - new Date(a?.createdAt || 0));
         break;
       default:
-      // relevance
     }
     return list;
-  }, [
-    baseProducts,
-    priceRange,
-    warranty,
-    inStockOnly,
-    selVariant,
-    selColor,
-    sortKey,
-  ]);
+  }, [baseProducts, priceRange, warranty, inStockOnly, selVariant, selColor, sortKey]);
 
-  /* URL utils */
-  const clearParam = (key) => {
-    const sp = new URLSearchParams(search.toString());
-    sp.delete(key);
-    router.replace(`${pathname}?${sp.toString()}`, { scroll: false });
-  };
-  const clearAll = () => router.replace(`${pathname}`, { scroll: false });
+  /* animations */
+  const fadeUp = { hidden: { opacity: 0, y: 8 }, show: { opacity: 1, y: 0, transition: { duration: 0.24 } } };
+  const listIn = { hidden: { opacity: 0, y: 6 }, show: { opacity: 1, y: 0, transition: { duration: 0.18 } } };
 
   /* mobile drawer */
   const [openSheet, setOpenSheet] = useState(false);
@@ -640,8 +512,8 @@ export default function CategoryPageClient({ params }) {
     <main
       className="min-h-screen w-full"
       style={{
-        background:
-          "linear-gradient(140deg, rgba(252,186,23,0.028) 0%, rgba(252,186,23,0.018) 20%, transparent 55%)",
+        /* subtle #fcba17 gradient */
+        background: "linear-gradient(140deg, rgba(252,186,23,0.018) 0%, rgba(252,186,23,0.012) 20%, transparent 60%)",
       }}
     >
       {/* Header */}
@@ -695,13 +567,8 @@ export default function CategoryPageClient({ params }) {
 
             {/* Grid area */}
             <div className="col-span-12 md:col-span-9">
-              {/* top row: sort */}
-              <motion.div
-                variants={fadeUp}
-                initial="hidden"
-                animate="show"
-                className="mb-3 flex items-center gap-2"
-              >
+              {/* toolbar */}
+              <motion.div variants={fadeUp} initial="hidden" animate="show" className="mb-3 flex items-center gap-2">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline">
@@ -711,40 +578,27 @@ export default function CategoryPageClient({ params }) {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start">
                     {Object.entries(SORTS).map(([k, v]) => (
-                      <DropdownMenuItem
-                        key={k}
-                        onClick={() => setSortKey(k)}
-                        className={k === sortKey ? "font-semibold" : ""}
-                      >
+                      <DropdownMenuItem key={k} onClick={() => setSortKey(k)} className={k === sortKey ? "font-semibold" : ""}>
                         {v.label}
                       </DropdownMenuItem>
                     ))}
                   </DropdownMenuContent>
                 </DropdownMenu>
 
-                {isFilterActive && (
+                {chips.length > 0 && (
                   <Button variant="ghost" size="sm" onClick={clearAll}>
                     <RotateCcw className="h-4 w-4 mr-2" /> Reset
                   </Button>
                 )}
               </motion.div>
 
-              {/* chips (mobile) */}
+              {/* mobile chips */}
               <div className="md:hidden mb-4">
                 <AnimatePresence>
-                  {isFilterActive && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -4 }}
-                      className="flex flex-wrap gap-2"
-                    >
+                  {chips.length > 0 && (
+                    <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="flex flex-wrap gap-2">
                       {chips.map((chip) => (
-                        <button
-                          key={chip.key}
-                          onClick={chip.clear}
-                          className="inline-flex items-center h-8 rounded-full bg-secondary px-3 text-xs hover:bg-secondary/80"
-                        >
+                        <button key={chip.key} onClick={chip.clear} className="inline-flex items-center h-8 rounded-full bg-secondary px-3 text-xs hover:bg-secondary/80">
                           {chip.label} <X className="ml-2 h-3.5 w-3.5" />
                         </button>
                       ))}
@@ -770,9 +624,7 @@ export default function CategoryPageClient({ params }) {
                   </div>
                 ) : items.length ? (
                   <motion.div
-                    key={`${slug}|${search.toString()}|${sortKey}|${
-                      items.length
-                    }`}
+                    key={toSortedQS({ qs: searchStr, sortKey, v: selVariant.join(","), c: selColor.join(","), len: String(items.length) })}
                     variants={listIn}
                     initial="hidden"
                     animate="show"
@@ -784,20 +636,10 @@ export default function CategoryPageClient({ params }) {
                     ))}
                   </motion.div>
                 ) : (
-                  <motion.div
-                    key="empty"
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -8 }}
-                    className="text-center py-20"
-                  >
+                  <motion.div key="empty" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="text-center py-20">
                     <Sparkles className="mx-auto h-10 w-10 text-muted-foreground mb-3" />
-                    <h3 className="text-lg font-semibold mb-1">
-                      No products found
-                    </h3>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Try tweaking filters or resetting them.
-                    </p>
+                    <h3 className="text-lg font-semibold mb-1">No products found</h3>
+                    <p className="text-sm text-muted-foreground mb-4">Try tweaking filters or resetting them.</p>
                     <Button variant="outline" onClick={clearAll}>
                       <RotateCcw className="h-4 w-4 mr-2" /> Reset Filters
                     </Button>
@@ -812,12 +654,9 @@ export default function CategoryPageClient({ params }) {
         <div className="md:hidden">
           <Sheet open={openSheet} onOpenChange={setOpenSheet}>
             <SheetTrigger asChild>
-              <Button
-                className="fixed left-[-10px] bottom-[calc(env(safe-area-inset-bottom)+120px)] z-40 shadow-lg"
-                type="button"
-              >
+              <Button className="fixed left-[-10px] bottom-[calc(env(safe-area-inset-bottom)+120px)] z-40 shadow-lg" type="button">
                 <Funnel className="h-4 w-4 ms-2" />
-                Filters 
+                Filters
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="w-[88vw] p-0">
@@ -843,17 +682,15 @@ export default function CategoryPageClient({ params }) {
                   setSelColor={setSelColor}
                   chips={chips}
                   onReset={() => {
-                    clearAll();
-                    // keep drawer open so user sees changes
+                    lastWrittenQS.current = ""; // mark as ours
+                    router.replace(pathname, { scroll: false });
                   }}
                 />
               </div>
 
               <SheetFooter className="p-4 border-t">
                 <SheetClose asChild>
-                  <Button className="w-full" type="button">
-                    Apply
-                  </Button>
+                  <Button className="w-full" type="button">Apply</Button>
                 </SheetClose>
               </SheetFooter>
             </SheetContent>
