@@ -71,8 +71,7 @@ export const PRESS_LOGOS = [
 const TEAM = [
   { name: "Sunit Begwani", role: "Chairman", photo: "", ig: "", li: "" },
   { name: "Kumod Begwani", role: "Founder & CEO", photo: "", ig: "https://www.instagram.com/itsmekumod/", li: "" },
-  { name: "Priyanshu Jain", role: "Technical Team Manager", photo: "", ig: "https://www.instagram.com/jain.priyanshu.74/", li: "" },
-  { name: "Jamling Sherpa", role: "Cheif Editor", photo: "", ig: "", li: "" },
+  { name: "Priyanshu Jain", role: "Co Founder & IT Manager", photo: "", ig: "https://www.instagram.com/jain.priyanshu.74/", li: "" },
 ];
 
 export default function AboutClient() {
@@ -337,7 +336,7 @@ export default function AboutClient() {
             initial="hidden"
             whileInView="show"
             viewport={{ once: true, amount: 0.35 }}
-            className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+            className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
           >
             {TEAM.map((m, idx) => (
               <motion.article

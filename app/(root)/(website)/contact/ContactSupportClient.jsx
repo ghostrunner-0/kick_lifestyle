@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import axios from "axios";
+
 import { motion, useReducedMotion } from "framer-motion";
 import TitleCard from "@/components/application/TitleCard";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -67,13 +69,15 @@ export default function ContactSupportClient() {
 
     setSending(true);
     try {
-      const res = await fetch("/api/website/support/contact", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, phone, message }),
+      const res = await axios.post("/api/website/support/contact", {
+        name,
+        email,
+        phone,
+        message,
       });
-      if (!res.ok) throw new Error("Failed to send your message.");
-
+      if (res.status !== 200 || !res.data.success) {
+        throw new Error("Failed to send your message.");
+      }
       setOk(true);
       setName("");
       setEmail("");

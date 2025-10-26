@@ -1305,9 +1305,11 @@ export default function ProductPageClient({
                 )}
               </motion.div>
 
-              {/* horizontal thumbs */}
+           
+            </div>
+               {/* horizontal thumbs */}
               {Array.isArray(gallery) && gallery.length > 1 && (
-                <div className="p-5">
+                <div className="pt-2">
                   <ScrollArea className="w-full thumbs-scrollarea">
                     <motion.div
                       className="relative thumbs-row flex pt-1 ps-1 gap-2.5 md:gap-3 pb-1 pe-4"
@@ -1366,7 +1368,6 @@ export default function ProductPageClient({
                   </ScrollArea>
                 </div>
               )}
-            </div>
           </section>
 
           {/* RIGHT: SUMMARY + Desktop Right Panel */}
