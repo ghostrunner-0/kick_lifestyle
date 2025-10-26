@@ -10,7 +10,7 @@ import BottomNav from "@/components/application/website/BottomNav";
 import { deriveKey } from "@/components/providers/ProductProvider";
 import AuthHydrator from "@/components/providers/AuthHydrator";
 import { SpeedInsights } from "@vercel/speed-insights/next";
-
+import { Analytics } from "@vercel/analytics/next";
 // If you truly need a different font *just for this subtree*,
 // import it and apply on a wrapper <div>. Do NOT render <html>/<body> here.
 // import { Poppins } from "next/font/google";
@@ -54,6 +54,7 @@ export default async function Layout({ children }) {
     <>
       <ReactQueryProvider>
         <AuthHydrator />
+        <Analytics />
 
         <CategoriesProvider initialCategories={initialCategories}>
           <ProductProvider
