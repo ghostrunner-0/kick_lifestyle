@@ -223,7 +223,7 @@ export const ABOUT_KUMOD = [
 const FOUNDER = {
   name: "Kumod Begwani",
   role: "Founder & CEO, Kick Lifestyle",
-  photo: "/art/founder-kumod.jpg", // update with your real path
+  photo: "/art/kumod.jpeg", // update with your real path
   bio: [
     "Kumod Begwani is a Nepali entrepreneur building premium-yet-accessible tech for the local market. Under his leadership, Kick Lifestyle blends honest engineering with refined design, focusing on the details that shape daily use: real battery life, clear calls, and durable builds.",
     "From launching category-leading earbuds and wearables to standing up reliable after-sales support, Kumod’s approach is straightforward: ship products that feel premium, perform consistently, and respect the customer’s time.",
