@@ -170,8 +170,8 @@ const schema = z.object({
   fullName: z.string().trim().min(1, "Required"),
   phone: z.string().regex(/^[\d]{10}$/, "Enter a valid 10-digit number"),
   city: z.string().min(1, "Choose a city"),
-  zone: z.string().min(1, "Choose a zone"),
-  area: z.string().min(1, "Choose an area"),
+  zone: z.string().min(1, "Choose an area"),
+  area: z.string().min(1, "Choose an address"),
   landmark: z.string().trim().min(1, "Required"),
   paymentMethod: z.enum(["cod", "khalti", "qr"]),
   couponCode: z.string().optional(),
@@ -1067,7 +1067,7 @@ export default function CheckoutClient({ initialUser = null }) {
                       name="zone"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Zone</FormLabel>
+                          <FormLabel>Area</FormLabel>
                           <FormControl>
                             <ComboBox
                               value={field.value}
@@ -1075,7 +1075,7 @@ export default function CheckoutClient({ initialUser = null }) {
                               onChange={field.onChange}
                               options={zoneOptions}
                               placeholder={
-                                loadingLoc.zone ? "Loading..." : "Select zone"
+                                loadingLoc.zone ? "Loading..." : "Select Area"
                               }
                               emptyText="No zones"
                               disabled={
@@ -1093,7 +1093,7 @@ export default function CheckoutClient({ initialUser = null }) {
                       name="area"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Area</FormLabel>
+                          <FormLabel>Address</FormLabel>
                           <FormControl>
                             <ComboBox
                               value={field.value}
@@ -1101,7 +1101,7 @@ export default function CheckoutClient({ initialUser = null }) {
                               onChange={field.onChange}
                               options={areaOptions}
                               placeholder={
-                                loadingLoc.area ? "Loading..." : "Select area"
+                                loadingLoc.area ? "Loading..." : "Select Address"
                               }
                               emptyText="No areas"
                               disabled={
@@ -1134,7 +1134,9 @@ export default function CheckoutClient({ initialUser = null }) {
                     <Separator />
 
                     <div className="space-y-3">
-                      <h3 className="text-base font-semibold">Payment</h3>
+                      <h3 className="text-base font-semibold">
+                        Payment Method
+                      </h3>
                       <FormField
                         control={form.control}
                         name="paymentMethod"
@@ -1151,7 +1153,7 @@ export default function CheckoutClient({ initialUser = null }) {
                                   className={cn(
                                     "flex cursor-pointer items-center gap-3 rounded-xl border p-3",
                                     field.value === "cod"
-                                      ? "border-slate-900"
+                                      ? "border-[#fcba17] border-2"
                                       : "border-slate-200"
                                   )}
                                 >
@@ -1170,7 +1172,7 @@ export default function CheckoutClient({ initialUser = null }) {
                                   className={cn(
                                     "flex cursor-pointer items-center gap-3 rounded-xl border p-3",
                                     field.value === "khalti"
-                                      ? "border-slate-900"
+                                      ? "border-[#fcba17] border-2"
                                       : "border-slate-200"
                                   )}
                                 >
@@ -1189,7 +1191,7 @@ export default function CheckoutClient({ initialUser = null }) {
                                   className={cn(
                                     "flex cursor-pointer items-center gap-3 rounded-xl border p-3",
                                     field.value === "qr"
-                                      ? "border-slate-900"
+                                      ? "border-[#fcba17] border-2"
                                       : "border-slate-200"
                                   )}
                                 >

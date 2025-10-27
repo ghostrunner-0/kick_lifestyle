@@ -1,92 +1,60 @@
-"use client";
+// Server component wrapper (no "use client")
+import FAQSupport from "./faq";
 
-import { useMemo } from "react";
-import { useSearchParams } from "next/navigation";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import {
-  Accordion,
-  AccordionItem,
-  AccordionTrigger,
-  AccordionContent,
-} from "@/components/ui/accordion";
-import { motion, useReducedMotion } from "framer-motion";
+export const metadata = {
+  title: "Help & FAQ | Kick Lifestyle",
+  description:
+    "Find answers to common questions about orders, delivery, and warranty at Kick Lifestyle. Learn how to track your order, request warranty service, and more.",
+  keywords: [
+    "Kick Lifestyle",
+    "FAQ",
+    "Support",
+    "Warranty",
+    "Delivery",
+    "Orders",
+    "Help Center",
+    "Customer Service",
+  ],
+  openGraph: {
+    title: "Help & FAQ | Kick Lifestyle",
+    description:
+      "Quick answers to your questions about Kick Lifestyle products, orders, and support.",
+    url: "https://kick.com.np/support/faq",
+    siteName: "Kick Lifestyle",
+    locale: "en_NP",
+    type: "website",
+    images: [
+      {
+        url: "https://kick.com.np/og/faq-cover.jpg", // replace if you have a real OG image
+        width: 1200,
+        height: 630,
+        alt: "Kick Lifestyle Help & FAQ",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Help & FAQ | Kick Lifestyle",
+    description:
+      "Get help with your Kick Lifestyle orders, delivery, and warranty issues.",
+    images: ["https://kick.com.np/og/faq-cover.jpg"], // replace with real path
+  },
+  alternates: {
+    canonical: "https://kick.com.np/support/faq",
+  },
+};
 
-const FAQ = [
-  { q: "How do I track my order?", a: "Use your Order ID (e.g. AXC-2042) and phone number on the Orders page. We also send updates via SMS/email.", tag: "orders" },
-  { q: "Delivery time inside/outside valley?", a: "Inside valley: 1–2 business days. Outside valley: 2–4 business days.", tag: "delivery" },
-  { q: "What is covered under warranty?", a: "Manufacturing defects for 12 months. Physical and liquid damage are not covered.", tag: "warranty" },
-  { q: "How to start a warranty/repair request?", a: "Go to Warranty page and follow the claim steps. Keep your order ID and proof ready.", tag: "warranty" },
-  { q: "Can I change my delivery address after placing an order?", a: "If the order is not shipped yet, contact support and we’ll update it.", tag: "orders" },
-];
-
-export default function FAQSupport() {
-  const sp = useSearchParams();
-  const q = (sp.get("q") || "").toLowerCase().trim();
-  const prefersReduced = useReducedMotion();
-
-  const list = useMemo(() => {
-    if (!q) return FAQ;
-    return FAQ.filter(
-      (f) =>
-        f.q.toLowerCase().includes(q) ||
-        f.a.toLowerCase().includes(q) ||
-        f.tag.toLowerCase().includes(q)
-    );
-  }, [q]);
-
-  const fadeUp = {
-    hidden: { opacity: 0, y: prefersReduced ? 0 : 12 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.35 } },
-  };
-
+export default function Page() {
   return (
-    <motion.div
-      initial="hidden"
-      animate="visible"
-      className="mx-auto max-w-4xl px-4 py-8 space-y-6"
-    >
-      <motion.header variants={fadeUp} className="space-y-2">
-        <h1 className="text-xl md:text-2xl font-semibold">FAQ</h1>
-        <p className="text-muted-foreground">
-          Click a question to view the answer. Use search to narrow down.
-        </p>
-        <Input
-          defaultValue={q}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              const val = e.currentTarget.value.trim();
-              const url = `/support/faq${val ? `?q=${encodeURIComponent(val)}` : ""}`;
-              window.history.replaceState({}, "", url);
-            }
-          }}
-          placeholder="Search FAQs…"
-          className="h-11"
-        />
-      </motion.header>
+    <div className="relative">
+      {/* subtle gradient background */}
+      <div className="pointer-events-none absolute inset-0 -z-10">
+        <div className="absolute inset-x-0 top-0 h-[120px]  " />
+      </div>
 
-      <motion.div variants={fadeUp}>
-        <Card>
-          <CardHeader className="font-medium">Top questions</CardHeader>
-          <CardContent>
-            <Accordion type="single" collapsible>
-              {list.map((f, i) => (
-                <AccordionItem key={i} value={`item-${i}`}>
-                  <AccordionTrigger className="text-left">{f.q}</AccordionTrigger>
-                  <AccordionContent className="text-sm text-muted-foreground">
-                    {f.a}
-                  </AccordionContent>
-                </AccordionItem>
-              ))}
-              {list.length === 0 && (
-                <div className="text-sm text-muted-foreground py-4">
-                  No results. Try a different keyword.
-                </div>
-              )}
-            </Accordion>
-          </CardContent>
-        </Card>
-      </motion.div>
-    </motion.div>
+      <div className="mx-auto max-w-5xl px-4 py-6">
+        <FAQSupport />
+      </div>
+    </div>
   );
 }

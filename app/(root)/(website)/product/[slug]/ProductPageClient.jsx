@@ -105,22 +105,38 @@ const percentOff = (mrp, sp) => {
     ? Math.round(((m - s) / m) * 100)
     : null;
 };
-const inferInStock = (p) => {
-  if (typeof p?.inStock === "boolean") return p.inStock;
+
+/* ---------- STOCK: fixed logic (variant-aware) ---------- */
+const variantInStock = (v) => {
+  if (!v || typeof v !== "object") return false;
+  if (typeof v.inStock === "boolean") return v.inStock;
+  if (Number.isFinite(v?.stock)) return v.stock > 0;
+  if (Number.isFinite(v?.inventory)) return v.inventory > 0;
+  if (Number.isFinite(v?.quantity)) return v.quantity > 0;
+  return true;
+};
+const productInStock = (p) => {
+  if (!p || typeof p !== "object") return false;
+  if (typeof p.inStock === "boolean") return p.inStock;
   if (Number.isFinite(p?.stock)) return p.stock > 0;
   if (Number.isFinite(p?.inventory)) return p.inventory > 0;
   if (Number.isFinite(p?.quantity)) return p.quantity > 0;
-  if (Array.isArray(p?.variants)) {
-    return p.variants.some((v) =>
-      typeof v?.inStock === "boolean"
-        ? v.inStock
-        : Number.isFinite(v?.stock)
-        ? v.stock > 0
-        : false
-    );
-  }
+  if (Array.isArray(p?.variants)) return p.variants.some(variantInStock);
   return true;
 };
+
+/* Available stock for current selection (Infinity = uncapped) */
+const getAvailableStock = (product, activeVariant) => {
+  if (activeVariant && Number.isFinite(activeVariant?.stock)) {
+    return Math.max(0, activeVariant.stock);
+  }
+  if (Number.isFinite(product?.stock)) {
+    return Math.max(0, product.stock);
+  }
+  return Infinity;
+};
+/* ------------------------------------------------------- */
+
 const getVariantHero = (v, fallback) =>
   v?.heroImage?.path ||
   v?.productGallery?.[0]?.path ||
@@ -711,7 +727,15 @@ export default function ProductPageClient({
   const off = percentOff(effMrp, effSp);
   const priceNow = off ? effSp : effMrp;
   const priceWas = off ? effMrp : null;
-  const inStock = inferInStock(activeVariant || product);
+
+  /* stock flags */
+  const inStock =
+    activeVariant !== null
+      ? variantInStock(activeVariant)
+      : productInStock(product);
+
+  /* available units for current selection */
+  const availableStock = getAvailableStock(product, activeVariant);
 
   const itemsMap = useSelector(selectItemsMap) || {};
   const lineKey = `${product?._id || ""}|${activeVariant?._id || ""}`;
@@ -732,6 +756,21 @@ export default function ProductPageClient({
   const handleAddToCart = () => {
     if (!product) return;
     const primaryImage = heroSrc || gallery?.[activeImg]?.path || undefined;
+
+    // Respect availableStock when adding first time via main ATC
+    const currentQty = inCartLine ? inCartLine.qty || 0 : 0;
+    if (Number.isFinite(availableStock) && currentQty + STEP > availableStock) {
+      showToast(
+        "warning",
+        availableStock === 0
+          ? "This selection is currently out of stock."
+          : `You can add up to ${availableStock} unit${
+              availableStock > 1 ? "s" : ""
+            } for this selection.`
+      );
+      return;
+    }
+
     dispatch(
       addItem({
         productId: product?._id,
@@ -861,6 +900,7 @@ export default function ProductPageClient({
     </div>
   );
 
+  /* ==== STOCK-CAPPED +/- handlers (shared) ==== */
   const decQty = () => {
     if (!inCartLine) return;
     const next = Math.max(0, (inCartLine.qty || STEP) - STEP);
@@ -880,7 +920,23 @@ export default function ProductPageClient({
         })
       );
   };
+
   const incQty = () => {
+    const current = inCartLine ? inCartLine.qty || 0 : 0;
+    const next = current + STEP;
+
+    if (Number.isFinite(availableStock) && next > availableStock) {
+      showToast(
+        "warning",
+        availableStock === 0
+          ? "This selection is currently out of stock."
+          : `You can add up to ${availableStock} unit${
+              availableStock > 1 ? "s" : ""
+            } for this selection.`
+      );
+      return;
+    }
+
     if (!inCartLine)
       return dispatch(
         addItem({
@@ -894,11 +950,12 @@ export default function ProductPageClient({
           variant: activeVariant ? { id: activeVariant._id } : null,
         })
       );
+
     dispatch(
       setQty({
         productId: product?._id,
         variant: activeVariant ? { id: activeVariant._id } : null,
-        qty: (inCartLine.qty || 0) + STEP,
+        qty: next,
       })
     );
   };
@@ -916,6 +973,12 @@ export default function ProductPageClient({
   /* shared layoutIds for animated rings */
   const THUMB_RING_ID = "thumb-ring";
   const VARIANT_RING_ID = "variant-ring";
+
+  const currentQty = inCartLine ? inCartLine.qty || 0 : 0;
+  const minusDisabled = !inCartLine || currentQty <= 0;
+  const plusDisabled =
+    Number.isFinite(availableStock) &&
+    (inCartLine ? currentQty >= availableStock : availableStock === 0);
 
   return (
     <motion.main
@@ -1106,6 +1169,7 @@ export default function ProductPageClient({
                     </div>
                   ) : null}
 
+                  {/* STICKY COUNTER — stock-capped */}
                   <div className="inline-flex items-center rounded-full border bg-background h-9">
                     <MotionButton
                       type="button"
@@ -1113,18 +1177,19 @@ export default function ProductPageClient({
                       className="px-3 h-9 min-w-[40px]"
                       onClick={decQty}
                       aria-label="Decrease quantity"
+                      disabled={minusDisabled}
                       whileTap={{ scale: 0.9 }}
                     >
                       –
                     </MotionButton>
                     <motion.div
                       className="px-3 py-1 text-sm font-medium w-8 text-center select-none tabular-nums"
-                      key={inCartLine ? inCartLine.qty || 0 : 0}
+                      key={currentQty}
                       initial={{ opacity: 0, y: 6 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.18 }}
                     >
-                      {inCartLine ? inCartLine.qty || 0 : 0}
+                      {currentQty}
                     </motion.div>
                     <MotionButton
                       type="button"
@@ -1132,6 +1197,7 @@ export default function ProductPageClient({
                       className="px-3 h-9 min-w-[40px]"
                       onClick={incQty}
                       aria-label="Increase quantity"
+                      disabled={plusDisabled}
                       whileTap={{ scale: 0.9 }}
                     >
                       +
@@ -1165,7 +1231,12 @@ export default function ProductPageClient({
             initial={{ y: 64, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 64, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 420, damping: 34, mass: 0.6 }}
+            transition={{
+              type: "spring",
+              stiffness: 420,
+              damping: 34,
+              mass: 0.6,
+            }}
           >
             <div className="mx-auto max-w-[1200px] px-3 pb-[calc(env(safe-area-inset-bottom)+8px)]">
               <div
@@ -1211,7 +1282,8 @@ export default function ProductPageClient({
               <ChevronLeft className="h-4 w-4" />
             </MotionButton>
             <div className="text-sm text-muted-foreground">
-              SKU: <span className="font-medium">{product?.modelNumber || "-"}</span>
+              SKU:{" "}
+              <span className="font-medium">{product?.modelNumber || "-"}</span>
             </div>
           </div>
         </motion.div>
@@ -1304,70 +1376,68 @@ export default function ProductPageClient({
                   </div>
                 )}
               </motion.div>
-
-           
             </div>
-               {/* horizontal thumbs */}
-              {Array.isArray(gallery) && gallery.length > 1 && (
-                <div className="pt-2">
-                  <ScrollArea className="w-full thumbs-scrollarea">
-                    <motion.div
-                      className="relative thumbs-row flex pt-1 ps-1 gap-2.5 md:gap-3 pb-1 pe-4"
-                      variants={fadeIn}
-                    >
-                      <AnimatePresence initial={false}>
-                        <motion.span
-                          key={`thumb-ring-${activeImg}`}
-                          layoutId={THUMB_RING_ID}
-                          className="absolute rounded-md pointer-events-none"
-                          style={{ top: 0, left: 0, width: 0, height: 0 }}
-                          transition={spring}
-                        />
-                      </AnimatePresence>
+            {/* horizontal thumbs */}
+            {Array.isArray(gallery) && gallery.length > 1 && (
+              <div className="pt-2">
+                <ScrollArea className="w-full thumbs-scrollarea">
+                  <motion.div
+                    className="relative thumbs-row flex pt-1 ps-1 gap-2.5 md:gap-3 pb-1 pe-4"
+                    variants={fadeIn}
+                  >
+                    <AnimatePresence initial={false}>
+                      <motion.span
+                        key={`thumb-ring-${activeImg}`}
+                        layoutId={THUMB_RING_ID}
+                        className="absolute rounded-md pointer-events-none"
+                        style={{ top: 0, left: 0, width: 0, height: 0 }}
+                        transition={spring}
+                      />
+                    </AnimatePresence>
 
-                      {gallery.map((g, i) => (
-                        <motion.button
-                          key={g?._id || g?.path || i}
-                          type="button"
-                          onClick={() => {
-                            mainSwiperRef.current?.slideTo(i);
-                            setActiveImg(i);
-                          }}
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.98 }}
-                          className={`relative w-14 h-14 md:w-16 md:h-16 rounded-md border overflow-hidden transition ${
-                            i === activeImg
-                              ? "ring-2 ring-yellow-300 ring-offset-1"
-                              : "hover:opacity-90"
-                          }`}
-                          aria-label={`View image ${i + 1}`}
-                        >
-                          {i === activeImg && (
-                            <motion.span
-                              layoutId={THUMB_RING_ID}
-                              className="absolute inset-0 rounded-md ring-2 ring-yellow-300 ring-offset-1"
-                              transition={spring}
-                            />
-                          )}
-                          {g?.path ? (
-                            <Image
-                              src={g.path}
-                              alt={g?.alt || `thumb-${i}`}
-                              fill
-                              sizes="64px"
-                              className="object-cover select-none pointer-events-none"
-                              draggable={false}
-                            />
-                          ) : (
-                            <div className="w-full h-full bg-muted" />
-                          )}
-                        </motion.button>
-                      ))}
-                    </motion.div>
-                    <ScrollBar orientation="horizontal" />
-                  </ScrollArea>
-                </div>
-              )}
+                    {gallery.map((g, i) => (
+                      <motion.button
+                        key={g?._id || g?.path || i}
+                        type="button"
+                        onClick={() => {
+                          mainSwiperRef.current?.slideTo(i);
+                          setActiveImg(i);
+                        }}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.98 }}
+                        className={`relative w-14 h-14 md:w-16 md:h-16 rounded-md border overflow-hidden transition ${
+                          i === activeImg
+                            ? "ring-2 ring-yellow-300 ring-offset-1"
+                            : "hover:opacity-90"
+                        }`}
+                        aria-label={`View image ${i + 1}`}
+                      >
+                        {i === activeImg && (
+                          <motion.span
+                            layoutId={THUMB_RING_ID}
+                            className="absolute inset-0 rounded-md ring-2 ring-yellow-300 ring-offset-1"
+                            transition={spring}
+                          />
+                        )}
+                        {g?.path ? (
+                          <Image
+                            src={g.path}
+                            alt={g?.alt || `thumb-${i}`}
+                            fill
+                            sizes="64px"
+                            className="object-cover select-none pointer-events-none"
+                            draggable={false}
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-muted" />
+                        )}
+                      </motion.button>
+                    ))}
+                  </motion.div>
+                  <ScrollBar orientation="horizontal" />
+                </ScrollArea>
+              </div>
+            )}
           </section>
 
           {/* RIGHT: SUMMARY + Desktop Right Panel */}
@@ -1448,7 +1518,7 @@ export default function ProductPageClient({
                 }`}
               >
                 {variants.length > 0 && (
-                  <div className="flex items-center gap-2 flex-1 flex-wrap">
+                  <div className="flex items-center gap-2 flex-1  flex-wrap">
                     <AnimatePresence initial={false}>
                       {variants.map((v, i) => {
                         const img = getVariantHero(v, heroSrc);
@@ -1496,6 +1566,7 @@ export default function ProductPageClient({
                   </div>
                 )}
 
+                {/* MAIN COUNTER — stock-capped */}
                 <div className="inline-flex items-center rounded-md border bg-background shrink-0">
                   <MotionButton
                     type="button"
@@ -1503,18 +1574,19 @@ export default function ProductPageClient({
                     className="px-3 min-w-[44px]"
                     onClick={decQty}
                     aria-label="Decrease quantity"
+                    disabled={minusDisabled}
                     whileTap={{ scale: 0.9 }}
                   >
                     –
                   </MotionButton>
                   <motion.div
                     className="px-3 py-2 text-sm font-medium select-none tabular-nums w-[36px] text-center"
-                    key={inCartLine ? inCartLine.qty || 0 : 0}
+                    key={currentQty}
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.18 }}
                   >
-                    {inCartLine ? inCartLine.qty || 0 : 0}
+                    {currentQty}
                   </motion.div>
                   <MotionButton
                     type="button"
@@ -1522,6 +1594,7 @@ export default function ProductPageClient({
                     className="px-3 min-w-[44px]"
                     onClick={incQty}
                     aria-label="Increase quantity"
+                    disabled={plusDisabled}
                     whileTap={{ scale: 0.9 }}
                   >
                     +

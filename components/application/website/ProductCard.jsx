@@ -92,7 +92,6 @@ function useIsTruncated() {
   return [ref, truncated, check];
 }
 
-/* ---- Trackless Embla Scrollbar (subtle thumb only) ---- */
 /* ---- Trackless Embla Scrollbar (extra-thin thumb) ---- */
 function EmblaScrollbar({ api }) {
   const trackRef = useRef(null);
@@ -129,7 +128,10 @@ function EmblaScrollbar({ api }) {
   };
 
   const thumbPct = 100 / (count || 1);
-  const leftPct = Math.max(0, Math.min(100 - thumbPct, progress * (100 - thumbPct)));
+  const leftPct = Math.max(
+    0,
+    Math.min(100 - thumbPct, progress * (100 - thumbPct))
+  );
 
   if ((count || 1) <= 1) return null;
 
@@ -138,9 +140,8 @@ function EmblaScrollbar({ api }) {
       <div
         ref={trackRef}
         onClick={onTrackClick}
-        className="relative h-[6px] rounded-full cursor-pointer" // thinner track hit-area (still no bg)
+        className="relative h-[6px] rounded-full cursor-pointer"
       >
-        {/* ultra-thin thumb only */}
         <motion.div
           className="absolute top-1/2 -translate-y-1/2 h-[2px] rounded-full bg-black/22 dark:bg-white/30 shadow-[0_0_0_0.5px_rgba(0,0,0,0.04)]"
           style={{
@@ -148,13 +149,17 @@ function EmblaScrollbar({ api }) {
             left: `${leftPct}%`,
             touchAction: "none",
           }}
-          transition={{ type: "spring", stiffness: 420, damping: 30, mass: 0.6 }}
+          transition={{
+            type: "spring",
+            stiffness: 420,
+            damping: 30,
+            mass: 0.6,
+          }}
         />
       </div>
     </div>
   );
 }
-
 
 /* =================================================================== */
 
@@ -164,6 +169,7 @@ export default function ProductCard({
   onAddToCart,
   onVariantChange,
 }) {
+  console.log(product);
   const dispatch = useDispatch();
   const swatchGroupRef = useRef(null);
   if (!product) return null;
@@ -207,18 +213,18 @@ export default function ProductCard({
         onVariantChange?.(variants[0]);
       }
     } else if (selectedIdx !== -1) {
-        setSelectedIdx(-1);
-        onVariantChange?.(null);
+      setSelectedIdx(-1);
+      onVariantChange?.(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug, variants]);
 
-  // --- Build gallery (kept same background & carousel content) ---
+  // --- Build gallery ---
   const variantHeroPath =
     activeVariant?.productGallery?.[0]?.path ||
     activeVariant?.swatchImage?.path ||
     null;
-  
+
   const heroPath =
     variantHeroPath || heroImage?.path || productMedia?.[0]?.path || null;
 
@@ -420,22 +426,24 @@ export default function ProductCard({
         "group relative overflow-hidden rounded-2xl bg-white",
         "border border-slate-200/70 shadow-sm transition-all",
         "dark:bg-neutral-900 dark:border-neutral-800",
+        "hover:shadow-md",
         className,
       ].join(" ")}
     >
-      {/* ---------- Media (kept same gradient background) ---------- */}
+      {/* ---------- Media (softened gradient background) ---------- */}
       <div
         className="relative aspect-square md:aspect-[4/5]"
         style={{
           backgroundImage: `
-            radial-gradient(820px 520px at 50% -18%, rgba(252,186,23,0.72), rgba(252,186,23,0) 82%),
-            radial-gradient(680px 420px at -12% -14%, rgba(252,186,23,0.45), rgba(252,186,23,0) 76%),
-            radial-gradient(680px 420px at 112% -14%, rgba(252,186,23,0.45), rgba(252,186,23,0) 76%),
-            radial-gradient(640px 400px at 50% 110%, rgba(252,186,23,0.28), rgba(252,186,23,0) 78%),
-            radial-gradient(420px 260px at 6% 102%, rgba(252,186,23,0.22), rgba(252,186,23,0) 64%),
-            radial-gradient(420px 260px at 94% 102%, rgba(252,186,23,0.22), rgba(252,186,23,0) 64%),
-            linear-gradient(180deg, rgba(252,186,23,0.32) 0%, rgba(252,186,23,0.18) 44%, #ffffff 86%)
+            radial-gradient(820px 520px at 50% -18%, rgba(252,186,23,0.22), rgba(252,186,23,0) 82%),
+            radial-gradient(680px 420px at -12% -14%, rgba(252,186,23,0.14), rgba(252,186,23,0) 76%),
+            radial-gradient(680px 420px at 112% -14%, rgba(252,186,23,0.14), rgba(252,186,23,0) 76%),
+            radial-gradient(640px 400px at 50% 110%, rgba(252,186,23,0.10), rgba(252,186,23,0) 78%),
+            radial-gradient(420px 260px at 6% 102%, rgba(252,186,23,0.08), rgba(252,186,23,0) 64%),
+            radial-gradient(420px 260px at 94% 102%, rgba(252,186,23,0.08), rgba(252,186,23,0) 64%),
+            linear-gradient(180deg, rgba(252,186,23,0.08) 0%, rgba(252,186,23,0.04) 40%, #ffffff 86%)
           `,
+          backgroundColor: "rgba(252,186,23,0.02)",
         }}
       >
         {/* Top-left info badges */}
@@ -461,7 +469,7 @@ export default function ProductCard({
           )}
         </div>
 
-        {/* Slider (same Embla core, images & links) */}
+        {/* Slider */}
         <div className="absolute inset-0">
           <div className="embla h-full" aria-label="Product images">
             <AnimatePresence mode="wait">
@@ -497,7 +505,7 @@ export default function ProductCard({
                                 : `Product image ${idx + 1}`
                             }
                             fill
-                            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 60vw, 33vw"
+                            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                             className="object-contain md:scale-[1.06]"
                             priority={idx === 0}
                             draggable={false}
@@ -512,7 +520,7 @@ export default function ProductCard({
                               : `Product image ${idx + 1}`
                           }
                           fill
-                          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+                          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                           className="object-contain"
                           priority={idx === 0}
                           draggable={false}
@@ -531,7 +539,7 @@ export default function ProductCard({
       </div>
 
       {/* ------------------------ INFO ------------------------ */}
-      <div className="p-3 sm:p-4">
+      <div className="p-2.5 sm:p-4">
         {/* Title & Variants row */}
         <div className="mb-1 flex items-center gap-2 min-h-[28px]">
           <div className="flex-1 min-w-0">
@@ -541,12 +549,18 @@ export default function ProductCard({
                 className="hover:underline underline-offset-2 block"
                 aria-label={name ? `View ${name}` : "View product"}
               >
-                <span ref={nameRef2} className="block truncate font-medium">
+                <span
+                  ref={nameRef2}
+                  className="block truncate font-medium text-[13px] sm:text-base"
+                >
                   {name}
                 </span>
               </Link>
             ) : (
-              <span ref={nameRef2} className="block truncate font-medium">
+              <span
+                ref={nameRef2}
+                className="block truncate font-medium text-[13px] sm:text-base"
+              >
                 {name}
               </span>
             )}
@@ -554,7 +568,7 @@ export default function ProductCard({
 
           {variants.length > 0 && (
             <ScrollArea
-              className="shrink-0 max-w-[55%] overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] me-0.5"
+              className="shrink-0 max-w-[52%] sm:max-w-[55%] overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] me-0.5"
               aria-label="Choose color"
               style={{ WebkitOverflowScrolling: "touch" }}
             >
@@ -623,7 +637,10 @@ export default function ProductCard({
                             )}
                           </motion.button>
                         </TooltipTrigger>
-                        <TooltipContent side="top" className="px-2 py-1 text-xs">
+                        <TooltipContent
+                          side="top"
+                          className="px-2 py-1 text-xs"
+                        >
                           {title}
                         </TooltipContent>
                       </Tooltip>
@@ -641,23 +658,36 @@ export default function ProductCard({
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: "spring", stiffness: 400, damping: 30 }}
-          className="mt-2 flex items-center justify-between"
+          className="mt-2 flex flex-col sm:flex-row sm:items-center sm:justify-between"
         >
-          <div className="flex items-baseline gap-2">
-            <span className="text-[18px] font-semibold tracking-tight text-slate-900 dark:text-white">
+          <div className="flex flex-col sm:flex-row sm:items-baseline sm:gap-2">
+            <span className="text-[17px] sm:text-[18px] font-semibold tracking-tight text-slate-900 dark:text-white">
               {formatPrice(priceNow)}
             </span>
+
             {priceWas ? (
-              <span className="text-[12px] text-slate-500 line-through">
-                MRP {formatPrice(priceWas)}
-              </span>
+              <>
+                {/* Mobile: below the price */}
+                <span className="block sm:hidden text-[12px] text-slate-500 line-through mt-0.5">
+                  MRP {formatPrice(priceWas)}
+                </span>
+
+                {/* Desktop: beside the price */}
+                <span className="hidden sm:inline text-[12px] text-slate-500 line-through">
+                  MRP {formatPrice(priceWas)}
+                </span>
+              </>
             ) : (
-              <span className="text-[12px] text-slate-500">
-                MRP {formatPrice(effMrp)}
-              </span>
+              <>
+                <span className="block sm:hidden text-[12px] text-slate-500 mt-0.5">
+                  MRP {formatPrice(effMrp)}
+                </span>
+                <span className="hidden sm:inline text-[12px] text-slate-500">
+                  MRP {formatPrice(effMrp)}
+                </span>
+              </>
             )}
           </div>
-          {/* removed fast delivery chip */}
         </motion.div>
 
         {/* CTA — stepper / add */}
@@ -750,7 +780,8 @@ export default function ProductCard({
                 ].join(" ")}
                 style={{ backgroundColor: BRAND }}
                 onMouseEnter={(e) => {
-                  if (canAdd) e.currentTarget.style.backgroundColor = BRAND_HOVER;
+                  if (canAdd)
+                    e.currentTarget.style.backgroundColor = BRAND_HOVER;
                 }}
                 onMouseLeave={(e) => {
                   if (canAdd) e.currentTarget.style.backgroundColor = BRAND;

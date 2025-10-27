@@ -2,6 +2,9 @@
 import "./globals.css";
 import { Poppins } from "next/font/google";
 import ClientProviders from "./providers/ClientProviders"; // <-- new client wrapper
+import { PostHogProvider } from "./providers/posthog";
+import PostHogPageView from "@/components/PostHogPageView";
+import { Suspense } from "react";
 
 const PoppinsFont = Poppins({
   weight: ["400", "500", "600", "700", "800"],
@@ -28,7 +31,14 @@ export default function RootLayout({ children }) {
         className={`${PoppinsFont.className} antialiased`}
         suppressHydrationWarning
       >
-        <ClientProviders>{children}</ClientProviders>
+        <PostHogProvider>
+          <ClientProviders>
+            <Suspense fallback={null}>
+              <PostHogPageView />
+            </Suspense>
+            {children}
+          </ClientProviders>
+        </PostHogProvider>
       </body>
     </html>
   );

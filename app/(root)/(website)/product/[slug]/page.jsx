@@ -32,7 +32,9 @@ function getBaseUrl() {
 
 async function getProduct(slug) {
   const base = getBaseUrl();
-  const url = `${base}/api/website/products/get-by-slug/${encodeURIComponent(slug)}`;
+  const url = `${base}/api/website/products/get-by-slug/${encodeURIComponent(
+    slug
+  )}`;
 
   const res = await fetch(url, { cache: "no-store" });
   if (res.status === 404) return { _notFound: true };

@@ -22,20 +22,44 @@ export async function GET(req, { params }) {
     const includeParam = url.searchParams.get("include");
     const includeVariants = includeParam !== "none";
     const debug = url.searchParams.get("debug") === "1";
-    const param = await params;
-    const slug = String(param?.slug || "").trim().toLowerCase();
+
+    const { slug: slugParam } = await params;
+    const slug = String(slugParam || "")
+      .trim()
+      .toLowerCase();
     if (!slug) return response(false, 400, "Invalid or missing product slug");
 
     // 1) Find public product by slug
     const product = await Product.findOne({
       slug,
-      showInWebsite: true,   // NOTE: your Product schema uses showInWebsite
+      showInWebsite: true,
       deletedAt: null,
     })
       .select(
-        "_id name slug shortDesc category mrp specialPrice warrantyMonths stock showInWebsite productMedia descImages heroImage additionalInfo modelNumber createdAt updatedAt"
+        [
+          "_id",
+          "name",
+          "slug",
+          "shortDesc",
+          "category",
+          "mrp",
+          "specialPrice",
+          "warrantyMonths",
+          // ✅ include inventory flags
+          "stock",
+          "hasVariants",
+          "showInWebsite",
+          // media / content
+          "productMedia",
+          "descImages",
+          "heroImage",
+          "additionalInfo",
+          "modelNumber",
+          // timestamps
+          "createdAt",
+          "updatedAt",
+        ].join(" ")
       )
-      // Do NOT filter category visibility here; we'll report a flag instead.
       .populate({
         path: "category",
         select: "_id name slug showOnWebsite deletedAt",
@@ -43,7 +67,6 @@ export async function GET(req, { params }) {
       .lean();
 
     if (!product) {
-      // Helpful debug: was it found if we ignored visibility?
       if (debug) {
         const raw = await Product.findOne({ slug })
           .select("_id slug showInWebsite deletedAt")
@@ -59,22 +82,42 @@ export async function GET(req, { params }) {
       return response(false, 404, "Product not found");
     }
 
-    // 2) Mark whether the category is visible (but don't 404 because of it)
+    // 2) Category visibility flag (UI can decide what to do)
     const cat = product.category || null;
-    const categoryVisible = !!(cat && cat.deletedAt == null && cat.showOnWebsite === true);
+    const categoryVisible = !!(
+      cat &&
+      cat.deletedAt == null &&
+      cat.showOnWebsite === true
+    );
 
-    // 3) Optionally include variants
+    // 3) Optionally include variants (✅ include per-variant stock)
     if (includeVariants) {
       const variants = await ProductVariant.find({
         product: product._id,
         deletedAt: null,
       })
-        .select("_id variantName sku mrp specialPrice productGallery swatchImage createdAt updatedAt")
+        .select(
+          [
+            "_id",
+            "variantName",
+            "sku",
+            "mrp",
+            "specialPrice",
+            "productGallery",
+            "swatchImage",
+            // ✅ stock on variant
+            "stock",
+            // timestamps
+            "createdAt",
+            "updatedAt",
+          ].join(" ")
+        )
         .lean();
+
       product.variants = variants || [];
     }
 
-    // 4) Attach the flag so UI can decide what to do
+    // 4) Ship the product plus the visibility hint
     return response(true, 200, "Product found", {
       ...product,
       categoryVisible,
