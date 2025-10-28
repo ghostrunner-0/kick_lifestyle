@@ -94,8 +94,18 @@ const toNum = (v) => {
   const n = typeof v === "string" ? parseFloat(v) : Number(v);
   return Number.isFinite(n) ? n : 0;
 };
+const stableCartKey = (items) =>
+  JSON.stringify(
+    items.map((it) => ({
+      p: String(it.productId),
+      v: it.variant?.id || it.variantId || null,
+      q: Number(it.qty || 0),
+      pr: Number(it.price || 0),
+      m: it.__couponFreeItem ? 1 : 0,
+    }))
+  );
 
-/* Combobox with valueLabel fallback */
+/* Combobox */
 function ComboBox({
   value,
   valueLabel,
@@ -181,14 +191,14 @@ export default function CheckoutClient({ initialUser = null }) {
   const router = useRouter();
   const dispatch = useDispatch();
 
-  // --- Auth from Redux (email-based) ---
+  // --- Auth ---
   const auth = useSelector((s) => s?.authStore?.auth);
   const isHydrated = useSelector((s) => !!s?._persist?.rehydrated);
   const authUser = auth?.user || auth || null;
   const authEmail = authUser?.email ?? null;
   const isLoggedIn = !!authEmail;
 
-  // --- Cart selectors ---
+  // --- Cart ---
   const items = useSelector(selectItems) || [];
   const itemCount = items.reduce((n, it) => n + (it.qty || 0), 0);
   const subtotal = useSelector(selectSubtotal) || 0;
@@ -211,7 +221,7 @@ export default function CheckoutClient({ initialUser = null }) {
   });
   const paymentMethod = form.watch("paymentMethod");
 
-  /* location options (Pathao) */
+  /* location (Pathao) */
   const [cityOptions, setCityOptions] = useState([]);
   const [zoneOptions, setZoneOptions] = useState([]);
   const [areaOptions, setAreaOptions] = useState([]);
@@ -221,34 +231,32 @@ export default function CheckoutClient({ initialUser = null }) {
     area: false,
   });
 
-  /* Saved labels from user profile (to show while options load) */
   const [savedLabels, setSavedLabels] = useState({
     city: "",
     zone: "",
     area: "",
   });
 
-  /* Shipping (Pathao price plan) */
+  /* Shipping */
   const [ship, setShip] = useState({ price: 0, loading: false, error: null });
 
-  // Persisted user from /getuser for user id/name/email in payload
+  // user snapshot
   const [currentUser, setCurrentUser] = useState(null);
 
-  // price-plan de-dupe & race guards
+  // price-plan guards
   const lastPriceKeyRef = useRef("");
   const latestReqRef = useRef(0);
   const lastPricePlanReqRef = useRef(null);
   const lastPricePlanResRef = useRef(null);
 
-  // ---- QR dialog state (show BEFORE creating order) ----
+  // QR modal
   const [qrOpen, setQrOpen] = useState(false);
-  const [qrConfig, setQrConfig] = useState(null); // { displayName, image: { url|path } }
+  const [qrConfig, setQrConfig] = useState(null);
   const [qrFile, setQrFile] = useState(null);
   const [qrUploading, setQrUploading] = useState(false);
-  const [qrPendingPayload, setQrPendingPayload] = useState(null); // order payload to create after proof chosen
-  const [createdOrder, setCreatedOrder] = useState(null); // after successful creation
+  const [qrPendingPayload, setQrPendingPayload] = useState(null);
+  const [createdOrder, setCreatedOrder] = useState(null);
 
-  // general "placing" guard to avoid double clicks across flows
   const [placing, setPlacing] = useState(false);
 
   const loadQRConfig = useCallback(async () => {
@@ -272,12 +280,12 @@ export default function CheckoutClient({ initialUser = null }) {
       )
     );
 
-  // Guards
+  /* Auth guard */
   useEffect(() => {
     if (isHydrated && !isLoggedIn) router.replace("/auth/login?next=/checkout");
   }, [isHydrated, isLoggedIn, router]);
 
-  /* ---- Pathao fetch helpers ---- */
+  /* Pathao fetchers */
   const fetchCities = useCallback(async () => {
     setLoadingLoc((s) => ({ ...s, city: true }));
     try {
@@ -340,7 +348,7 @@ export default function CheckoutClient({ initialUser = null }) {
     }
   }, []);
 
-  // Robust price-plan
+  // price plan
   const calcDeliveryPrice = useCallback(async (cityId, zoneId, areaId) => {
     const reqId = ++latestReqRef.current;
     setShip({ price: 0, loading: true, error: null });
@@ -356,10 +364,8 @@ export default function CheckoutClient({ initialUser = null }) {
       if (areaId) body.recipient_area = Number(areaId);
 
       lastPricePlanReqRef.current = body;
-
       const { data } = await axios.post("/api/pathao/price-plan", body);
-
-      if (reqId !== latestReqRef.current) return; // stale response, ignore
+      if (reqId !== latestReqRef.current) return;
 
       lastPricePlanResRef.current = data;
 
@@ -400,7 +406,7 @@ export default function CheckoutClient({ initialUser = null }) {
     }
   }, []);
 
-  // Cascade loaders; ONLY calc on area & payment method changes
+  // cascade
   useEffect(() => {
     const sub = form.watch(async (vals, { name }) => {
       if (name === "city") {
@@ -421,17 +427,7 @@ export default function CheckoutClient({ initialUser = null }) {
         return;
       }
 
-      if (name === "area") {
-        await maybeRecalc(
-          vals.city,
-          vals.zone,
-          vals.area || null,
-          vals.paymentMethod
-        );
-        return;
-      }
-
-      if (name === "paymentMethod") {
+      if (name === "area" || name === "paymentMethod") {
         await maybeRecalc(
           vals.city,
           vals.zone,
@@ -442,7 +438,7 @@ export default function CheckoutClient({ initialUser = null }) {
       }
     });
     return () => sub.unsubscribe();
-  }, [form, fetchZones, fetchAreas]); // (calc is referenced via maybeRecalc’s stable closure)
+  }, [form, fetchZones, fetchAreas]);
 
   const maybeRecalc = useCallback(
     async (cityId, zoneId, areaId, pay) => {
@@ -452,14 +448,14 @@ export default function CheckoutClient({ initialUser = null }) {
         return;
       }
       const key = `c:${cityId}|z:${zoneId}|a:${areaId}|pm:${pay}`;
-      if (lastPriceKeyRef.current === key) return; // duplicate, skip
+      if (lastPriceKeyRef.current === key) return;
       lastPriceKeyRef.current = key;
       await calcDeliveryPrice(cityId, zoneId, areaId);
     },
     [calcDeliveryPrice]
   );
 
-  /** Prefill helper */
+  /** Prefill */
   const prefillFromUser = useCallback(
     async (u) => {
       if (!u) return;
@@ -503,15 +499,12 @@ export default function CheckoutClient({ initialUser = null }) {
     [form, fetchCities, fetchZones, fetchAreas]
   );
 
-  /* Load city list on mount */
   useEffect(() => {
     fetchCities();
   }, [fetchCities]);
 
-  /* Fetch user on load AFTER rehydration (or use initialUser if provided) */
   useEffect(() => {
     if (!isHydrated) return;
-
     (async () => {
       try {
         if (initialUser) {
@@ -519,12 +512,9 @@ export default function CheckoutClient({ initialUser = null }) {
           return;
         }
         if (!authEmail) return;
-
         const res = await axios.get(
           `/api/website/users/${encodeURIComponent(authEmail)}/getuser`,
-          {
-            withCredentials: true,
-          }
+          { withCredentials: true }
         );
         const u = res?.data?.data ?? res?.data?.user ?? res?.data ?? null;
         await prefillFromUser(u);
@@ -534,7 +524,255 @@ export default function CheckoutClient({ initialUser = null }) {
     })();
   }, [isHydrated, authEmail, initialUser, prefillFromUser]);
 
-  /* coupon apply/remove (STRICT) */
+  /* ---------- helpers for free-item row ---------- */
+  const findCartRow = useCallback(
+    (productId, variantId) =>
+      items.find((it) =>
+        variantId
+          ? String(it.variant?.id || it.variantId) === String(variantId)
+          : String(it.productId) === String(productId) && !it.variant
+      ),
+    [items]
+  );
+
+  const removeCouponFreeRowIfAny = useCallback(() => {
+    const c = couponState;
+    if (!c || c.mode !== "freeItem" || !c.freeItem) return;
+    const { productId, variantId } = c.freeItem;
+    const row = items.find((it) => {
+      const isMatch = variantId
+        ? String(it.variant?.id || it.variantId) === String(variantId)
+        : String(it.productId) === String(productId) && !it.variant;
+      return isMatch && it.__couponFreeItem === true;
+    });
+    if (row) {
+      dispatch({
+        type: "cart/removeItem",
+        payload: {
+          productId: row.productId,
+          variant: row.variant ? { id: row.variant.id } : null,
+        },
+      });
+    }
+  }, [couponState, items, dispatch]);
+
+  /* ---------- AUTO REVALIDATE COUPON ON ANY CART CHANGE ---------- */
+  const lastCartHashRef = useRef(stableCartKey(items));
+  const selfMutatingRef = useRef(false); // prevent loops after our own dispatches
+  const revalidateTimerRef = useRef(null);
+
+  const revalidateCoupon = useCallback(
+    async (reasonLabel = "cart-change") => {
+      if (!couponState || !couponState.code) return;
+
+      // avoid re-entry storms
+      if (selfMutatingRef.current) return;
+
+      const payload = {
+        code: couponState.code,
+        userId: currentUser?._id || currentUser?.id || null,
+        items: items.map((it) => ({
+          productId: it.productId,
+          variantId: it?.variant?.id || it.variantId || null,
+          qty: Number(it.qty || 0),
+          price: Number(it.price || 0),
+        })),
+      };
+
+      try {
+        const { data } = await axios.post(
+          "/api/website/coupons/apply",
+          payload
+        );
+        if (!data?.success) {
+          // ineligible or error => nuke
+          selfMutatingRef.current = true;
+          removeCouponFreeRowIfAny();
+          dispatch(setCouponAction(null));
+          selfMutatingRef.current = false;
+          showToast("info", "Coupon cleared (not applicable).");
+          return;
+        }
+
+        const d = data.data;
+
+        // not eligible anymore
+        if (!d?.eligible) {
+          selfMutatingRef.current = true;
+          removeCouponFreeRowIfAny();
+          dispatch(setCouponAction(null));
+          selfMutatingRef.current = false;
+          showToast("info", "Coupon cleared (no longer eligible).");
+          return;
+        }
+
+        // FREE ITEM path
+        if (d.mode === "freeItem" && d.freeItem?.eligible) {
+          const wantQty = Number(d.freeItem.qty || 1);
+          const vId = d.freeItem.variantId || null;
+          const img =
+            d.freeItem.bestImage ||
+            d.freeItem?.variant?.productGallery?.[0]?.path ||
+            d.freeItem?.variant?.swatchImage?.path ||
+            d.freeItem?.product?.heroImage?.path ||
+            d.freeItem?.product?.productMedia?.[0]?.path ||
+            "/placeholder.png";
+
+          // ensure row exists with correct qty/price
+          const row = findCartRow(d.freeItem.productId, vId);
+
+          selfMutatingRef.current = true;
+
+          if (!row) {
+            // add row
+            dispatch({
+              type: "cart/addItem",
+              payload: {
+                productId: d.freeItem.productId,
+                variant: vId
+                  ? { id: vId, name: d.freeItem.variantName, image: img }
+                  : null,
+                name: d.freeItem.productName,
+                qty: wantQty,
+                price: Number(d.freeItem.unitPrice || 0),
+                image: img,
+                __couponFreeItem: true,
+              },
+            });
+          } else {
+            // align qty & price if needed
+            if (Number(row.qty) !== wantQty) {
+              dispatch({
+                type: "cart/updateQty",
+                payload: {
+                  productId: row.productId,
+                  variant: row.variant ? { id: row.variant.id } : null,
+                  qty: wantQty,
+                },
+              });
+            }
+            if (Number(row.price) !== Number(d.freeItem.unitPrice || 0)) {
+              dispatch({
+                type: "cart/updatePrice",
+                payload: {
+                  productId: row.productId,
+                  variant: row.variant ? { id: row.variant.id } : null,
+                  price: Number(d.freeItem.unitPrice || 0),
+                },
+              });
+            }
+            if (!row.__couponFreeItem) {
+              dispatch({
+                type: "cart/markAsCouponFreeItem",
+                payload: {
+                  productId: row.productId,
+                  variant: row.variant ? { id: row.variant.id } : null,
+                },
+              });
+            }
+          }
+
+          // set coupon snapshot w/ refreshed discount
+          dispatch(
+            setCouponAction({
+              code: couponState.code,
+              mode: "freeItem",
+              discountApplied: Number(d.moneyDiscount?.applied || 0),
+              freeItem: {
+                productId: d.freeItem.productId,
+                variantId: vId,
+                qty: wantQty,
+                unitPrice: Number(d.freeItem.unitPrice || 0),
+                productName: d.freeItem.productName,
+                variantName: d.freeItem.variantName || null,
+                bestImage: img,
+                product: d.freeItem.product || null,
+                variant: d.freeItem.variant || null,
+                availableQty: Number(d.freeItem.availableQty ?? wantQty),
+              },
+            })
+          );
+
+          selfMutatingRef.current = false;
+          return;
+        }
+
+        // MONEY path
+        const applied = Number(d?.moneyDiscount?.applied || 0);
+        const type = d?.moneyDiscount?.type || "fixed";
+        const amount = Number(d?.moneyDiscount?.amount || 0);
+
+        selfMutatingRef.current = true;
+        removeCouponFreeRowIfAny();
+        dispatch(
+          setCouponAction({
+            code: couponState.code,
+            mode: "money",
+            discountType: type,
+            discountAmount: amount,
+            discountApplied: applied,
+          })
+        );
+        selfMutatingRef.current = false;
+      } catch (e) {
+        // any error → clear to be safe
+        selfMutatingRef.current = true;
+        removeCouponFreeRowIfAny();
+        dispatch(setCouponAction(null));
+        selfMutatingRef.current = false;
+        showToast("info", "Coupon removed (revalidation failed).");
+      }
+    },
+    [
+      couponState,
+      currentUser,
+      items,
+      dispatch,
+      removeCouponFreeRowIfAny,
+      findCartRow,
+    ]
+  );
+
+  // debounce + watch cart
+  useEffect(() => {
+    const nowHash = stableCartKey(items);
+    if (nowHash === lastCartHashRef.current) return;
+    lastCartHashRef.current = nowHash;
+
+    if (!couponState?.code) return;
+
+    if (revalidateTimerRef.current) clearTimeout(revalidateTimerRef.current);
+    revalidateTimerRef.current = setTimeout(() => {
+      revalidateCoupon("cart-change");
+    }, 250); // small debounce to batch rapid edits
+
+    return () => {
+      if (revalidateTimerRef.current) clearTimeout(revalidateTimerRef.current);
+    };
+  }, [items, couponState?.code, revalidateCoupon]);
+
+  /* ---------- also guard: if user manually removes free item ---------- */
+  useEffect(() => {
+    if (!couponState || couponState.mode !== "freeItem") return;
+    const { productId, variantId } = couponState.freeItem || {};
+    if (!productId) return;
+
+    const present = items.some((it) =>
+      variantId
+        ? String(it.variant?.id || it.variantId) === String(variantId)
+        : String(it.productId) === String(productId) && !it.variant
+    );
+
+    if (!present) {
+      selfMutatingRef.current = true;
+      removeCouponFreeRowIfAny();
+      dispatch(setCouponAction(null));
+      selfMutatingRef.current = false;
+      showToast("info", "Free item removed — coupon cleared.");
+    }
+  }, [items, couponState, dispatch, removeCouponFreeRowIfAny]);
+
+  /* ---------- APPLY / REMOVE COUPON (manual button) ---------- */
   const applyCoupon = async () => {
     const code = (form.getValues("couponCode") || "").trim().toUpperCase();
     if (!code) return;
@@ -542,17 +780,18 @@ export default function CheckoutClient({ initialUser = null }) {
     try {
       const payload = {
         code,
+        userId: currentUser?._id || currentUser?.id || null,
         items: items.map((it) => ({
           productId: it.productId,
-          variantId: it?.variant?.id || null,
+          variantId: it?.variant?.id || it.variantId || null,
           qty: Number(it.qty || 0),
-          price: it.isFreeItem ? 0 : Number(it.price || 0),
+          price: Number(it.price || 0),
         })),
       };
+
       const { data } = await axios.post("/api/website/coupons/apply", payload);
 
       if (!data?.success) {
-        dispatch(setCouponAction(null));
         showToast("error", data?.message || "Invalid coupon");
         return;
       }
@@ -560,71 +799,82 @@ export default function CheckoutClient({ initialUser = null }) {
       const d = data.data;
 
       if (!d?.eligible) {
+        removeCouponFreeRowIfAny();
         dispatch(setCouponAction(null));
-        showToast(
-          "error",
-          d?.reason || "Coupon is not applicable to your cart"
-        );
+        showToast("error", d?.reason || "Coupon not applicable");
         return;
       }
 
-      if (d?.freeItem?.exists && d?.freeItem?.eligible) {
-        dispatch(
-          setCouponAction({
-            code,
-            mode: "freeItem",
-            freeItem: {
-              variantId: d.freeItem.variantId,
-              qty: Number(d.freeItem.qty || 1),
-              productId: d.freeItem.productId || null,
-              productName: d.freeItem.productName || "",
-              variantName: d.freeItem.variantName || "",
-            },
-          })
-        );
-        const alreadyInCart = items.some(
-          (it) =>
-            String(it.productId) === String(d.freeItem.productId) &&
-            String(it.variant?.id || it.variantId) ===
-              String(d.freeItem.variantId)
-        );
-        if (!alreadyInCart) {
-          let image = "/placeholder.png";
-          try {
-            const res = await axios.get(
-              `/api/website/product-variant/${d.freeItem.variantId}`
-            );
-            const v = res?.data?.data;
-            image =
-              v?.swatchImage?.path || v?.productGallery?.[0]?.path || image;
-          } catch {}
+      // FREE ITEM
+      if (d.mode === "freeItem" && d.freeItem?.eligible) {
+        const want = Number(d.freeItem.qty || 1);
+        const vId = d.freeItem.variantId || null;
+        const img =
+          d.freeItem.bestImage ||
+          d.freeItem?.variant?.productGallery?.[0]?.path ||
+          d.freeItem?.variant?.swatchImage?.path ||
+          d.freeItem?.product?.heroImage?.path ||
+          d.freeItem?.product?.productMedia?.[0]?.path ||
+          "/placeholder.png";
+
+        const exists = findCartRow(d.freeItem.productId, vId);
+
+        selfMutatingRef.current = true;
+
+        if (!exists) {
           dispatch({
             type: "cart/addItem",
             payload: {
               productId: d.freeItem.productId,
-              variant: {
-                id: d.freeItem.variantId,
-                name: d.freeItem.variantName,
-                image,
-              },
+              variant: vId
+                ? { id: vId, name: d.freeItem.variantName, image: img }
+                : null,
               name: d.freeItem.productName,
-              qty: Number(d.freeItem.qty || 1),
-              price: 0,
-              image,
+              qty: want,
+              price: Number(d.freeItem.unitPrice || 0),
+              image: img,
+              __couponFreeItem: true,
             },
           });
         }
+
+        dispatch(
+          setCouponAction({
+            code,
+            mode: "freeItem",
+            discountApplied: Number(d.moneyDiscount?.applied || 0),
+            freeItem: {
+              productId: d.freeItem.productId,
+              variantId: vId,
+              qty: want,
+              unitPrice: Number(d.freeItem.unitPrice || 0),
+              productName: d.freeItem.productName,
+              variantName: d.freeItem.variantName || null,
+              bestImage: img,
+              product: d.freeItem.product || null,
+              variant: d.freeItem.variant || null,
+              availableQty: Number(d.freeItem.availableQty ?? want),
+            },
+          })
+        );
+
+        selfMutatingRef.current = false;
+
         showToast(
           "success",
-          `Coupon applied! Free item: ${d.freeItem.productName} — ${d.freeItem.variantName}`
+          `Free item added: ${d.freeItem.productName}${
+            d.freeItem.variantName ? " — " + d.freeItem.variantName : ""
+          }`
         );
         return;
       }
 
+      // MONEY
       const applied = Number(d?.moneyDiscount?.applied || 0);
       const type = d?.moneyDiscount?.type || "fixed";
       const amount = Number(d?.moneyDiscount?.amount || 0);
 
+      removeCouponFreeRowIfAny();
       dispatch(
         setCouponAction({
           code,
@@ -636,59 +886,30 @@ export default function CheckoutClient({ initialUser = null }) {
       );
       showToast("success", `Coupon applied! You saved ${formatNpr(applied)}.`);
     } catch (e) {
-      dispatch(setCouponAction(null));
-      showToast("error", "Failed to apply coupon");
+      showToast(
+        "error",
+        e?.response?.data?.message || "Failed to apply coupon"
+      );
     }
   };
 
   const removeCoupon = () => {
-    if (couponState?.mode === "freeItem" && couponState?.freeItem?.variantId) {
-      dispatch({
-        type: "cart/removeItem",
-        payload: {
-          productId: couponState.freeItem.productId,
-          variant: { id: couponState.freeItem.variantId },
-        },
-      });
-    }
+    removeCouponFreeRowIfAny();
     dispatch(setCouponAction(null));
     showToast("info", "Coupon removed");
   };
 
   /* totals */
-  const memoTotals = useMemo(() => {
-    if (!couponState) return { discountApplied: 0, freeItemActive: false };
-
-    if (couponState.mode === "freeItem" && couponState?.freeItem?.variantId) {
-      const setVariant = new Set(
-        items.map((it) => String(it?.variant?.id || ""))
-      );
-      const active = setVariant.has(String(couponState.freeItem.variantId));
-      return { discountApplied: 0, freeItemActive: active };
-    }
-
-    if (couponState.mode === "money") {
-      return {
-        discountApplied: Math.min(
-          subtotal,
-          Number(couponState?.discountApplied || 0)
-        ),
-        freeItemActive: false,
-      };
-    }
-
-    return { discountApplied: 0, freeItemActive: false };
-  }, [couponState, items, subtotal]);
-
-  const discountApplied = memoTotals.discountApplied;
-  const freeItemActive = memoTotals.freeItemActive;
+  const discountApplied = useMemo(() => {
+    return Math.min(subtotal, Number(couponState?.discountApplied || 0));
+  }, [couponState, subtotal]);
 
   const codFee = paymentMethod === "cod" ? 50 : 0;
   const shippingCost = paymentMethod === "cod" ? ship.price : 0;
   const baseTotal = Math.max(0, subtotal - discountApplied);
   const total = baseTotal + shippingCost + codFee;
 
-  // Single flag to disable both buttons
+  /* disable Place Order */
   const isPlaceOrderDisabled = useMemo(() => {
     if (isCartEmpty) return true;
     if (placing) return true;
@@ -706,15 +927,19 @@ export default function CheckoutClient({ initialUser = null }) {
       showToast("info", "Your cart is empty. Add items to continue.");
       return;
     }
-    if (couponState?.mode === "freeItem") {
-      const setVariant = new Set(
-        items.map((it) => String(it?.variant?.id || ""))
-      );
-      if (!setVariant.has(String(couponState?.freeItem?.variantId))) {
-        showToast("error", "Coupon requires a specific variant in your cart.");
+
+    // final free-item presence check
+    if (couponState?.mode === "freeItem" && couponState?.freeItem) {
+      const { productId, variantId } = couponState.freeItem;
+      const row = findCartRow(productId, variantId || null);
+      if (!row) {
+        removeCouponFreeRowIfAny();
+        dispatch(setCouponAction(null));
+        showToast("error", "Free item missing. Coupon cleared.");
         return;
       }
     }
+
     if (paymentMethod === "cod") {
       if (ship.loading) {
         showToast("info", "Hold on—calculating delivery price…");
@@ -726,13 +951,11 @@ export default function CheckoutClient({ initialUser = null }) {
       }
     }
 
-    // derive labels
     const vals = form.getValues();
     const cityLabel = getLabel(cityOptions, vals.city, savedLabels.city);
     const zoneLabel = getLabel(zoneOptions, vals.zone, savedLabels.zone);
     const areaLabel = getLabel(areaOptions, vals.area, savedLabels.area);
 
-    // ----- ORDER PAYLOAD (server generates display_order_id + seq)
     const payload = {
       user: {
         id: currentUser?._id || currentUser?.id || "",
@@ -754,13 +977,14 @@ export default function CheckoutClient({ initialUser = null }) {
       },
       items: items.map((it) => ({
         productId: it.productId,
-        variantId: it.variant?.id || null,
+        variantId: it.variant?.id || it.variantId || null,
         name: it.name,
-        variantName: it.variant?.name || null,
+        variantName: it.variant?.name || it.variantName || null,
         qty: it.qty,
         price: it.price,
-        mrp: it.isFreeItem ? 0 : it.mrp,
+        mrp: it.mrp ?? it.price,
         image: it.image || it.variant?.image || undefined,
+        __couponFreeItem: it.__couponFreeItem === true ? true : undefined,
       })),
       amounts: {
         subtotal,
@@ -769,8 +993,26 @@ export default function CheckoutClient({ initialUser = null }) {
         codFee: paymentMethod === "cod" ? codFee : 0,
         total: paymentMethod === "cod" ? total : baseTotal,
       },
-      paymentMethod: values.paymentMethod, // "cod" | "khalti" | "qr"
-      coupon: couponState ?? undefined,
+      paymentMethod: values.paymentMethod,
+      coupon: couponState
+        ? {
+            code: couponState.code,
+            mode: couponState.mode,
+            discountType: couponState.discountType || null,
+            discountAmount: couponState.discountAmount || null,
+            discountApplied: couponState.discountApplied || 0,
+            freeItem: couponState.freeItem
+              ? {
+                  productId: couponState.freeItem.productId,
+                  variantId: couponState.freeItem.variantId || null,
+                  productName: couponState.freeItem.productName,
+                  variantName: couponState.freeItem.variantName || null,
+                  qty: couponState.freeItem.qty,
+                  unitPrice: couponState.freeItem.unitPrice || null,
+                }
+              : undefined,
+          }
+        : undefined,
       metadata: {
         pricePlan: {
           request: lastPricePlanReqRef.current || null,
@@ -800,7 +1042,6 @@ export default function CheckoutClient({ initialUser = null }) {
     try {
       setPlacing(true);
 
-      // ---- KHALTI FLOW (create order first, then initiate for that order)
       if (paymentMethod === "khalti") {
         const { data: createRes } = await axios.post(
           "/api/website/orders",
@@ -813,7 +1054,6 @@ export default function CheckoutClient({ initialUser = null }) {
           return;
         }
         const displayId = createRes.data.display_order_id;
-
         const { data: initRes } = await axios.post(
           "/api/website/payments/khalti/initiate",
           { display_order_id: displayId },
@@ -831,7 +1071,6 @@ export default function CheckoutClient({ initialUser = null }) {
         return;
       }
 
-      // ---- QR FLOW: open dialog first (no order yet)
       if (paymentMethod === "qr") {
         setQrPendingPayload(payload);
         if (!qrConfig) await loadQRConfig();
@@ -840,7 +1079,6 @@ export default function CheckoutClient({ initialUser = null }) {
         return;
       }
 
-      // ---- COD FLOW
       const { data } = await axios.post("/api/website/orders", payload, {
         withCredentials: true,
       });
@@ -861,7 +1099,7 @@ export default function CheckoutClient({ initialUser = null }) {
     }
   };
 
-  // Submit proof THEN create order, THEN upload, THEN finish
+  // QR submit
   const submitQRProofAndPlaceOrder = async () => {
     if (!qrPendingPayload) {
       showToast("error", "Missing order details.");
@@ -877,9 +1115,7 @@ export default function CheckoutClient({ initialUser = null }) {
       const { data: orderRes } = await axios.post(
         "/api/website/orders",
         qrPendingPayload,
-        {
-          withCredentials: true,
-        }
+        { withCredentials: true }
       );
       if (!orderRes?.success || !orderRes?.data?._id) {
         showToast("error", orderRes?.message || "Failed to place order");
@@ -931,7 +1167,6 @@ export default function CheckoutClient({ initialUser = null }) {
     }
   };
 
-  // Close dialog without creating any order
   const handleQrOpenChange = (open) => {
     setQrOpen(open);
     if (!open) {
@@ -941,10 +1176,9 @@ export default function CheckoutClient({ initialUser = null }) {
     }
   };
 
-  /* ====== ONLY CHANGE: measure BottomNav and offset the mobile sticky footer ====== */
+  /* bottom nav safe-area */
   const [mobileNavHeight, setMobileNavHeight] = useState(0);
   useEffect(() => {
-    // Find your bottom nav by aria-label (matches your component)
     const el = document.querySelector('nav[aria-label="Mobile Navigation"]');
     if (!el) {
       setMobileNavHeight(0);
@@ -961,7 +1195,6 @@ export default function CheckoutClient({ initialUser = null }) {
       window.removeEventListener("resize", measure);
     };
   }, []);
-  /* ============================================================================== */
 
   return (
     <div className="relative">
@@ -1101,7 +1334,9 @@ export default function CheckoutClient({ initialUser = null }) {
                               onChange={field.onChange}
                               options={areaOptions}
                               placeholder={
-                                loadingLoc.area ? "Loading..." : "Select Address"
+                                loadingLoc.area
+                                  ? "Loading..."
+                                  : "Select Address"
                               }
                               emptyText="No areas"
                               disabled={
@@ -1249,13 +1484,14 @@ export default function CheckoutClient({ initialUser = null }) {
                 <div className="rounded-xl bg-white/60 p-3">
                   <ul className="divide-y max-h-72 overflow-auto">
                     {items.map((it) => {
-                      const key = `${it.productId}|${it.variant?.id || ""}`;
+                      const key = `${it.productId}|${
+                        it.variant?.id || it.variantId || ""
+                      }`;
                       const title = it.variant
                         ? `${it.name} — ${it.variant.name}`
                         : it.name;
                       const lineTotal =
-                        (it.isFreeItem ? 0 : Number(it.price) || 0) *
-                        (Number(it.qty) || 0);
+                        (Number(it.price) || 0) * (Number(it.qty) || 0);
                       const img =
                         it.image || it.variant?.image || "/placeholder.png";
                       return (
@@ -1272,10 +1508,14 @@ export default function CheckoutClient({ initialUser = null }) {
                           <div className="min-w-0 flex-1">
                             <div className="line-clamp-1 text-sm font-medium">
                               {title}
+                              {it.__couponFreeItem ? (
+                                <span className="ml-2 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 border border-emerald-200">
+                                  FREE with coupon
+                                </span>
+                              ) : null}
                             </div>
                             <div className="text-xs text-slate-500">
-                              {it.qty} ×{" "}
-                              {formatNpr(it.isFreeItem ? 0 : it.price)}
+                              {it.qty} × {formatNpr(it.price)}
                             </div>
                           </div>
                           <div className="text-sm font-semibold">
@@ -1284,34 +1524,6 @@ export default function CheckoutClient({ initialUser = null }) {
                         </li>
                       );
                     })}
-
-                    {couponState?.mode === "freeItem" &&
-                      freeItemActive &&
-                      !items.some(
-                        (it) =>
-                          String(it.productId) ===
-                            String(couponState.freeItem.productId) &&
-                          String(it.variant?.id || it.variantId) ===
-                            String(couponState.freeItem.variantId)
-                      ) && (
-                        <li className="flex items-center gap-3 py-2 text-emerald-700">
-                          <div className="h-12 w-12 shrink-0 grid place-items-center rounded-md border bg-emerald-50">
-                            🎁
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="line-clamp-1 text-sm font-medium">
-                              Free item: {couponState.freeItem.productName} —{" "}
-                              {couponState.freeItem.variantName}
-                            </div>
-                            <div className="text-xs">
-                              Qty: {couponState.freeItem.qty}
-                            </div>
-                          </div>
-                          <div className="text-sm font-semibold">
-                            {formatNpr(0)}
-                          </div>
-                        </li>
-                      )}
                   </ul>
                 </div>
 
@@ -1323,11 +1535,11 @@ export default function CheckoutClient({ initialUser = null }) {
                     <span className="font-medium">{formatNpr(subtotal)}</span>
                   </div>
 
-                  {couponState?.mode === "money" && discountApplied > 0 && (
+                  {Number(discountApplied) > 0 && (
                     <div className="flex items-center justify-between">
                       <span className="text-slate-600">
                         Discount{" "}
-                        {couponState.code ? `(${couponState.code})` : ""}
+                        {couponState?.code ? `(${couponState.code})` : ""}
                       </span>
                       <span className="font-medium">
                         - {formatNpr(discountApplied)}
@@ -1363,7 +1575,7 @@ export default function CheckoutClient({ initialUser = null }) {
                   </div>
                 </div>
 
-                {/* Desktop place order button */}
+                {/* Desktop place order */}
                 <Button
                   type="button"
                   className="mt-2 hidden w-full h-11 rounded-xl text-[14px] font-semibold sm:block"
@@ -1390,7 +1602,7 @@ export default function CheckoutClient({ initialUser = null }) {
         </div>
       </div>
 
-      {/* Mobile place order button — OFFSET ABOVE BOTTOM NAV */}
+      {/* Mobile place order */}
       <div
         className="fixed inset-x-0 z-40 border-t bg-white/90 backdrop-blur sm:hidden"
         style={{ bottom: `${mobileNavHeight}px` }}
@@ -1417,7 +1629,7 @@ export default function CheckoutClient({ initialUser = null }) {
         </div>
       </div>
 
-      {/* QR Payment Dialog (opens BEFORE order is created) */}
+      {/* QR Payment Dialog */}
       <Dialog open={qrOpen} onOpenChange={handleQrOpenChange}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
@@ -1429,7 +1641,6 @@ export default function CheckoutClient({ initialUser = null }) {
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* QR display */}
             <div className="rounded-xl border bg-white p-3 grid place-items-center">
               {qrConfig?.image?.url || qrConfig?.image?.path ? (
                 <Image
@@ -1456,7 +1667,6 @@ export default function CheckoutClient({ initialUser = null }) {
               )}
             </div>
 
-            {/* Upload proof */}
             <div className="space-y-2">
               <Label htmlFor="qr-proof">Upload payment screenshot</Label>
               <Input

@@ -1,3 +1,4 @@
+// app/api/admin/offline-registration/[id]/route.js
 import { NextResponse } from "next/server";
 import path from "node:path";
 import fs from "node:fs/promises";
@@ -6,6 +7,9 @@ import mongoose from "mongoose";
 import { isAuthenticated } from "@/lib/Authentication";
 import { connectDB } from "@/lib/DB";
 import OfflineRegistrationRequest from "@/models/OfflineRegistrationRequest.model";
+import WarrantyRegistration from "@/models/WarrantyRegistration.model";
+import Product from "@/models/Product.model";
+import ProductVariant from "@/models/ProductVariant.model";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,7 +34,7 @@ function absFromStored(storedPath) {
 
 export async function PATCH(req, { params }) {
   try {
-    // ✅ allow admin + sales
+    // auth
     const allowed = await isAuthenticated(["admin", "sales"]);
     if (!allowed) {
       return NextResponse.json(
@@ -40,6 +44,7 @@ export async function PATCH(req, { params }) {
     }
 
     await connectDB();
+
     const param = await params;
     const id = String(param?.id || "");
     if (!mongoose.isValidObjectId(id)) {
@@ -58,7 +63,7 @@ export async function PATCH(req, { params }) {
       );
     }
 
-    // ----- Editable fields -----
+    // ---------- Editable fields ----------
     if (body.name != null) doc.name = String(body.name).trim();
 
     if (body.email != null) doc.email = String(body.email).trim().toLowerCase();
@@ -77,13 +82,11 @@ export async function PATCH(req, { params }) {
     }
 
     if (body.purchaseDate != null) {
-      // cap at today, ignore invalid
       const d = new Date(String(body.purchaseDate));
       if (!Number.isNaN(d.valueOf())) {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        if (d > today) doc.purchaseDate = today;
-        else doc.purchaseDate = d;
+        doc.purchaseDate = d > today ? today : d;
       }
     }
 
@@ -91,43 +94,135 @@ export async function PATCH(req, { params }) {
       const pf = String(body.purchasedFrom).toLowerCase();
       if (["kick", "daraz", "offline"].includes(pf)) doc.purchasedFrom = pf;
     }
+
     if (doc.purchasedFrom === "offline") {
       if (body.shopName != null) doc.shopName = String(body.shopName).trim();
     } else {
       doc.shopName = "";
     }
 
-    // ----- Status change → optionally delete image -----
+    // ---------- Status change handling ----------
+    let createdWarrantyId = null;
+
     if (body.status != null) {
       const next = String(body.status).toLowerCase();
       if (ALLOWED_STATUSES.has(next)) {
         const prev = doc.status || "pending";
+        const movingFromPending = prev === "pending" && next !== "pending";
+        const approvingNow = prev === "pending" && next === "approved";
+
         doc.status = next;
 
-        if (prev === "pending" && next !== "pending") {
+        // If approving now -> create warranty entry
+        if (approvingNow) {
+          // Gather product + variant information
+          const productId = doc.productId
+            ? new mongoose.Types.ObjectId(doc.productId)
+            : null;
+
+          let product = null;
+          if (productId) {
+            product = await Product.findById(productId, {
+              name: 1,
+              warrantyMonths: 1,
+            }).lean();
+          }
+
+          // Support optional variant (if your request model stores it)
+          // Try explicit doc.productVariantId, fall back to snapshot doc.productVariant?.id
+          let variantDoc = null;
+          let variantId = null;
+
+          if (doc.productVariantId) {
+            variantId = new mongoose.Types.ObjectId(doc.productVariantId);
+          } else if (doc.productVariant?.id) {
+            variantId = new mongoose.Types.ObjectId(doc.productVariant.id);
+          }
+
+          if (variantId) {
+            variantDoc = await ProductVariant.findById(variantId, {
+              variantName: 1,
+              sku: 1,
+              product: 1,
+            }).lean();
+          }
+
+          // Build warranty payload
+          const warrantyPayload = {
+            channel: doc.purchasedFrom || "offline",
+            // For offline, keep actual shop; for kick/daraz, set label
+            shopName:
+              doc.purchasedFrom === "offline"
+                ? doc.shopName || ""
+                : doc.purchasedFrom === "kick"
+                ? "KICK LIFESTYLE"
+                : "Daraz",
+            customer: {
+              name: doc.name || "",
+              phone: doc.phoneNormalized || digits10(doc.phone),
+            },
+            items: [
+              {
+                product: {
+                  productId: productId || null,
+                  variantId: variantId || null,
+                  productName: doc.productName || product?.name || "Product",
+                  variantName:
+                    variantDoc?.variantName || doc.productVariant?.name || "",
+                },
+                serial: doc.serial,
+                warrantyMonths: Number.isFinite(product?.warrantyMonths)
+                  ? product.warrantyMonths
+                  : 0,
+              },
+            ],
+            notes: `Auto-created from offline request ${String(
+              doc._id
+            )} on approval.`,
+          };
+
+          try {
+            const created = await WarrantyRegistration.create(warrantyPayload);
+            createdWarrantyId = created?._id || null;
+          } catch (e) {
+            // Handle duplicate serial (unique index on items.serial)
+            if (e?.code === 11000) {
+              // Serial already registered; we still proceed with approval & cleanup
+              // You can also append a note to doc here if you want to track this situation.
+              // No rethrow — continue.
+            } else {
+              throw e; // Other errors should abort the flow
+            }
+          }
+        }
+
+        // If leaving pending (approved OR rejected), clean image and clear reference
+        if (movingFromPending) {
           const stored = doc?.purchaseProof?.path || "";
           if (stored) {
             try {
               const absPair = absFromStored(stored);
               if (absPair) {
-                // try primary, then legacy
-                await fs.unlink(absPair.absPrimary).catch(async () => {
-                  await fs.unlink(absPair.absLegacy).catch(() => {});
-                });
+                await fs
+                  .unlink(absPair.absPrimary)
+                  .catch(
+                    async () =>
+                      await fs.unlink(absPair.absLegacy).catch(() => {})
+                  );
               }
             } catch (e) {
               console.warn("Failed to delete warranty image:", e?.message || e);
             }
           }
-          // clear reference after decision
           doc.purchaseProof = undefined;
+          // optionally stamp decision time
+          doc.decidedAt = new Date();
         }
       }
     }
 
     await doc.save();
 
-    // minimal payload for UI
     const payload = {
       _id: doc._id,
       name: doc.name,
@@ -140,8 +235,10 @@ export async function PATCH(req, { params }) {
       shopName: doc.shopName,
       status: doc.status,
       purchaseProof: doc.purchaseProof || null,
+      productVariant: doc.productVariant || null, // snapshot if stored
       createdAt: doc.createdAt,
       updatedAt: doc.updatedAt,
+      warrantyId: createdWarrantyId, // <-- returns the created warranty id if any
     };
 
     return NextResponse.json({ success: true, data: payload }, { status: 200 });

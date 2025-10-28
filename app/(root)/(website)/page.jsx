@@ -3,7 +3,7 @@ import HomeClient from "./HomeClient";
 import Script from "next/script";
 export const dynamic = "force-dynamic"; // ✅ ensure runtime fetch in prod (no build-time SSG)
 export const revalidate = 0;
-const BRAND = "KICK";
+const BRAND = "KICK LIFESTYLE";
 const BRAND_LONG = "Kick Lifestyle";
 const SITE_URL = (
   process.env.NEXT_PUBLIC_SITE_URL || "https://kick.com.np"
@@ -11,11 +11,11 @@ const SITE_URL = (
 
 export const metadata = {
   metadataBase: new URL(SITE_URL),
-  title: `Best Earbuds in Nepal | ${BRAND}`,
+  title: ` ${BRAND} | Best Earbuds in Nepal`,
   description: `${BRAND_LONG} by Kumod Begwani brings premium true wireless earbuds, smartwatches, and tech accessories to Nepal — cutting-edge features, great prices, and trusted quality. #ProudlyNepali`,
   alternates: { canonical: "/" },
   openGraph: {
-    title: `Best Earbuds in Nepal | ${BRAND}`,
+    title: ` ${BRAND} | Best Earbuds in Nepal`,
     description: `${BRAND_LONG} is redefining tech accessories in Nepal with premium TWS earbuds (ZenBuds, Buds S Pro) and smart watches at honest prices.`,
     url: "/",
     type: "website",

@@ -21,7 +21,7 @@ const OfflineRegistrationRequestSchema = new Schema(
     phone: { type: String, required: true, trim: true },
     phoneNormalized: { type: String, required: true, index: true },
 
-    // product (now also store the id)
+    // product (store both product & variant snapshots)
     productId: {
       type: Types.ObjectId,
       ref: "Product",
@@ -29,6 +29,18 @@ const OfflineRegistrationRequestSchema = new Schema(
       default: null,
     },
     productName: { type: String, required: true, trim: true }, // snapshot for convenience
+
+    // NEW: variant info (optional)
+    productVariantId: {
+      type: Types.ObjectId,
+      ref: "ProductVariant",
+      index: true,
+      default: null,
+    },
+    productVariantName: { type: String, trim: true, default: "" }, // e.g., "Harmonic Black"
+    productVariantSku: { type: String, trim: true, default: null },
+
+    // unit identity
     serial: {
       type: String,
       required: true,
@@ -68,13 +80,30 @@ const OfflineRegistrationRequestSchema = new Schema(
   { timestamps: true }
 );
 
+/** Keep your original uniqueness rule */
 OfflineRegistrationRequestSchema.index(
   { phoneNormalized: 1, serial: 1 },
   { unique: true }
 );
 
+/** Helpful for searches/reporting by product/variant/serial */
+OfflineRegistrationRequestSchema.index({
+  productId: 1,
+  productVariantId: 1,
+  serial: 1,
+});
+
 OfflineRegistrationRequestSchema.pre("validate", function (next) {
   this.phoneNormalized = digits10(this.phone);
+
+  // Normalize snapshots from provided variant object if caller sets it
+  if (!this.productVariantName && this.get("variant")?.variantName) {
+    this.productVariantName = String(this.get("variant").variantName || "");
+  }
+  if (!this.productVariantSku && this.get("variant")?.sku) {
+    this.productVariantSku = String(this.get("variant").sku || "");
+  }
+
   if (this.purchasedFrom === "offline" && !this.shopName?.trim()) {
     return next(new Error("Shop name is required for 'Others' channel."));
   }

@@ -8,30 +8,43 @@ const CouponSchema = new Schema(
     code: { type: String, required: true, unique: true, trim: true },
 
     // Discount
-    discountType: { type: String, enum: ["percentage", "fixed"], required: true },
+    discountType: {
+      type: String,
+      enum: ["percentage", "fixed"],
+      required: true,
+    },
     discountAmount: { type: Number, required: true, min: 0 },
-    individualUse: { type: Boolean, default: false, index: true },
+    individualUse: { type: Boolean, default: true, index: true },
 
     // Free item (target a variant directly)
     freeItem: {
-      variant: { type: Schema.Types.ObjectId, ref: "ProductVariant", default: null },
+      product: { type: Schema.Types.ObjectId, ref: "Product", default: null },
+      variant: {
+        type: Schema.Types.ObjectId,
+        ref: "ProductVariant",
+        default: null,
+      },
       qty: { type: Number, min: 1, default: 1 },
     },
 
     // Applicability
     // If both arrays empty -> applies to all.
     // Keep specificProducts only if you need “any variant of product X”.
-    specificProducts: [{ type: Schema.Types.ObjectId, ref: "Product" }],      // optional
+    specificProducts: [{ type: Schema.Types.ObjectId, ref: "Product" }], // optional
     specificVariants: [{ type: Schema.Types.ObjectId, ref: "ProductVariant" }],
 
     // Usage limits
     perUserLimit: { type: Number, min: 0, default: 0 }, // 0 = unlimited
-    totalLimit: { type: Number, min: 0, default: 0 },   // 0 = unlimited
+    totalLimit: { type: Number, min: 0, default: 0 }, // 0 = unlimited
     redemptionsTotal: { type: Number, min: 0, default: 0, index: true },
 
     // Switch discount after N total redemptions
     changeAfterUsage: { type: Number, min: 0, default: 0 }, // 0 = never
-    newDiscountType: { type: String, enum: ["percentage", "fixed"], default: null },
+    newDiscountType: {
+      type: String,
+      enum: ["percentage", "fixed"],
+      default: null,
+    },
     newDiscountAmount: { type: Number, min: 0, default: null },
 
     // Soft delete
@@ -66,7 +79,8 @@ CouponSchema.virtual("effectiveDiscount").get(function () {
   const switched =
     this.changeAfterUsage > 0 && this.redemptionsTotal >= this.changeAfterUsage;
 
-  const type = switched && this.newDiscountType ? this.newDiscountType : this.discountType;
+  const type =
+    switched && this.newDiscountType ? this.newDiscountType : this.discountType;
   const amount =
     switched && (this.newDiscountAmount ?? null) != null
       ? this.newDiscountAmount

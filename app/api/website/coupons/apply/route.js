@@ -4,91 +4,225 @@ import { connectDB } from "@/lib/DB";
 import Coupon from "@/models/Coupon.model";
 import Product from "@/models/Product.model";
 import ProductVariant from "@/models/ProductVariant.model";
+import Order from "@/models/Orders.model";
 
-/**
- * Helpers
- */
 const idStr = (v) =>
   typeof v === "object" && v?._id ? String(v._id) : v != null ? String(v) : "";
+const num = (v) => (Number.isFinite(+v) ? +v : 0);
 
-function effectiveDiscount(coupon) {
+function effectiveDiscount(c) {
   const switched =
-    Number(coupon.changeAfterUsage || 0) > 0 &&
-    Number(coupon.redemptionsTotal || 0) >= Number(coupon.changeAfterUsage || 0);
-
-  const type = switched && coupon.newDiscountType ? coupon.newDiscountType : coupon.discountType;
-  const amount =
-    switched && (coupon.newDiscountAmount ?? null) != null
-      ? Number(coupon.newDiscountAmount)
-      : Number(coupon.discountAmount);
-
-  return { type, amount };
+    num(c.changeAfterUsage) > 0 &&
+    num(c.redemptionsTotal) >= num(c.changeAfterUsage);
+  return {
+    type: switched && c.newDiscountType ? c.newDiscountType : c.discountType,
+    amount:
+      switched && c.newDiscountAmount != null
+        ? num(c.newDiscountAmount)
+        : num(c.discountAmount),
+  };
 }
 
-/**
- * Strict eligibility:
- *  - If specificProducts has items → require ANY of those products in cart (ignore variants).
- *  - Else if specificVariants has items → require ANY of those variants in cart.
- *  - Else → global.
- * Returns { eligible, reason, matchedItems }
- *   matchedItems are the items to which a money discount should apply (if any).
- */
 function evaluateEligibility(coupon, items) {
-  const productIds = (coupon?.specificProducts || []).map(idStr);
-  const variantIds = (coupon?.specificVariants || []).map(idStr);
+  const pIds = (coupon?.specificProducts || []).map(idStr);
+  const vIds = (coupon?.specificVariants || []).map(idStr);
+  const setP = new Set(items.map((it) => String(it.productId)));
+  const setV = new Set(items.map((it) => String(it.variantId || "")));
 
-  // cart sets
-  const setProduct = new Set(items.map((it) => String(it.productId)));
-  const setVariant = new Set(items.map((it) => String(it.variantId || "")));
-
-  // product-first gate
-  if (productIds.length > 0) {
-    const eligible = productIds.some((pid) => setProduct.has(String(pid)));
-    if (!eligible) {
-      return { eligible: false, reason: "Coupon targets specific products not in cart", matchedItems: [] };
-    }
-    const matchedItems = items.filter((it) => productIds.includes(String(it.productId)));
-    return { eligible: true, reason: "Eligible by product", matchedItems };
+  if (pIds.length) {
+    const ok = pIds.some((pid) => setP.has(pid));
+    if (!ok)
+      return {
+        eligible: false,
+        reason: "Targets specific products not in cart",
+        matchedItems: [],
+      };
+    return {
+      eligible: true,
+      reason: "Eligible by product",
+      matchedItems: items.filter((it) => pIds.includes(String(it.productId))),
+    };
   }
-
-  // strict variant gate
-  if (variantIds.length > 0) {
-    const eligible = variantIds.some((vid) => setVariant.has(String(vid)));
-    if (!eligible) {
-      return { eligible: false, reason: "Coupon targets specific variants not in cart", matchedItems: [] };
-    }
-    const matchedItems = items.filter((it) => variantIds.includes(String(it.variantId || "")));
-    return { eligible: true, reason: "Eligible by variant", matchedItems };
+  if (vIds.length) {
+    const ok = vIds.some((vid) => setV.has(vid));
+    if (!ok)
+      return {
+        eligible: false,
+        reason: "Targets specific variants not in cart",
+        matchedItems: [],
+      };
+    return {
+      eligible: true,
+      reason: "Eligible by variant",
+      matchedItems: items.filter((it) =>
+        vIds.includes(String(it.variantId || ""))
+      ),
+    };
   }
-
-  // global
-  return { eligible: true, reason: "Eligible (global)", matchedItems: items.slice() };
+  return {
+    eligible: true,
+    reason: "Eligible (global)",
+    matchedItems: items.slice(),
+  };
 }
 
-/**
- * Free item eligibility:
- * - Coupon must be eligible (by product/variant/global).
- * - If freeItem.variant exists -> that variant MUST be in the cart.
- */
-function evaluateFreeItemEligibility(coupon, items) {
-  const res = { exists: false, eligible: false, variantId: null, qty: 0 };
-  const vId = coupon?.freeItem?.variant?._id ?? coupon?.freeItem?.variant ?? null;
-  if (!vId) return res; // no free item on coupon
+const pickBestImage = (variant, product) => {
+  const vgal = Array.isArray(variant?.productGallery)
+    ? variant.productGallery
+    : [];
+  const pm = Array.isArray(product?.productMedia) ? product.productMedia : [];
+  return (
+    vgal[0]?.path ||
+    variant?.swatchImage?.path ||
+    product?.heroImage?.path ||
+    pm[0]?.path ||
+    "/placeholder.png"
+  );
+};
 
-  res.exists = true;
-  res.variantId = idStr(vId);
-  res.qty = Math.max(1, Number(coupon?.freeItem?.qty || 1));
-  // Eligible if coupon itself is eligible (checked before calling this)
-  res.eligible = true;
-  return res;
+// bundle from VARIANT id
+async function getVariantBundle(variantId) {
+  const v = await ProductVariant.findById(variantId)
+    .select(
+      "_id variantName mrp specialPrice product productGallery swatchImage stock deletedAt"
+    )
+    .populate({
+      path: "product",
+      model: Product,
+      select: "_id name heroImage productMedia hasVariants stock deletedAt",
+    })
+    .lean();
+  if (!v || v.deletedAt || v?.product?.deletedAt) return null;
+
+  const unitPrice = num(v.specialPrice ?? v.mrp);
+  const productId = v.product?._id ? String(v.product._id) : null;
+  const productName = v.product?.name || "";
+  const variantName = v.variantName || "";
+  const bestImage = pickBestImage(v, v.product);
+
+  const variantStock = num(v.stock);
+  const productStock = num(v.product?.stock);
+  const inStock = v.product?.hasVariants ? variantStock > 0 : productStock > 0;
+
+  return {
+    unitPrice,
+    productId,
+    productName,
+    variantName,
+    bestImage,
+    product: v.product || null,
+    variant: {
+      _id: v._id,
+      variantName: v.variantName,
+      mrp: v.mrp,
+      specialPrice: v.specialPrice ?? null,
+      productGallery: v.productGallery || [],
+      swatchImage: v.swatchImage || null,
+      stock: variantStock,
+    },
+    chosenVariantId: String(v._id),
+    productStock,
+    variantStock,
+    inStock,
+  };
+}
+
+// bundle from PRODUCT id (auto-pick an in-stock variant if product has variants)
+async function getProductBundle(productId) {
+  const p = await Product.findById(productId)
+    .select(
+      "_id name heroImage productMedia hasVariants stock deletedAt mrp specialPrice"
+    )
+    .lean();
+  if (!p || p.deletedAt) return null;
+
+  // No variants: use product price & stock
+  if (!p.hasVariants) {
+    const unitPrice = num(p.specialPrice ?? p.mrp);
+    const bestImage =
+      p.heroImage?.path ||
+      (Array.isArray(p.productMedia) && p.productMedia[0]?.path) ||
+      "/placeholder.png";
+    const productStock = num(p.stock);
+    const inStock = productStock > 0;
+    return {
+      unitPrice,
+      productId: String(p._id),
+      productName: p.name || "",
+      variantName: null,
+      bestImage,
+      product: p,
+      variant: null,
+      chosenVariantId: null,
+      productStock,
+      variantStock: null,
+      inStock,
+    };
+  }
+
+  // Has variants: choose an in-stock variant (cheapest specialPrice -> mrp)
+  const v = await ProductVariant.findOne({
+    product: p._id,
+    deletedAt: null,
+    stock: { $gt: 0 },
+  })
+    .select(
+      "_id variantName mrp specialPrice product productGallery swatchImage stock"
+    )
+    .sort({ specialPrice: 1, mrp: 1 })
+    .lean();
+
+  if (!v) {
+    // product exists but no in-stock variants
+    return {
+      unitPrice: 0,
+      productId: String(p._id),
+      productName: p.name || "",
+      variantName: null,
+      bestImage:
+        p.heroImage?.path ||
+        (Array.isArray(p.productMedia) && p.productMedia[0]?.path) ||
+        "/placeholder.png",
+      product: p,
+      variant: null,
+      chosenVariantId: null,
+      productStock: num(p.stock),
+      variantStock: 0,
+      inStock: false,
+    };
+  }
+
+  const unitPrice = num(v.specialPrice ?? v.mrp);
+  const bestImage = pickBestImage(v, p);
+  const variantStock = num(v.stock);
+
+  return {
+    unitPrice,
+    productId: String(p._id),
+    productName: p.name || "",
+    variantName: v.variantName || "",
+    bestImage,
+    product: p,
+    variant: {
+      _id: v._id,
+      variantName: v.variantName,
+      mrp: v.mrp,
+      specialPrice: v.specialPrice ?? null,
+      productGallery: v.productGallery || [],
+      swatchImage: v.swatchImage || null,
+      stock: variantStock,
+    },
+    chosenVariantId: String(v._id),
+    productStock: num(p.stock),
+    variantStock,
+    inStock: variantStock > 0,
+  };
 }
 
 export async function POST(req) {
   try {
     await connectDB();
-
     const { code, items = [], userId = null } = await req.json();
-
     if (!code || !Array.isArray(items)) {
       return NextResponse.json(
         { success: false, message: "code and items[] are required" },
@@ -97,124 +231,252 @@ export async function POST(req) {
     }
 
     const normCode = String(code).trim().toUpperCase();
-
-    // Find active coupon by code (ignore soft-deleted)
-    const coupon = await Coupon.findOne({ code: normCode, deletedAt: null }).lean();
-    if (!coupon) {
+    const coupon = await Coupon.findOne({
+      code: normCode,
+      deletedAt: null,
+    }).lean();
+    if (!coupon)
       return NextResponse.json(
         { success: false, message: "Invalid coupon code" },
         { status: 404 }
       );
-    }
 
-    // High-level gates (optional usage checks you may enforce here)
-    if (Number(coupon.totalLimit || 0) > 0 && Number(coupon.redemptionsTotal || 0) >= Number(coupon.totalLimit)) {
+    // totalLimit
+    if (
+      num(coupon.totalLimit) > 0 &&
+      num(coupon.redemptionsTotal) >= num(coupon.totalLimit)
+    ) {
       return NextResponse.json(
         { success: false, message: "Coupon redemption limit reached" },
         { status: 400 }
       );
     }
 
-    // NOTE: perUserLimit enforcement typically needs historical data. You can check separately.
+    // perUserLimit
+    if (num(coupon.perUserLimit) > 0) {
+      if (!userId)
+        return NextResponse.json(
+          { success: false, message: "Login required for this coupon" },
+          { status: 401 }
+        );
+      const used = await Order.countDocuments({
+        userId: String(userId),
+        "coupon.code": normCode,
+        status: { $nin: ["cancelled", "Invalid Payment"] },
+      });
+      if (used >= num(coupon.perUserLimit)) {
+        return NextResponse.json(
+          { success: false, message: "Per-user redemption limit reached" },
+          { status: 400 }
+        );
+      }
+    }
 
     const normItems = items.map((it) => ({
       productId: idStr(it.productId),
       variantId: it.variantId ? idStr(it.variantId) : null,
-      qty: Math.max(0, Number(it.qty || 0)),
-      price: Math.max(0, Number(it.price || 0)),
+      qty: Math.max(0, num(it.qty)),
+      price: Math.max(0, num(it.price)),
     }));
 
-    // Strict eligibility evaluation
     const elig = evaluateEligibility(coupon, normItems);
     if (!elig.eligible) {
-      return NextResponse.json(
-        {
+      return NextResponse.json({
+        success: true,
+        data: {
+          eligible: false,
+          reason: elig.reason,
+          mode: "ineligible",
+          moneyDiscount: {
+            applies: false,
+            type: null,
+            amount: 0,
+            applied: 0,
+            base: 0,
+          },
+          freeItem: {
+            exists: !!coupon?.freeItem,
+            eligible: false,
+            productId: null,
+            variantId: null,
+            qty: 0,
+          },
+        },
+      });
+    }
+
+    const { type, amount } = effectiveDiscount(coupon);
+
+    // ===== FREE ITEM: product or variant =====
+    const freeProductId = coupon?.freeItem?.product
+      ? idStr(coupon.freeItem.product)
+      : null;
+    const freeVariantId = coupon?.freeItem?.variant
+      ? idStr(coupon.freeItem.variant)
+      : null;
+    const qty = Math.max(1, num(coupon?.freeItem?.qty || 1));
+
+    if (freeVariantId || freeProductId) {
+      const meta = freeVariantId
+        ? await getVariantBundle(freeVariantId)
+        : await getProductBundle(freeProductId);
+
+      if (!meta) {
+        return NextResponse.json({
           success: true,
           data: {
             eligible: false,
-            reason: elig.reason,
-            moneyDiscount: { applies: false, type: null, amount: 0, applied: 0 },
-            freeItem: { exists: !!coupon?.freeItem, eligible: false, variantId: null, qty: 0 },
-          },
-        },
-        { status: 200 }
-      );
-    }
-
-    // Effective discount (before free-item rule)
-    const { type, amount } = effectiveDiscount(coupon);
-
-    // Free item eligibility check
-    const freeCheck = evaluateFreeItemEligibility(coupon, normItems);
-
-    // If coupon includes a free item:
-    //  - Grant free item if coupon is eligible, regardless of free item variant presence in cart
-    if (freeCheck.exists && freeCheck.eligible) {
-      // fetch free item names for UI
-      const fv = await ProductVariant.findById(freeCheck.variantId)
-        .select("_id variantName product")
-        .populate({ path: "product", select: "_id name", model: "Product" })
-        .lean();
-
-      return NextResponse.json(
-        {
-          success: true,
-          data: {
-            eligible: true,
-            reason: "Eligible (free-item)",
-            moneyDiscount: { applies: false, type: null, amount: 0, applied: 0 },
+            reason: "Free item not available",
+            mode: "ineligible",
+            moneyDiscount: {
+              applies: false,
+              type: null,
+              amount: 0,
+              applied: 0,
+              base: 0,
+            },
             freeItem: {
               exists: true,
-              eligible: true,
-              variantId: freeCheck.variantId,
-              qty: freeCheck.qty,
-              productId: fv?.product?._id ? String(fv.product._id) : null,
-              productName: fv?.product?.name || "",
-              variantName: fv?.variantName || "",
+              eligible: false,
+              productId: freeProductId,
+              variantId: freeVariantId,
+              qty: 0,
+              availableQty: 0,
             },
           },
-        },
-        { status: 200 }
-      );
-    }
+        });
+      }
 
-    // Otherwise: normal money discount on matched items only
-    let base = 0;
-    for (const it of elig.matchedItems) {
-      base += Number(it.price || 0) * Number(it.qty || 0);
-    }
+      if (!meta.inStock) {
+        return NextResponse.json({
+          success: true,
+          data: {
+            eligible: false,
+            reason: "Free item out of stock",
+            mode: "ineligible",
+            moneyDiscount: {
+              applies: false,
+              type: null,
+              amount: 0,
+              applied: 0,
+              base: 0,
+            },
+            freeItem: {
+              exists: true,
+              eligible: false,
+              productId: meta.productId,
+              variantId: meta.chosenVariantId, // could be null if no variants
+              qty,
+              availableQty: Math.max(
+                0,
+                meta.variantStock ?? meta.productStock ?? 0
+              ),
+              productName: meta.productName,
+              variantName: meta.variantName,
+            },
+          },
+        });
+      }
 
-    let applied = 0;
-    if (type === "percentage") {
-      applied = Math.round((base * Number(amount || 0)) / 100);
-    } else if (type === "fixed") {
-      applied = Math.min(base, Number(amount || 0));
-    }
+      const available = meta.variantStock ?? meta.productStock ?? 0;
+      if (qty > available) {
+        return NextResponse.json({
+          success: true,
+          data: {
+            eligible: false,
+            reason: `Only ${available} pcs available for the free item`,
+            mode: "ineligible",
+            moneyDiscount: {
+              applies: false,
+              type: null,
+              amount: 0,
+              applied: 0,
+              base: 0,
+            },
+            freeItem: {
+              exists: true,
+              eligible: false,
+              productId: meta.productId,
+              variantId: meta.chosenVariantId,
+              qty,
+              availableQty: Math.max(0, available),
+              productName: meta.productName,
+              variantName: meta.variantName,
+            },
+          },
+        });
+      }
 
-    return NextResponse.json(
-      {
+      const base = meta.unitPrice * qty;
+
+      return NextResponse.json({
         success: true,
         data: {
           eligible: true,
-          reason: "Eligible (money discount)",
+          reason: "Eligible (free item via discount)",
+          mode: "freeItem",
           moneyDiscount: {
-            applies: applied > 0,
-            type,
-            amount: Number(amount || 0),
-            applied,
+            applies: true,
+            type: "free-item",
+            amount: base,
+            applied: base,
             base,
           },
-          freeItem: { exists: false, eligible: false, variantId: null, qty: 0 },
+          freeItem: {
+            exists: true,
+            eligible: true,
+            requireAddToCart: true,
+            // IDs (variant may be null if product has no variants)
+            productId: meta.productId,
+            variantId: meta.chosenVariantId,
+            qty,
+            unitPrice: meta.unitPrice,
+            availableQty: available,
+            // Display/enrichment
+            productName: meta.productName,
+            variantName: meta.variantName,
+            bestImage: meta.bestImage,
+            product: meta.product,
+            variant: meta.variant,
+          },
+        },
+      });
+    }
+
+    // ===== MONEY DISCOUNT =====
+    let base = 0;
+    for (const it of elig.matchedItems) base += num(it.price) * num(it.qty);
+
+    let applied = 0;
+    if (type === "percentage") applied = Math.floor((base * num(amount)) / 100);
+    else if (type === "fixed") applied = Math.min(base, num(amount));
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        eligible: true,
+        reason: "Eligible (money discount)",
+        mode: "money",
+        moneyDiscount: {
+          applies: applied > 0,
+          type,
+          amount: num(amount),
+          applied,
+          base,
+        },
+        freeItem: {
+          exists: false,
+          eligible: false,
+          productId: null,
+          variantId: null,
+          qty: 0,
         },
       },
-      { status: 200 }
-    );
+    });
   } catch (err) {
     const status = err?.status || err?.response?.status || 500;
-    const msg = err?.response?.data?.message || err?.message || "Failed to apply coupon";
-    return NextResponse.json(
-      { success: false, message: msg },
-      { status }
-    );
+    const msg =
+      err?.response?.data?.message || err?.message || "Failed to apply coupon";
+    return NextResponse.json({ success: false, message: msg }, { status });
   }
 }

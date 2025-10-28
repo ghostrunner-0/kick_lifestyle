@@ -169,7 +169,6 @@ export default function ProductCard({
   onAddToCart,
   onVariantChange,
 }) {
-  console.log(product);
   const dispatch = useDispatch();
   const swatchGroupRef = useRef(null);
   if (!product) return null;
@@ -259,10 +258,13 @@ export default function ProductCard({
   const needsVariantSelection = hasVariants && !activeVariant;
   const productStock = readStock(product);
   const variantStock = readStock(activeVariant);
+
   const variantOutOfStock =
     hasVariants && activeVariant && variantStock !== null && variantStock <= 0;
   const productOutOfStock =
     !hasVariants && productStock !== null && productStock <= 0;
+
+  const availableStock = hasVariants ? variantStock : productStock; // Number | null
   const canAdd =
     !needsVariantSelection && !variantOutOfStock && !productOutOfStock;
 
@@ -338,6 +340,11 @@ export default function ProductCard({
   }, [cartLines, _id, activeVariant?._id, activeVariant?.sku]);
 
   const currentQty = Number(cartLine?.qty ?? 0) || 0;
+  const reachedLimit =
+    availableStock !== null && currentQty >= Number(availableStock);
+  const nextWouldExceed =
+    availableStock !== null && currentQty + 1 > Number(availableStock);
+
   const subtotal = Number(priceNow || 0) * currentQty;
 
   const handleAddToCart = () => {
@@ -360,6 +367,16 @@ export default function ProductCard({
       showToast("warning", "This product is out of stock.");
       return;
     }
+    // Respect stock also for the very first add or subsequent add via main CTA
+    if (nextWouldExceed) {
+      showToast(
+        "warning",
+        `Only ${availableStock} in stock${
+          Number(availableStock) === 1 ? "" : "s"
+        }. You can’t add more.`
+      );
+      return;
+    }
 
     dispatch(addItem(buildCartPayload(1)));
     onAddToCart?.(buildCartPayload(1));
@@ -373,8 +390,20 @@ export default function ProductCard({
 
   const handleIncrement = () => {
     if (!canAdd) return;
+
+    if (nextWouldExceed) {
+      showToast(
+        "warning",
+        `Only ${availableStock} in stock${
+          Number(availableStock) === 1 ? "" : "s"
+        }. You can’t add more.`
+      );
+      return;
+    }
+
     dispatch(addItem(buildCartPayload(1)));
   };
+
   const handleDecrement = () => {
     if (currentQty <= 0) return;
     const next = currentQty - 1;
@@ -729,7 +758,7 @@ export default function ProductCard({
                 <motion.button
                   type="button"
                   onClick={handleIncrement}
-                  disabled={!canAdd}
+                  disabled={!canAdd || reachedLimit}
                   aria-label="Increase quantity"
                   whileTap={{ scale: 0.95 }}
                   className={[
@@ -740,7 +769,13 @@ export default function ProductCard({
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-0",
                     "focus-visible:ring-[#fcba17] dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100",
                   ].join(" ")}
-                  title={canAdd ? "Increase quantity" : "Out of stock"}
+                  title={
+                    !canAdd
+                      ? "Out of stock"
+                      : reachedLimit && availableStock !== null
+                      ? `Max ${availableStock} allowed (stock limit)`
+                      : "Increase quantity"
+                  }
                 >
                   +
                 </motion.button>
@@ -774,7 +809,7 @@ export default function ProductCard({
                 disabled={!canAdd}
                 className={[
                   "w-full rounded-full px-3 py-1.5 text-[11px] font-bold text-white transition-colors",
-                  "min-h-[34px]",
+                  "min-h[34px] min-h-[34px]",
                   "focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#fcba17]",
                   !canAdd ? "opacity-70 cursor-not-allowed" : "",
                 ].join(" ")}

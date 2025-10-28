@@ -33,7 +33,11 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 
 import { showToast } from "@/lib/ShowToast";
@@ -42,18 +46,15 @@ import { showToast } from "@/lib/ShowToast";
 // Helpers
 // ------------------------------------
 const PRIMARY = "#fcba17";
+const digits10 = (s) =>
+  (String(s || "").match(/\d+/g) || []).join("").slice(0, 10);
 
-// normalize to 10 digits (client-side check)
-const digits10 = (s) => (String(s || "").match(/\d+/g) || []).join("").slice(0, 10);
-
-// purchasedFrom values
 const CHANNELS = [
   { value: "kick", label: "Kick Lifestyle" },
   { value: "daraz", label: "Daraz" },
   { value: "offline", label: "Others" },
 ];
 
-// API duplicate messages we may want to treat as warnings
 const DUP_MSGS = new Set([
   "A request for this phone & serial already exists.",
   "This serial is already registered for this phone number.",
@@ -61,6 +62,7 @@ const DUP_MSGS = new Set([
 
 // ------------------------------------
 // Validation schema (Zod)
+// (variantId required will be enforced in onSubmit based on selected product)
 // ------------------------------------
 const schema = z
   .object({
@@ -69,8 +71,12 @@ const schema = z
     phoneNumber: z
       .string()
       .trim()
-      .refine((v) => digits10(v).length === 10, "Enter a valid 10-digit phone number"),
+      .refine(
+        (v) => digits10(v).length === 10,
+        "Enter a valid 10-digit phone number"
+      ),
     productId: z.string().trim().min(1, "Product is required"),
+    variantId: z.string().trim().optional(), // dynamically required if product has variants
     serialNumber: z.string().trim().min(3, "Serial number is required"),
     purchaseDate: z.date({ required_error: "Purchase date is required" }),
     purchasedFrom: z.enum(["kick", "daraz", "offline"], {
@@ -106,24 +112,47 @@ export default function OfflineRegisterClient() {
       },
     },
     headerDown: {
-      hidden: { opacity: 0, y: prefersReduced ? 0 : -14, filter: prefersReduced ? "none" : "blur(4px)" },
-      show: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 0.38, ease: "easeOut" } },
+      hidden: {
+        opacity: 0,
+        y: prefersReduced ? 0 : -14,
+        filter: prefersReduced ? "none" : "blur(4px)",
+      },
+      show: {
+        opacity: 1,
+        y: 0,
+        filter: "blur(0px)",
+        transition: { duration: 0.38, ease: "easeOut" },
+      },
     },
     cardPop: {
       hidden: { opacity: 0, scale: prefersReduced ? 1 : 0.985 },
-      show: { opacity: 1, scale: 1, transition: { duration: 0.28, ease: "easeOut" } },
+      show: {
+        opacity: 1,
+        scale: 1,
+        transition: { duration: 0.28, ease: "easeOut" },
+      },
     },
     fieldRise: {
       hidden: { opacity: 0, y: prefersReduced ? 0 : 12 },
-      show: { opacity: 1, y: 0, transition: { duration: 0.28, ease: "easeOut" } },
+      show: {
+        opacity: 1,
+        y: 0,
+        transition: { duration: 0.28, ease: "easeOut" },
+      },
     },
     previewZoom: {
       hidden: { opacity: 0, scale: prefersReduced ? 1 : 0.985 },
       show: { opacity: 1, scale: 1, transition: { duration: 0.2 } },
-      exit: { opacity: 0, scale: prefersReduced ? 1 : 0.985, transition: { duration: 0.16 } },
+      exit: {
+        opacity: 0,
+        scale: prefersReduced ? 1 : 0.985,
+        transition: { duration: 0.16 },
+      },
     },
   };
-  const hoverScale = prefersReduced ? {} : { whileHover: { scale: 1.01 }, whileTap: { scale: 0.99 } };
+  const hoverScale = prefersReduced
+    ? {}
+    : { whileHover: { scale: 1.01 }, whileTap: { scale: 0.99 } };
 
   // Form
   const form = useForm({
@@ -133,6 +162,7 @@ export default function OfflineRegisterClient() {
       email: "",
       phoneNumber: "",
       productId: "",
+      variantId: "",
       serialNumber: "",
       purchaseDate: undefined, // Date | undefined
       purchasedFrom: undefined, // "kick" | "daraz" | "offline"
@@ -144,22 +174,23 @@ export default function OfflineRegisterClient() {
   const [loadingProducts, setLoadingProducts] = useState(true);
 
   const purchasedFrom = form.watch("purchasedFrom");
+  const selectedProductId = form.watch("productId");
+  const selectedVariantId = form.watch("variantId");
 
   // File
   const [file, setFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState("");
 
-  // Load products (includes hero image + model number)
+  // Load products (WITH variants, regardless of showInWebsite)
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         setLoadingProducts(true);
-        // Endpoint that returns all products (even if not shown on website)
-        // shape: { success: true, data: [{ _id, name, modelNumber, heroImage: {path,...} }, ...] }
-        const { data } = await axios.get("/api/website/offline-registration/products", {
-          withCredentials: true,
-        });
+        const { data } = await axios.get(
+          "/api/website/offline-registration/products?includeVariants=1",
+          { withCredentials: true }
+        );
 
         const arr = Array.isArray(data?.data) ? data.data : [];
         if (!cancelled) {
@@ -169,12 +200,23 @@ export default function OfflineRegisterClient() {
               name: p.name || "Unnamed",
               modelNumber: p.modelNumber || "",
               heroImage: p.heroImage || null,
+              hasVariants: !!p.hasVariants,
+              variants: Array.isArray(p.variants)
+                ? p.variants.map((v) => ({
+                    _id: String(v._id),
+                    variantName: v.variantName || "Variant",
+                    sku: v.sku || "",
+                  }))
+                : [],
             }))
           );
         }
       } catch (e) {
         if (!cancelled) {
-          showToast("error", e?.response?.data?.message || "Failed to load products");
+          showToast(
+            "error",
+            e?.response?.data?.message || "Failed to load products"
+          );
         }
       } finally {
         if (!cancelled) setLoadingProducts(false);
@@ -184,6 +226,12 @@ export default function OfflineRegisterClient() {
       cancelled = true;
     };
   }, []);
+
+  // When product changes, clear variantId and force reselect if needed
+  useEffect(() => {
+    // Clear variant if current selected doesn't belong to this product
+    form.setValue("variantId", "");
+  }, [selectedProductId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onPickFile = (e) => {
     const f = e.target.files?.[0];
@@ -200,22 +248,42 @@ export default function OfflineRegisterClient() {
     setPreviewUrl(URL.createObjectURL(f));
   };
 
-  const submittingText = useMemo(() => "Submitting...", []);
+  // currently selected product (drives variant UI)
+  const selectedProduct = useMemo(
+    () => (products || []).find((p) => p._id === selectedProductId) || null,
+    [products, selectedProductId]
+  );
+  const selectedHasVariants = !!(
+    selectedProduct &&
+    selectedProduct.variants &&
+    selectedProduct.variants.length
+  );
 
   const onSubmit = async (vals) => {
     if (!file) {
       showToast("warning", "Please upload the warranty card image.");
       return;
     }
+
+    // Enforce variant selection if product has variants
+    if (selectedHasVariants && !vals.variantId) {
+      showToast("error", "Please choose a variant.");
+      return;
+    }
+
     try {
       const fd = new FormData();
       fd.append("name", vals.name);
       fd.append("email", vals.email);
       fd.append("phoneNumber", vals.phoneNumber);
       fd.append("productId", vals.productId);
+      if (vals.variantId) fd.append("variantId", vals.variantId);
       fd.append("serialNumber", (vals.serialNumber || "").toUpperCase());
       fd.append("purchasedFrom", vals.purchasedFrom);
-      fd.append("shopName", vals.purchasedFrom === "offline" ? vals.shopName || "" : "");
+      fd.append(
+        "shopName",
+        vals.purchasedFrom === "offline" ? vals.shopName || "" : ""
+      );
       fd.append("purchaseDate", vals.purchaseDate?.toISOString?.() || "");
       // send under BOTH names (API accepts either)
       fd.append("warrantyCard", file);
@@ -227,8 +295,12 @@ export default function OfflineRegisterClient() {
       });
 
       const ok = !!res?.data?.success;
-      const msg = res?.data?.message || (ok ? "Submitted!" : "Submission failed");
-      showToast(ok ? "success" : DUP_MSGS.has(msg) ? "warning" : "error", ok ? "Thanks! We’ll review your registration shortly." : msg);
+      const msg =
+        res?.data?.message || (ok ? "Submitted!" : "Submission failed");
+      showToast(
+        ok ? "success" : DUP_MSGS.has(msg) ? "warning" : "error",
+        ok ? "Thanks! We’ll review your registration shortly." : msg
+      );
 
       if (ok) {
         form.reset();
@@ -236,17 +308,13 @@ export default function OfflineRegisterClient() {
         setPreviewUrl("");
       }
     } catch (err) {
-      const msg = err?.response?.data?.message || err?.message || "Could not submit. Try again.";
+      const msg =
+        err?.response?.data?.message ||
+        err?.message ||
+        "Could not submit. Try again.";
       showToast(DUP_MSGS.has(msg) ? "warning" : "error", msg);
     }
   };
-
-  // currently selected product (for trigger display)
-  const selectedProduct = useMemo(
-    () => (products || []).find((p) => p._id === form.watch("productId")),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [products, form.watch("productId")]
-  );
 
   return (
     <main className="py-8">
@@ -265,19 +333,33 @@ export default function OfflineRegisterClient() {
         />
 
         {/* Form Card */}
-        <motion.section className="mt-8" variants={v.container} initial="hidden" animate="show">
+        <motion.section
+          className="mt-8"
+          variants={v.container}
+          initial="hidden"
+          animate="show"
+        >
           <motion.div variants={v.cardPop}>
             <Card className="rounded-2xl">
               <CardHeader className="pb-0">
-                <motion.h2 variants={v.headerDown} className="text-lg font-medium">
+                <motion.h2
+                  variants={v.headerDown}
+                  className="text-lg font-medium"
+                >
                   Your details
                 </motion.h2>
               </CardHeader>
               <CardContent className="pt-4">
                 <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                  <form
+                    onSubmit={form.handleSubmit(onSubmit)}
+                    className="space-y-6"
+                  >
                     {/* Row 1 */}
-                    <motion.div className="grid grid-cols-1 md:grid-cols-2 gap-4" variants={v.container}>
+                    <motion.div
+                      className="grid grid-cols-1 md:grid-cols-2 gap-4"
+                      variants={v.container}
+                    >
                       <motion.div variants={v.fieldRise}>
                         <FormField
                           control={form.control}
@@ -286,7 +368,10 @@ export default function OfflineRegisterClient() {
                             <FormItem>
                               <FormLabel>Full name</FormLabel>
                               <FormControl>
-                                <Input placeholder="Your full name" {...field} />
+                                <Input
+                                  placeholder="Your full name"
+                                  {...field}
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -302,7 +387,11 @@ export default function OfflineRegisterClient() {
                             <FormItem>
                               <FormLabel>Email</FormLabel>
                               <FormControl>
-                                <Input type="email" placeholder="you@example.com" {...field} />
+                                <Input
+                                  type="email"
+                                  placeholder="you@example.com"
+                                  {...field}
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -318,7 +407,11 @@ export default function OfflineRegisterClient() {
                             <FormItem>
                               <FormLabel>Phone number</FormLabel>
                               <FormControl>
-                                <Input type="tel" placeholder="98XXXXXXXX" {...field} />
+                                <Input
+                                  type="tel"
+                                  placeholder="98XXXXXXXX"
+                                  {...field}
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -335,14 +428,22 @@ export default function OfflineRegisterClient() {
                             <FormItem>
                               <FormLabel>Product</FormLabel>
                               <FormControl>
-                                <Select value={field.value ?? ""} onValueChange={field.onChange}>
+                                <Select
+                                  value={field.value ?? ""}
+                                  onValueChange={(val) => {
+                                    field.onChange(val);
+                                    // variant cleared in useEffect tied to selectedProductId
+                                  }}
+                                >
                                   <SelectTrigger className="h-11">
                                     {selectedProduct ? (
                                       <div className="flex items-center gap-2 truncate">
                                         <span className="relative h-6 w-6 rounded border bg-muted overflow-hidden shrink-0">
                                           {selectedProduct?.heroImage?.path ? (
                                             <Image
-                                              src={selectedProduct.heroImage.path}
+                                              src={
+                                                selectedProduct.heroImage.path
+                                              }
                                               alt={selectedProduct.name}
                                               fill
                                               sizes="24px"
@@ -350,15 +451,29 @@ export default function OfflineRegisterClient() {
                                             />
                                           ) : null}
                                         </span>
-                                        <span className="truncate">{selectedProduct.name}</span>
+                                        <span className="truncate">
+                                          {selectedProduct.name}
+                                        </span>
                                         {selectedProduct.modelNumber ? (
                                           <span className="ml-2 text-xs text-muted-foreground truncate">
                                             {selectedProduct.modelNumber}
                                           </span>
                                         ) : null}
+                                        {selectedProduct.hasVariants ? (
+                                          <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
+                                            {selectedProduct.variants.length}{" "}
+                                            variants
+                                          </span>
+                                        ) : null}
                                       </div>
                                     ) : (
-                                      <SelectValue placeholder={loadingProducts ? "Loading…" : "Select product"} />
+                                      <SelectValue
+                                        placeholder={
+                                          loadingProducts
+                                            ? "Loading…"
+                                            : "Select product"
+                                        }
+                                      />
                                     )}
                                   </SelectTrigger>
 
@@ -377,9 +492,18 @@ export default function OfflineRegisterClient() {
                                               />
                                             ) : null}
                                           </span>
-                                          <span className="truncate">{p.name}</span>
+                                          <span className="truncate">
+                                            {p.name}
+                                          </span>
                                           {p.modelNumber ? (
-                                            <span className="ml-2 text-xs text-muted-foreground truncate">{p.modelNumber}</span>
+                                            <span className="ml-2 text-xs text-muted-foreground truncate">
+                                              {p.modelNumber}
+                                            </span>
+                                          ) : null}
+                                          {p.hasVariants ? (
+                                            <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
+                                              {p.variants.length} variants
+                                            </span>
                                           ) : null}
                                         </div>
                                       </SelectItem>
@@ -394,8 +518,64 @@ export default function OfflineRegisterClient() {
                       </motion.div>
                     </motion.div>
 
+                    {/* Variant (only when selected product has variants) */}
+                    <AnimatePresence initial={false} mode="wait">
+                      {selectedHasVariants ? (
+                        <motion.div
+                          key="variantRow"
+                          variants={v.fieldRise}
+                          initial="hidden"
+                          animate="show"
+                          exit={{ opacity: 0, y: 8 }}
+                          className="grid grid-cols-1 md:grid-cols-2 gap-4"
+                        >
+                          <FormField
+                            control={form.control}
+                            name="variantId"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Variant</FormLabel>
+                                <FormControl>
+                                  <Select
+                                    value={field.value ?? ""}
+                                    onValueChange={field.onChange}
+                                  >
+                                    <SelectTrigger className="h-11">
+                                      <SelectValue placeholder="Select variant" />
+                                    </SelectTrigger>
+                                    <SelectContent className="max-h-72">
+                                      {(selectedProduct?.variants || []).map(
+                                        (v) => (
+                                          <SelectItem key={v._id} value={v._id}>
+                                            <div className="flex items-center justify-between gap-2 w-full">
+                                              <span className="truncate">
+                                                {v.variantName}
+                                              </span>
+                                              {v.sku ? (
+                                                <span className="ml-2 text-xs text-muted-foreground">
+                                                  {v.sku}
+                                                </span>
+                                              ) : null}
+                                            </div>
+                                          </SelectItem>
+                                        )
+                                      )}
+                                    </SelectContent>
+                                  </Select>
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </motion.div>
+                      ) : null}
+                    </AnimatePresence>
+
                     {/* Row 2 */}
-                    <motion.div className="grid grid-cols-1 md:grid-cols-2 gap-4" variants={v.container}>
+                    <motion.div
+                      className="grid grid-cols-1 md:grid-cols-2 gap-4"
+                      variants={v.container}
+                    >
                       {/* Purchase date (shadcn date picker) */}
                       <motion.div variants={v.fieldRise}>
                         <FormField
@@ -408,23 +588,31 @@ export default function OfflineRegisterClient() {
                                 <PopoverTrigger asChild>
                                   <Button
                                     variant="outline"
-                                    className={`justify-start text-left font-normal h-11 ${!field.value ? "text-muted-foreground" : ""}`}
+                                    className={`justify-start text-left font-normal h-11 ${
+                                      !field.value
+                                        ? "text-muted-foreground"
+                                        : ""
+                                    }`}
                                     type="button"
                                   >
                                     <CalendarIcon className="mr-2 h-4 w-4" />
-                                    {field.value ? format(field.value, "PPP") : "Pick a date"}
+                                    {field.value
+                                      ? format(field.value, "PPP")
+                                      : "Pick a date"}
                                   </Button>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0" align="start">
+                                <PopoverContent
+                                  className="w-auto p-0"
+                                  align="start"
+                                >
                                   <Calendar
                                     mode="single"
                                     selected={field.value}
-                                    // ⬇️ Prevent future dates
                                     disabled={(date) => date > new Date()}
                                     toDate={new Date()}
                                     onSelect={(d) => {
-                                      // guard again in case of manual calls
-                                      if (d && d <= new Date()) field.onChange(d);
+                                      if (d && d <= new Date())
+                                        field.onChange(d);
                                     }}
                                     initialFocus
                                   />
@@ -448,7 +636,9 @@ export default function OfflineRegisterClient() {
                                 <Input
                                   placeholder="E.g., KBS220053-XYZ"
                                   {...field}
-                                  onChange={(e) => field.onChange(e.target.value.toUpperCase())}
+                                  onChange={(e) =>
+                                    field.onChange(e.target.value.toUpperCase())
+                                  }
                                 />
                               </FormControl>
                               <FormMessage />
@@ -459,7 +649,10 @@ export default function OfflineRegisterClient() {
                     </motion.div>
 
                     {/* Row 3 */}
-                    <motion.div className="grid grid-cols-1 md:grid-cols-2 gap-4" variants={v.container}>
+                    <motion.div
+                      className="grid grid-cols-1 md:grid-cols-2 gap-4"
+                      variants={v.container}
+                    >
                       {/* Purchased from */}
                       <motion.div variants={v.fieldRise}>
                         <FormField
@@ -469,7 +662,10 @@ export default function OfflineRegisterClient() {
                             <FormItem>
                               <FormLabel>Purchased from</FormLabel>
                               <FormControl>
-                                <Select value={field.value ?? ""} onValueChange={field.onChange}>
+                                <Select
+                                  value={field.value ?? ""}
+                                  onValueChange={field.onChange}
+                                >
                                   <SelectTrigger className="h-11">
                                     <SelectValue placeholder="Select channel" />
                                   </SelectTrigger>
@@ -505,7 +701,10 @@ export default function OfflineRegisterClient() {
                                 <FormItem>
                                   <FormLabel>Shop name</FormLabel>
                                   <FormControl>
-                                    <Input placeholder="Shop / Retailer name" {...field} />
+                                    <Input
+                                      placeholder="Shop / Retailer name"
+                                      {...field}
+                                    />
                                   </FormControl>
                                   <FormMessage />
                                 </FormItem>
@@ -519,14 +718,24 @@ export default function OfflineRegisterClient() {
                     </motion.div>
 
                     {/* Warranty card image + Sample */}
-                    <motion.div variants={v.container} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <motion.div
+                      variants={v.container}
+                      className="grid grid-cols-1 lg:grid-cols-2 gap-6"
+                    >
                       {/* Upload & preview */}
                       <motion.div variants={v.fieldRise}>
                         <FormLabel>Warranty card image</FormLabel>
                         <div className="mt-2 flex flex-col sm:flex-row gap-4 sm:items-center">
                           <label className="inline-flex items-center gap-3">
-                            <Input type="file" accept="image/*" onChange={onPickFile} className="cursor-pointer" />
-                            <span className="text-sm text-muted-foreground hidden sm:block">PNG/JPG/WEBP</span>
+                            <Input
+                              type="file"
+                              accept="image/*"
+                              onChange={onPickFile}
+                              className="cursor-pointer"
+                            />
+                            <span className="text-sm text-muted-foreground hidden sm:block">
+                              PNG/JPG/WEBP
+                            </span>
                           </label>
 
                           <AnimatePresence mode="wait">
@@ -539,19 +748,31 @@ export default function OfflineRegisterClient() {
                                 exit="exit"
                                 className="relative w-40 h-24 rounded-md overflow-hidden border bg-muted shrink-0"
                               >
-                                <Image src={previewUrl} alt="Warranty card preview" fill sizes="160px" className="object-cover" />
+                                <Image
+                                  src={previewUrl}
+                                  alt="Warranty card preview"
+                                  fill
+                                  sizes="160px"
+                                  className="object-cover"
+                                />
                               </motion.div>
                             ) : null}
                           </AnimatePresence>
                         </div>
                         <FormDescription className="mt-1">
-                          Clear photo of your warranty card or invoice where the serial is visible.
+                          Clear photo of your warranty card or invoice where the
+                          serial is visible.
                         </FormDescription>
                       </motion.div>
 
-                      {/* Sample shown inline (not a 'view sample' button) */}
-                      <motion.div variants={v.fieldRise} className="rounded-lg border p-3 bg-muted/30">
-                        <div className="text-sm font-medium mb-2">Sample (for reference)</div>
+                      {/* Sample shown inline */}
+                      <motion.div
+                        variants={v.fieldRise}
+                        className="rounded-lg border p-3 bg-muted/30"
+                      >
+                        <div className="text-sm font-medium mb-2">
+                          Sample (for reference)
+                        </div>
                         <div className="relative w-full aspect-[4/3] rounded-md overflow-hidden bg-white">
                           <Image
                             src="/assets/images/warranty.png"
@@ -571,10 +792,16 @@ export default function OfflineRegisterClient() {
                         <Button
                           type="submit"
                           className="h-11 px-5"
-                          style={{ backgroundColor: PRIMARY, color: "#111", borderColor: PRIMARY }}
+                          style={{
+                            backgroundColor: PRIMARY,
+                            color: "#111",
+                            borderColor: PRIMARY,
+                          }}
                         >
                           <Upload className="h-4 w-4 mr-2" />
-                          {form.formState.isSubmitting ? "Submitting…" : "Submit registration"}
+                          {form.formState.isSubmitting
+                            ? "Submitting…"
+                            : "Submit registration"}
                         </Button>
                       </motion.div>
                     </motion.div>
