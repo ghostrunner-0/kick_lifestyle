@@ -10,13 +10,21 @@ import "slick-carousel/slick/slick-theme.css";
 
 export default function Banner({ banners = [], loading = false }) {
   const [active, setActive] = useState(0);
-  const [currentBg, setCurrentBg] = useState(banners?.[0]?.bgColor || "#ffffff");
+  const [currentBg, setCurrentBg] = useState(
+    banners?.[0]?.bgColor || "#ffffff"
+  );
   const sliderRef = useRef(null);
 
-  // tiny helpers for the soft gradient bg
+  // helpers
   const hexToRgb = (hex) => {
     const v = hex?.replace("#", "") || "ffffff";
-    const n = v.length === 3 ? v.split("").map((c) => c + c).join("") : v;
+    const n =
+      v.length === 3
+        ? v
+            .split("")
+            .map((c) => c + c)
+            .join("")
+        : v;
     const num = parseInt(n, 16);
     return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
   };
@@ -117,11 +125,10 @@ export default function Banner({ banners = [], loading = false }) {
               const mobileSrc = mobileImage?.path || desktopImage?.path || "";
               const alt = desktopImage?.alt || mobileImage?.alt || "Banner";
 
-              // LCP slide: eager + fetchpriority high (avoid Next's mis-preload with <picture>)
               const isLCP = i === 0;
               const eagerProps = isLCP
                 ? { loading: "eager", fetchPriority: "high" }
-                : {}; // others default (lazy when offscreen)
+                : {};
 
               return (
                 <div key={_id || i} className="px-5">
@@ -132,17 +139,17 @@ export default function Banner({ banners = [], loading = false }) {
                     className="block rounded-2xl overflow-hidden shadow-lg"
                   >
                     <picture>
-                      {/* Desktop art-direction */}
+                      {/* Desktop */}
                       <source media="(min-width: 768px)" srcSet={desktopSrc} />
-                      {/* Mobile default image (Next optimizing) */}
+                      {/* Mobile (same structure, fixed height) */}
+                      <source media="(max-width: 767px)" srcSet={mobileSrc} />
                       <Image
                         src={mobileSrc}
                         alt={alt}
                         width={1600}
-                        height={900}
-                        // realistic sizes for your layout (≈1263px desktop hero)
-                        sizes="(min-width: 1280px) 1263px, (min-width: 768px) 100vw, 100vw"
-                        className="w-full h-auto object-cover rounded-2xl"
+                        height={1100}
+                        sizes="100vw"
+                        className="w-full object-cover rounded-2xl"
                         {...eagerProps}
                       />
                     </picture>
