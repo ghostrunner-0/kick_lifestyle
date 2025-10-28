@@ -10,15 +10,27 @@ import BlogCarousel from "@/components/application/website/BlogCarousel";
 import HomePageBannerDisplay from "@/components/application/website/HomePageBannerDisplay";
 
 import { motion, useReducedMotion } from "framer-motion";
+import KickStarsArmy from "@/components/application/website/KickStarsArmy";
+import KickPartnersMarquee from "@/components/application/website/KickPartnersMarquee";
 
-const Trusted = dynamic(() => import("@/components/application/website/Trusted"), { ssr: true });
-const BestSellers = dynamic(() => import("@/components/application/website/BestSellers"), { ssr: true });
-const ProductGrid = dynamic(() => import("@/components/application/website/ProductGrid"), { ssr: true });
+const Trusted = dynamic(
+  () => import("@/components/application/website/Trusted"),
+  { ssr: true }
+);
+const BestSellers = dynamic(
+  () => import("@/components/application/website/BestSellers"),
+  { ssr: true }
+);
+const ProductGrid = dynamic(
+  () => import("@/components/application/website/ProductGrid"),
+  { ssr: true }
+);
 
 /* same canonical key for quick counting */
 const canonicalKey = (p) => {
   if (!p) return null;
-  const slug = p.slug || p.handle || p?.data?.slug || p.productSlug || p?.seo?.slug;
+  const slug =
+    p.slug || p.handle || p?.data?.slug || p.productSlug || p?.seo?.slug;
   if (slug) return `slug:${String(slug).toLowerCase()}`;
   const parent = p.parentId || p.productId || p.pid || p.masterId || p.groupId;
   if (parent) return `pid:${parent}`;
@@ -44,7 +56,11 @@ export default function HomeClient({ initialBanners = [] }) {
   // apply only to sections that should animate on scroll
   const scrollAnimProps = prefersReduced
     ? {}
-    : { initial: "hidden", whileInView: "visible", viewport: { once: true, amount: 0.22 } };
+    : {
+        initial: "hidden",
+        whileInView: "visible",
+        viewport: { once: true, amount: 0.22 },
+      };
 
   // count unique to decide whether to render the big grid
   const uniqueCount = useMemo(() => {
@@ -107,6 +123,15 @@ export default function HomeClient({ initialBanners = [] }) {
       >
         <Trusted />
       </motion.section>
+      <motion.section
+        className="flex justify-center items-center w-full py-12"
+        variants={reveal}
+        {...scrollAnimProps}
+      >
+        <div className="w-full max-w-7xl px-4">
+          <KickStarsArmy />
+        </div>
+      </motion.section>
 
       <motion.section
         className="content-visibility-auto"
@@ -114,6 +139,23 @@ export default function HomeClient({ initialBanners = [] }) {
         {...scrollAnimProps}
       >
         <BlogCarousel />
+      </motion.section>
+      <motion.section
+        className="content-visibility-auto"
+        variants={reveal}
+        {...scrollAnimProps}
+      >
+        <KickPartnersMarquee
+          partners={[
+            { name: "HUKUT", src: "/assets/partners/hukut.svg" },
+            { name: "DARAZ", src: "/assets/partners/daraz.svg" },
+            { name: "KHALTI", src: "/assets/partners/khalti.svg" },
+            { name: "IMEPAY", src: "/assets/partners/imepay.svg" },
+            { name: "BROTHER MART", src: "/assets/partners/brothermart.svg" },
+          ]}
+          height="h-16"
+          speedSec={20}
+        />
       </motion.section>
     </main>
   );

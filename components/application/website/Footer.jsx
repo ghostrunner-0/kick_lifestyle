@@ -2,6 +2,10 @@
 
 import Image from "next/image";
 import Link from "next/link";
+
+// ⬇️ use the two-card variant
+import KickFooterTopCards from "./KickFooterTopCards";
+
 import Logo from "@/public/assets/images/logo-black.png";
 import {
   Facebook,
@@ -50,9 +54,17 @@ const HELP = [
 
 const SOCIAL = [
   { label: "Facebook", href: "https://facebook.com/yourbrand", Icon: Facebook },
-  { label: "Instagram", href: "https://instagram.com/yourbrand", Icon: Instagram },
+  {
+    label: "Instagram",
+    href: "https://instagram.com/yourbrand",
+    Icon: Instagram,
+  },
   { label: "YouTube", href: "https://youtube.com/@yourbrand", Icon: Youtube },
-  { label: "Twitter / X", href: "https://twitter.com/yourbrand", Icon: Twitter },
+  {
+    label: "Twitter / X",
+    href: "https://twitter.com/yourbrand",
+    Icon: Twitter,
+  },
 ];
 
 /* ---------- Reusable link ---------- */
@@ -64,7 +76,9 @@ function ListLink({ href, children }) {
         className="group flex items-center gap-2 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         <ChevronRight className="h-4 w-4 opacity-40 transition-transform group-hover:translate-x-0.5" />
-        <span className="underline-offset-4 group-hover:underline">{children}</span>
+        <span className="underline-offset-4 group-hover:underline">
+          {children}
+        </span>
       </Link>
     </li>
   );
@@ -87,6 +101,9 @@ export default function Footer() {
 
   return (
     <footer className="w-full border-t bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/70 dark:bg-neutral-950/60">
+      {/* ⭐ Top two-card row (brand warranty + all-nepal delivery) */}
+      <KickFooterTopCards />
+
       {/* match header widths */}
       <div className="mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-10 2xl:px-16 py-10">
         {/* Mobile View */}
@@ -132,20 +149,22 @@ export default function Footer() {
               </AccordionTrigger>
               <AccordionContent>
                 {isLoading ? (
-                  <div className="mt-2 text-sm text-muted-foreground">Loading…</div>
+                  <div className="mt-2 text-sm text-muted-foreground">
+                    Loading…
+                  </div>
                 ) : (
                   <ul className="mt-3 space-y-1.5">
-                    {catLinks?.length
-                      ? catLinks.map((item) => (
-                          <ListLink key={item.label} href={item.href}>
-                            {item.label}
-                          </ListLink>
-                        ))
-                      : (
-                        <li className="py-1.5 text-sm text-muted-foreground">
-                          No categories available
-                        </li>
-                      )}
+                    {catLinks?.length ? (
+                      catLinks.map((item) => (
+                        <ListLink key={item.label} href={item.href}>
+                          {item.label}
+                        </ListLink>
+                      ))
+                    ) : (
+                      <li className="py-1.5 text-sm text-muted-foreground">
+                        No categories available
+                      </li>
+                    )}
                   </ul>
                 )}
               </AccordionContent>
@@ -191,7 +210,10 @@ export default function Footer() {
                     <Mail className="mt-0.5 h-4 w-4 text-muted-foreground" />
                     <div>
                       <div className="text-muted-foreground">Email</div>
-                      <Link href="mailto:info@kick.com.np" className="hover:underline">
+                      <Link
+                        href="mailto:info@kick.com.np"
+                        className="hover:underline"
+                      >
                         info@kick.com.np
                       </Link>
                     </div>
@@ -200,7 +222,10 @@ export default function Footer() {
                     <Phone className="mt-0.5 h-4 w-4 text-muted-foreground" />
                     <div>
                       <div className="text-muted-foreground">Phone</div>
-                      <Link href="tel:+9779820810020" className="hover:underline">
+                      <Link
+                        href="tel:+9779820810020"
+                        className="hover:underline"
+                      >
                         +977 9820810020
                       </Link>
                     </div>
@@ -270,17 +295,17 @@ export default function Footer() {
               <div className="mt-3 text-sm text-muted-foreground">Loading…</div>
             ) : (
               <ul className="mt-3 space-y-1.5">
-                {catLinks?.length
-                  ? catLinks.map((item) => (
-                      <ListLink key={item.label} href={item.href}>
-                        {item.label}
-                      </ListLink>
-                    ))
-                  : (
-                    <li className="py-1.5 text-sm text-muted-foreground">
-                      No categories available
-                    </li>
-                  )}
+                {catLinks?.length ? (
+                  catLinks.map((item) => (
+                    <ListLink key={item.label} href={item.href}>
+                      {item.label}
+                    </ListLink>
+                  ))
+                ) : (
+                  <li className="py-1.5 text-sm text-muted-foreground">
+                    No categories available
+                  </li>
+                )}
               </ul>
             )}
           </div>
@@ -317,7 +342,10 @@ export default function Footer() {
                 <Mail className="mt-0.5 h-4 w-4 text-muted-foreground" />
                 <div>
                   <div className="text-muted-foreground">Email</div>
-                  <Link href="mailto:info@kick.com.np" className="hover:underline">
+                  <Link
+                    href="mailto:info@kick.com.np"
+                    className="hover:underline"
+                  >
                     info@kick.com.np
                   </Link>
                 </div>

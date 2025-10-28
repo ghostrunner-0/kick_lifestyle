@@ -1642,38 +1642,68 @@ export default function ProductPageClient({
               <TabsTrigger value="reviews">Reviews</TabsTrigger>
             </TabsList>
 
+            {/* OVERVIEW TAB — premium layout: shortDesc card → images */}
+            {/* OVERVIEW — clean, minimal, edge-aligned images */}
             <TabsContent value="overview" className="mt-6 space-y-6">
-              {product?.longDescription ? (
+              {/* short description */}
+              {product?.shortDesc ? (
                 <motion.div
-                  className="prose dark:prose-invert max-w-none text-sm leading-7"
                   variants={fadeIn}
+                  className="rounded-2xl border border-neutral-200/60 dark:border-neutral-800/60 
+             bg-white/80 dark:bg-neutral-900/60 backdrop-blur-sm 
+             p-6 md:p-8 shadow-[0_2px_16px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.08)] 
+             transition-all duration-300"
                 >
-                  <p>{product.longDescription}</p>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-[18px] md:text-[20px] font-semibold text-neutral-900 dark:text-neutral-100 tracking-tight">
+                      Overview
+                    </h2>
+                    <span className="h-1.5 w-12 rounded-full bg-gradient-to-r from-[#fcba17] to-amber-400"></span>
+                  </div>
+
+                  <p className="text-[15.5px] leading-8 text-neutral-700 dark:text-neutral-300 font-[450]">
+                    {product.shortDesc}
+                  </p>
                 </motion.div>
               ) : null}
 
-              {Array.isArray(product?.descImages) &&
-                product.descImages.length > 0 && (
-                  <section className="bleed-images overflow-x-hidden">
-                    <div className="space-y-0">
-                      {product.descImages.map((img, i) =>
+              {/* images (descImages preferred, productMedia fallback) */}
+              {(() => {
+                const imgs =
+                  Array.isArray(product?.descImages) &&
+                  product.descImages.length > 0
+                    ? product.descImages
+                    : Array.isArray(product?.productMedia)
+                    ? product.productMedia
+                    : [];
+
+                if (!imgs.length) return null;
+
+                return (
+                  <section className="relative w-screen left-1/2 right-1/2 -translate-x-1/2">
+                    <div className="px-1 sm:px-2 md:px-4 lg:px-6 space-y-2">
+                      {imgs.map((img, i) =>
                         img?.path ? (
                           <motion.img
                             key={img?._id || i}
                             variants={fadeIn}
                             src={img.path}
-                            alt={img?.alt || `desc-${i}`}
+                            alt={img?.alt || `overview-${i}`}
                             loading="lazy"
                             draggable={false}
-                            className="block w-full h-auto object-contain select-none"
+                            className="block w-full h-auto object-cover rounded-xl overflow-hidden"
                           />
                         ) : (
-                          <div key={i} className="h-[40vh] bg-muted" />
+                          <div
+                            key={i}
+                            className="h-[45vh] bg-muted rounded-xl overflow-hidden"
+                          />
                         )
                       )}
                     </div>
                   </section>
-                )}
+                );
+              })()}
             </TabsContent>
 
             <TabsContent value="specs" className="mt-6">
