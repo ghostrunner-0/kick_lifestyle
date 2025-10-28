@@ -63,9 +63,13 @@ const STATIC_NAV = [
       { label: "Blogs", href: "/blogs" },
       { label: "About Us", href: "/about" },
       { label: "Contact Us", href: "/contact" },
-      { label: "Student Discount", href: "/student-discount" },
     ],
   },
+  // {
+  //   label: "Discount & Offers",
+  //   items: [{ label: "Student Discount", href: "/student-discount" }],
+  // },
+  { label: "Student Discount", href: "/student-discount" },
 ];
 
 const toTitle = (s) =>
@@ -255,7 +259,11 @@ export default function Header() {
       ].join(" ")
     : "fixed inset-x-0 top-0 z-[40] bg-white/70 supports-[backdrop-filter]:bg-white/60 backdrop-blur";
 
-  const textCls = isHome ? (isStickyShade ? "text-gray-900" : "text-white") : "text-gray-900";
+  const textCls = isHome
+    ? isStickyShade
+      ? "text-gray-900"
+      : "text-white"
+    : "text-gray-900";
   const currentLogo = isHome && !isStickyShade ? LOGO_WHITE : LOGO_BLACK;
 
   /* global listeners to open search/cart */
@@ -275,7 +283,10 @@ export default function Header() {
   useLayoutEffect(() => {
     const setVar = () => {
       const h = headerRef.current?.getBoundingClientRect().height ?? 64;
-      document.documentElement.style.setProperty("--site-header-h", `${Math.round(h)}px`);
+      document.documentElement.style.setProperty(
+        "--site-header-h",
+        `${Math.round(h)}px`
+      );
       window.dispatchEvent(new Event("header:resize"));
     };
     setVar();
@@ -349,7 +360,9 @@ export default function Header() {
                 <nav className="p-3">
                   <ul className="space-y-2">
                     {isLoading && (
-                      <li className="px-4 py-2 text-sm text-muted-foreground">Loading…</li>
+                      <li className="px-4 py-2 text-sm text-muted-foreground">
+                        Loading…
+                      </li>
                     )}
 
                     {!isLoading &&
@@ -370,7 +383,10 @@ export default function Header() {
                       item.items ? (
                         <li key={item.label}>
                           <Accordion type="single" collapsible>
-                            <AccordionItem value={item.label} className="border-0">
+                            <AccordionItem
+                              value={item.label}
+                              className="border-0"
+                            >
                               <AccordionTrigger className="px-4 h-12 text-[15px] font-medium hover:no-underline rounded-lg data-[state=closed]:hover:bg-muted/60 data-[state=open]:bg-muted">
                                 {item.label}
                               </AccordionTrigger>
@@ -556,7 +572,9 @@ export default function Header() {
       </header>
 
       {/* Push content below fixed header (home keeps hero overlay) */}
-      {!isHome && <div style={{ height: "var(--site-header-h)" }} aria-hidden />}
+      {!isHome && (
+        <div style={{ height: "var(--site-header-h)" }} aria-hidden />
+      )}
 
       <CartSidebar open={cartOpen} onOpenChange={setCartOpen} />
       <SearchSidebar
