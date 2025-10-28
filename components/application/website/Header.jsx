@@ -47,7 +47,6 @@ import {
 /* Categories */
 import { useCategories } from "@/components/providers/CategoriesProvider";
 
-/* -------- Static (non-category) items -------- */
 const STATIC_NAV = [
   {
     label: "Support & warranty",
@@ -65,10 +64,6 @@ const STATIC_NAV = [
       { label: "Contact Us", href: "/contact" },
     ],
   },
-  // {
-  //   label: "Discount & Offers",
-  //   items: [{ label: "Student Discount", href: "/student-discount" }],
-  // },
   { label: "Student Discount", href: "/student-discount" },
 ];
 
@@ -78,11 +73,9 @@ const toTitle = (s) =>
     .replace(/\s+/g, " ")
     .replace(/\b\w/g, (m) => m.toUpperCase());
 
-/* -------- Portal roles that should see /admin/dashboard -------- */
 const PORTAL_ROLES = new Set(["admin", "sales", "editor"]);
 const LS_ROLE_KEY = "auth.role";
 
-/* Extract role from different API shapes */
 const pickRole = (json) =>
   json?.role ||
   json?.data?.role ||
@@ -104,11 +97,9 @@ export default function Header() {
 
   const { categories, isLoading } = useCategories();
 
-  /* -------- account link (fast + role-aware) -------- */
   const [accountHref, setAccountHref] = useState("/auth/login");
   const [accountLabel, setAccountLabel] = useState("Login / Register");
 
-  // 1) Instant boot from localStorage to avoid flicker
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
@@ -123,7 +114,6 @@ export default function Header() {
     } catch {}
   }, []);
 
-  // 2) Refresh from API
   useEffect(() => {
     let cancelled = false;
     const ac = new AbortController();
@@ -204,7 +194,6 @@ export default function Header() {
     };
   }, []);
 
-  /* -------- sticky shade on home -------- */
   useEffect(() => {
     if (!isHome) return;
     const onScroll = () => setIsStickyShade(window.scrollY > 8);
@@ -223,7 +212,6 @@ export default function Header() {
       }));
   }, [categories]);
 
-  /* -------- search index (for SearchSidebar) -------- */
   useEffect(() => {
     let cancel = false;
     (async () => {
@@ -247,9 +235,6 @@ export default function Header() {
     router.push(href);
   };
 
-  const containerMaxW = "max-w-[1600px]";
-
-  /* keep header beneath shadcn Sheet/Dialog (z-50) */
   const headerCls = isHome
     ? [
         "fixed inset-x-0 top-0 z-[40] transition-colors",
@@ -266,7 +251,6 @@ export default function Header() {
     : "text-gray-900";
   const currentLogo = isHome && !isStickyShade ? LOGO_WHITE : LOGO_BLACK;
 
-  /* global listeners to open search/cart */
   useEffect(() => {
     const openSearch = () => setSearchOpen(true);
     const openCart = () => setCartOpen(true);
@@ -278,7 +262,6 @@ export default function Header() {
     };
   }, []);
 
-  /* expose header height CSS var */
   const headerRef = useRef(null);
   useLayoutEffect(() => {
     const setVar = () => {
@@ -305,7 +288,7 @@ export default function Header() {
     <>
       <header ref={headerRef} className={headerCls}>
         <div
-          className={`mx-auto ${containerMaxW} flex items-center justify-between lg:py-5 py-3 px-4 sm:px-6 lg:px-10 2xl:px-16`}
+          className={`w-full flex items-center relative justify-between py-4 px-6 md:px-10 lg:px-16 text-black`}
         >
           {/* Left: Mobile menu + Desktop logo */}
           <div className="flex items-center gap-2">
@@ -325,7 +308,6 @@ export default function Header() {
                 side="left"
                 className="w-[80%] sm:w-[380px] p-0 flex flex-col [&>button.absolute.right-4.top-4]:hidden"
               >
-                {/* Required for Radix a11y */}
                 <SheetHeader className="sr-only">
                   <SheetTitle>Main navigation</SheetTitle>
                 </SheetHeader>
@@ -341,7 +323,7 @@ export default function Header() {
                   />
                   <SheetClose asChild>
                     <button className="h-9 w-9 rounded-full bg-black/5 hover:bg-black/10">
-                      <span className="sr-only">Close</span>✕
+                      ✕
                     </button>
                   </SheetClose>
                 </div>
@@ -431,7 +413,6 @@ export default function Header() {
                       <Link
                         href={accountHref}
                         className="flex items-center justify-center gap-2 rounded-lg border bg-white hover:bg-muted h-11 px-4 text-sm font-medium"
-                        title={accountLabel}
                       >
                         <User className="h-5 w-5" />
                         <span>{accountLabel}</span>
@@ -442,9 +423,8 @@ export default function Header() {
               </SheetContent>
             </Sheet>
 
-            {/* Desktop: Logo */}
             <div className="hidden lg:block">
-              <Link href="/" className="block" aria-label="Go to home">
+              <Link href="/" aria-label="Go to home">
                 <Image
                   src={currentLogo}
                   height={146}
@@ -459,8 +439,7 @@ export default function Header() {
 
           {/* Center */}
           <div className="flex-1 flex justify-center min-w-0">
-            {/* Mobile centered logo */}
-            <Link href="/" className="lg:hidden block" aria-label="Go to home">
+            <Link href="/" className="lg:hidden" aria-label="Go to home">
               <Image
                 src={currentLogo}
                 height={146}
@@ -471,7 +450,6 @@ export default function Header() {
               />
             </Link>
 
-            {/* Desktop nav */}
             <nav
               className={`hidden lg:flex items-center gap-6 relative whitespace-nowrap ${textCls}`}
             >
@@ -490,10 +468,8 @@ export default function Header() {
                   <div key={item.label} className="relative group">
                     <button
                       className={`nav-link-underline inline-flex items-center gap-1 text-sm font-medium tracking-wide h-10 px-1 whitespace-nowrap ${textCls}`}
-                      aria-haspopup="menu"
-                      aria-expanded="false"
                     >
-                      <span className="whitespace-nowrap">{item.label}</span>
+                      <span>{item.label}</span>
                       <ChevronDown
                         className={`h-4 w-4 transition-transform duration-500 group-hover:rotate-180 ${textCls}`}
                       />
@@ -533,8 +509,6 @@ export default function Header() {
               variant="ghost"
               size="icon"
               className={`hidden lg:inline-flex hover:bg-transparent ${textCls}`}
-              aria-label="Search"
-              title="Search"
               onClick={() => setSearchOpen(true)}
             >
               <Search className="h-5 w-5" />
@@ -545,8 +519,6 @@ export default function Header() {
               variant="ghost"
               size="icon"
               className={`hidden lg:inline-flex hover:bg-transparent ${textCls}`}
-              aria-label="Account"
-              title={accountLabel}
             >
               <Link href={accountHref}>
                 <User className="h-5 w-5" />
@@ -556,9 +528,7 @@ export default function Header() {
             <button
               type="button"
               onClick={() => setCartOpen(true)}
-              className={`relative inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-md ${textCls}`}
-              aria-label="Cart"
-              title="Cart"
+              className={`relative inline-flex h-10 w-10 items-center justify-center rounded-md ${textCls}`}
             >
               <ShoppingCart className="h-5 w-5" />
               {cartCount > 0 && (
@@ -571,10 +541,7 @@ export default function Header() {
         </div>
       </header>
 
-      {/* Push content below fixed header (home keeps hero overlay) */}
-      {!isHome && (
-        <div style={{ height: "var(--site-header-h)" }} aria-hidden />
-      )}
+      {!isHome && <div style={{ height: "var(--site-header-h)" }} />}
 
       <CartSidebar open={cartOpen} onOpenChange={setCartOpen} />
       <SearchSidebar
