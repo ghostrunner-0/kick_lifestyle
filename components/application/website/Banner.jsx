@@ -10,21 +10,13 @@ import "slick-carousel/slick/slick-theme.css";
 
 export default function Banner({ banners = [], loading = false }) {
   const [active, setActive] = useState(0);
-  const [currentBg, setCurrentBg] = useState(
-    banners?.[0]?.bgColor || "#ffffff"
-  );
+  const [currentBg, setCurrentBg] = useState(banners?.[0]?.bgColor || "#ffffff");
   const sliderRef = useRef(null);
 
-  // helpers
+  // helpers for gradient background
   const hexToRgb = (hex) => {
     const v = hex?.replace("#", "") || "ffffff";
-    const n =
-      v.length === 3
-        ? v
-            .split("")
-            .map((c) => c + c)
-            .join("")
-        : v;
+    const n = v.length === 3 ? v.split("").map((c) => c + c).join("") : v;
     const num = parseInt(n, 16);
     return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
   };
@@ -107,15 +99,15 @@ export default function Banner({ banners = [], loading = false }) {
 
   return (
     <div className="relative w-full bg-white isolate">
-      {/* soft background wash */}
+      {/* gradient wash */}
       <div
         className="absolute left-0 right-0 top-0 -z-10 overflow-hidden h-[45vh] min-h-[260px] max-h-[520px]"
         style={{ backgroundImage: mkGradient(currentBg) }}
       />
 
-      <div className="relative z-10 max-w-[1980px] mx-auto px-4 pt-20 pb-12">
+      <div className="relative z-10 max-w-[1980px] mx-auto px-2 sm:px-4 pt-20 pb-12">
         {loading || banners.length === 0 ? (
-          <div className="px-5">
+          <div className="px-2 sm:px-5">
             <Skeleton className="w-full h-[200px] md:h-[400px] rounded-2xl" />
           </div>
         ) : (
@@ -124,35 +116,43 @@ export default function Banner({ banners = [], loading = false }) {
               const desktopSrc = desktopImage?.path || mobileImage?.path || "";
               const mobileSrc = mobileImage?.path || desktopImage?.path || "";
               const alt = desktopImage?.alt || mobileImage?.alt || "Banner";
-
               const isLCP = i === 0;
-              const eagerProps = isLCP
-                ? { loading: "eager", fetchPriority: "high" }
-                : {};
 
               return (
-                <div key={_id || i} className="px-5">
+                <div key={_id || i} className="px-2 sm:px-5">
                   <a
                     href={href || "#"}
                     target={href && href !== "#" ? "_blank" : undefined}
                     rel="noreferrer"
                     className="block rounded-2xl overflow-hidden shadow-lg"
                   >
-                    <picture>
-                      {/* Desktop */}
-                      <source media="(min-width: 768px)" srcSet={desktopSrc} />
-                      {/* Mobile (same structure, fixed height) */}
-                      <source media="(max-width: 767px)" srcSet={mobileSrc} />
+                    {/* Desktop (auto height) */}
+                    <div className="hidden md:block">
+                      <picture>
+                        <source media="(min-width: 768px)" srcSet={desktopSrc} />
+                        <Image
+                          src={desktopSrc}
+                          alt={alt}
+                          width={1600}
+                          height={900}
+                          sizes="(min-width: 1280px) 1263px, (min-width: 768px) 100vw, 100vw"
+                          className="w-full h-auto object-cover rounded-2xl"
+                          {...(isLCP ? { loading: "eager", fetchPriority: "high" } : {})}
+                        />
+                      </picture>
+                    </div>
+
+                    {/* Mobile (fixed 740px height) */}
+                    <div className="block md:hidden relative w-full h-[740px] rounded-2xl overflow-hidden">
                       <Image
                         src={mobileSrc}
                         alt={alt}
-                        width={1600}
-                        height={1100}
+                        fill
                         sizes="100vw"
-                        className="w-full object-cover rounded-2xl"
-                        {...eagerProps}
+                        className="object-cover rounded-2xl"
+                        {...(isLCP ? { loading: "eager", fetchPriority: "high" } : {})}
                       />
-                    </picture>
+                    </div>
                   </a>
                 </div>
               );
