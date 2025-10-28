@@ -1,14 +1,16 @@
+// app/api/products/route.js (or app/api/search-index/route.js)
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/DB";
 import Product from "@/models/Product.model";
 import Category from "@/models/Category.model";
 import ProductVariant from "@/models/ProductVariant.model";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     await connectDB();
 
-    // Build a compact index in one go via aggregation
     const rows = await Product.aggregate([
       { $match: { showInWebsite: true, deletedAt: null } },
       {
@@ -17,7 +19,9 @@ export async function GET() {
           localField: "category",
           foreignField: "_id",
           as: "cat",
-          pipeline: [{ $project: { _id: 0, name: 1, slug: 1, showOnWebsite: 1 } }],
+          pipeline: [
+            { $project: { _id: 0, name: 1, slug: 1, showOnWebsite: 1 } },
+          ],
         },
       },
       {
@@ -41,15 +45,15 @@ export async function GET() {
           mrp: 1,
           specialPrice: 1,
           stock: 1,
-          categoryName: { $ifNull: [{ $first: "$cat.name" }, "" ] },
-          categorySlug: { $ifNull: [{ $first: "$cat.slug" }, "" ] },
+          categoryName: { $ifNull: [{ $first: "$cat.name" }, ""] },
+          categorySlug: { $ifNull: [{ $first: "$cat.slug" }, ""] },
           imageUrl: {
             $ifNull: [
               "$heroImage.path",
-              { $arrayElemAt: ["$productMedia.path", 0] }
-            ]
+              { $arrayElemAt: ["$productMedia.path", 0] },
+            ],
           },
-          sku: { $ifNull: [{ $arrayElemAt: ["$vars.sku", 0] }, "" ] },
+          sku: { $ifNull: [{ $arrayElemAt: ["$vars.sku", 0] }, ""] },
           skus: "$vars.sku",
         },
       },
@@ -60,16 +64,15 @@ export async function GET() {
         },
       },
       { $sort: { updatedAt: -1 } },
-      { $limit: 5000 }, // safety cap
+      { $limit: 5000 },
     ]);
 
-    // Filter out categories hidden on website (if needed)
     const products = rows.map((r) => ({
       id: String(r._id),
       slug: r.slug,
       name: r.name,
-      sku: r.sku,           // first sku
-      skus: r.skus || [],   // optional list
+      sku: r.sku,
+      skus: r.skus || [],
       category: r.categoryName,
       categorySlug: r.categorySlug,
       imageUrl: r.imageUrl || "",
@@ -79,11 +82,14 @@ export async function GET() {
     }));
 
     return new NextResponse(
-      JSON.stringify({ success: true, version: new Date().toISOString(), products }),
+      JSON.stringify({
+        success: true,
+        version: new Date().toISOString(),
+        products,
+      }),
       {
         headers: {
           "Content-Type": "application/json",
-          // Cache at the edge/CDN; refresh hourly, allow stale
           "Cache-Control": "s-maxage=3600, stale-while-revalidate=86400",
         },
       }
