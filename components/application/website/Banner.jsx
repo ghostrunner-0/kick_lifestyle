@@ -143,7 +143,7 @@ export default function Banner({ banners = [], loading = false }) {
                     </div>
 
                     {/* Mobile (fixed 740px height) */}
-                    <div className="block md:hidden relative w-full h-[320px] rounded-2xl overflow-hidden">
+                    <div className="block md:hidden relative w-full h-[500px] rounded-2xl overflow-hidden">
                       <Image
                         src={mobileSrc}
                         alt={alt}
