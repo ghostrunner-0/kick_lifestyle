@@ -10,8 +10,9 @@ import BlogCarousel from "@/components/application/website/BlogCarousel";
 import HomePageBannerDisplay from "@/components/application/website/HomePageBannerDisplay";
 
 import { motion, useReducedMotion } from "framer-motion";
-import KickStarsArmy from "@/components/application/website/KickStarsArmy";
+import KickStarsArmy from "@/components/application/website/KickStars";
 import KickPartnersMarquee from "@/components/application/website/KickPartnersMarquee";
+import KickReviewsCoverage from "@/components/application/website/KickReviewsCoverage";
 
 const Trusted = dynamic(
   () => import("@/components/application/website/Trusted"),
@@ -124,15 +125,22 @@ export default function HomeClient({ initialBanners = [] }) {
         <Trusted />
       </motion.section>
       <motion.section
-        className="flex justify-center items-center w-full py-12"
+        className="flex justify-center items-center w-full min-h-screen"
         variants={reveal}
         {...scrollAnimProps}
       >
-        <div className="w-full max-w-7xl px-4">
+        <div className="w-full max-w-full flex justify-center">
           <KickStarsArmy />
         </div>
       </motion.section>
 
+      <motion.section
+        className="content-visibility-auto"
+        variants={reveal}
+        {...scrollAnimProps}
+      >
+        <KickReviewsCoverage />
+      </motion.section>
       <motion.section
         className="content-visibility-auto"
         variants={reveal}
