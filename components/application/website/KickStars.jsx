@@ -53,7 +53,7 @@ export default function KickStarsArmy({
   rounded-[24px] sm:rounded-[30px] lg:rounded-[36px]
   overflow-hidden bg-[#0e0e0e]
   px-4 sm:px-8 lg:px-16
-  py-12 sm:py-18 lg:py-28
+  py-12 sm:py-18 lg:py-6
       "
     >
       <div className="absolute inset-0 bg-gradient-to-b from-[#fcba17]/10 to-transparent pointer-events-none" />
