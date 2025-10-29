@@ -2,11 +2,11 @@
 
 export default function KickPartnersInfinite({
   partners = [
-    { name: "HUKUT", src: "/assets/partners/hukut.svg" },
-    { name: "DARAZ", src: "/assets/partners/daraz.svg" },
-    { name: "KHALTI", src: "/assets/partners/khalti.svg" },
-    { name: "IMEPAY", src: "/assets/partners/imepay.svg" },
-    { name: "BROTHER MART", src: "/assets/partners/brothermart.svg" },
+    { name: "HUKUT", src: "/assets/images/hukut.png" },
+    { name: "DARAZ", src: "/assets/images/daraz.png" },
+    { name: "KHALTI", src: "/assets/images/khalti.png" },
+    { name: "IMEPAY", src: "/assets/images/imepay.png" },
+    { name: "BROTHER MART", src: "/assets/images/Brothermart.png" },
   ],
   speedSec = 25, // control the speed here (lower = faster)
 }) {
