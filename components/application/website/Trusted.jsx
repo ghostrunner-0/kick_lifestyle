@@ -9,7 +9,7 @@ const SAMPLE = [
   {
     name: "Rikesh N",
     title: "KICK NEKXA BUDS Z10",
-    body: "Mero second Kick Nekxa ko Z10 buds. First 1800 ma kiney, yo 1400 ma — dami cha! Gaming mode sabai try gareko earbuds maddhe best. Almost wired jastai feel, no delay while gaming.",
+    body: "Mero second Kick Nekxa ko Z10 buds. First 1800 ma kiney, yo 1400 ma — dami cha! Gaming mode sabai try gareko earbuds maddhe best.",
     rating: 5,
   },
   {

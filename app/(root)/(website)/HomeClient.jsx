@@ -125,13 +125,11 @@ export default function HomeClient({ initialBanners = [] }) {
         <Trusted />
       </motion.section>
       <motion.section
-        className="flex justify-center items-center w-full min-h-screen"
+        className="w-full flex justify-center"
         variants={reveal}
         {...scrollAnimProps}
       >
-        <div className="w-full max-w-full flex justify-center">
-          <KickStarsArmy />
-        </div>
+        <KickStarsArmy />
       </motion.section>
 
       <motion.section
