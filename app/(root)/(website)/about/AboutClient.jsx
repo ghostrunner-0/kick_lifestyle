@@ -10,6 +10,7 @@ import {
   animate,
 } from "framer-motion";
 import { Battery, Mic2, Waves, ChevronRight } from "lucide-react";
+import Image from "next/image";
 
 const ACCENT = "#fcba17";
 
@@ -753,7 +754,6 @@ export default function AboutClient() {
           />
         </motion.section>
 
-        {/* ===== DESIGN STRIP ===== */}
         <motion.section
           variants={sectionReveal(0.1)}
           initial="hidden"
@@ -762,6 +762,7 @@ export default function AboutClient() {
           className="mx-auto w-full max-w-[1200px] rounded-[22px] border overflow-hidden"
         >
           <div className="grid grid-cols-1 lg:grid-cols-12">
+            {/* === LEFT TEXT CONTENT === */}
             <motion.div
               variants={fade(0.02)}
               initial="hidden"
@@ -795,10 +796,13 @@ export default function AboutClient() {
                   href="/support"
                   className="inline-flex items-center gap-2 underline underline-offset-4"
                 >
-                  Read our support articles <ChevronRight className="h-4 w-4" />
+                  Read our support articles
+                  <ChevronRight className="h-4 w-4" />
                 </Link>
               </div>
             </motion.div>
+
+            {/* === RIGHT IMAGE === */}
             <motion.div
               variants={fade(0.12)}
               initial="hidden"
@@ -806,7 +810,13 @@ export default function AboutClient() {
               viewport={{ once: true, amount: 0.35 }}
               className="lg:col-span-5 bg-neutral-100 min-h-64 grid place-items-center text-xs text-neutral-500"
             >
-              Add a product montage / still
+              <Image
+                src="/assets/images/kickmontage.png"
+                alt="Design montage"
+                width={500}
+                height={500}
+                className="w-full h-auto object-cover"
+              />
             </motion.div>
           </div>
         </motion.section>
