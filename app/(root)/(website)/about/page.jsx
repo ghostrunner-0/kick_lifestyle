@@ -10,6 +10,14 @@ const ABOUT_URL = `${SITE_URL}${ABOUT_PATH}`;
 // ✅ Use the absolute URL for your new meta image
 const OG_IMAGE = `${SITE_URL}/meta-images/about.png`; // 1200x630 preferred size
 
+// ✅ Move viewport out of metadata (Next.js requirement)
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: "cover",
+};
+
 export const metadata = {
   metadataBase: new URL(SITE_URL),
   title: `About ${BRAND_LONG} & Founder Kumod Begwani | ${BRAND}`,
@@ -84,13 +92,6 @@ export const metadata = {
       { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
     ],
     apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180" }],
-  },
-
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    maximumScale: 5,
-    viewportFit: "cover",
   },
 };
 

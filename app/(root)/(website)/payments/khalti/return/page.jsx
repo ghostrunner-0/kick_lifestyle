@@ -9,6 +9,14 @@ const KHALTI_URL = `${SITE_URL}${KHALTI_PATH}`;
 // ✅ Default meta image (brand logo)
 const OG_IMAGE = `${SITE_URL}/meta-images/logo.png`;
 
+// ✅ Move viewport outside metadata (Next.js requirement)
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: "cover",
+};
+
 export const metadata = {
   metadataBase: new URL(SITE_URL),
 
@@ -58,12 +66,6 @@ export const metadata = {
   applicationName: BRAND_LONG,
   creator: BRAND,
   publisher: BRAND_LONG,
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    maximumScale: 5,
-    viewportFit: "cover",
-  },
 };
 
 export default function Page() {

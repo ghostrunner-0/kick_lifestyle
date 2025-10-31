@@ -8,6 +8,14 @@ const CHECKOUT_URL = `${SITE_URL}${CHECKOUT_PATH}`;
 // ✅ Use default brand logo for meta image
 const OG_IMAGE = `${SITE_URL}/meta-images/logo.png`;
 
+// ✅ Moved viewport outside metadata (Next.js requirement)
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: "cover",
+};
+
 export const metadata = {
   metadataBase: new URL(SITE_URL),
 
@@ -57,12 +65,6 @@ export const metadata = {
   applicationName: BRAND,
   creator: BRAND,
   publisher: BRAND,
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    maximumScale: 5,
-    viewportFit: "cover",
-  },
 };
 
 export default function Page() {

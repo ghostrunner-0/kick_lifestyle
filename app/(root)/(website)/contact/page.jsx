@@ -10,6 +10,14 @@ const CONTACT_URL = `${SITE_URL}${CONTACT_PATH}`;
 // ✅ Use correct meta image (1200x630 recommended)
 const OG_IMAGE = `${SITE_URL}/meta-images/contact.png`;
 
+// ✅ Move viewport out of metadata (Next.js requirement)
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: "cover",
+};
+
 export const metadata = {
   metadataBase: new URL(SITE_URL),
 
@@ -59,12 +67,6 @@ export const metadata = {
   applicationName: BRAND_LONG,
   creator: BRAND,
   publisher: BRAND_LONG,
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    maximumScale: 5,
-    viewportFit: "cover",
-  },
 };
 
 export default function Page() {
