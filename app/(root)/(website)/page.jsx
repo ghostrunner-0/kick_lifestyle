@@ -1,80 +1,111 @@
 // app/(site)/page.jsx
 import HomeClient from "./HomeClient";
 import Script from "next/script";
-export const dynamic = "force-dynamic"; // ✅ ensure runtime fetch in prod (no build-time SSG)
+
+export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
 const BRAND = "KICK LIFESTYLE";
 const BRAND_LONG = "Kick Lifestyle";
 const SITE_URL = (
   process.env.NEXT_PUBLIC_SITE_URL || "https://kick.com.np"
 ).replace(/\/$/, "");
+const HOME_PATH = "/";
+const HOME_URL = `${SITE_URL}${HOME_PATH}`;
+
+// ✅ Default meta image (brand logo)
+const OG_IMAGE = `${SITE_URL}/meta-images/logo.png`;
 
 export const metadata = {
   metadataBase: new URL(SITE_URL),
-  title: ` ${BRAND} | Best Earbuds in Nepal`,
+  title: `${BRAND} | Premium Earbuds & Smartwatches in Nepal`,
   description: `${BRAND_LONG} by Kumod Begwani brings premium true wireless earbuds, smartwatches, and tech accessories to Nepal — cutting-edge features, great prices, and trusted quality. #ProudlyNepali`,
-  alternates: { canonical: "/" },
+  alternates: { canonical: HOME_PATH },
+
   openGraph: {
-    title: ` ${BRAND} | Best Earbuds in Nepal`,
-    description: `${BRAND_LONG} is redefining tech accessories in Nepal with premium TWS earbuds (ZenBuds, Buds S Pro) and smart watches at honest prices.`,
-    url: "/",
     type: "website",
+    url: HOME_URL,
     siteName: BRAND_LONG,
+    title: `${BRAND} | Premium Earbuds & Smartwatches in Nepal`,
+    description: `${BRAND_LONG} is redefining tech accessories in Nepal with premium TWS earbuds and smartwatches at honest prices.`,
     images: [
       {
-        url: "/og/home.jpg",
+        url: OG_IMAGE,
         width: 1200,
         height: 630,
-        alt: `${BRAND_LONG} – Best Earbuds in Nepal`,
+        alt: `${BRAND_LONG} — Home`,
       },
     ],
+    locale: "en_NP",
+    alternateLocale: ["ne_NP", "en_US"],
   },
+
   twitter: {
     card: "summary_large_image",
-    title: `Best Earbuds in Nepal | ${BRAND}`,
+    title: `${BRAND} | Premium Earbuds & Smartwatches in Nepal`,
     description: `Shop premium TWS earbuds and smartwatches from ${BRAND_LONG}. “Tune into Zen.” #ProudlyNepali`,
-    images: ["/og/home.jpg"],
+    images: [OG_IMAGE],
   },
+
   robots: {
     index: true,
     follow: true,
-    googleBot: { index: true, follow: true },
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-snippet": -1,
+      "max-image-preview": "large",
+      "max-video-preview": -1,
+    },
   },
+
   category: "technology",
+  applicationName: BRAND_LONG,
+  creator: BRAND,
+  publisher: BRAND_LONG,
+
+  viewport: {
+    width: "device-width",
+    initialScale: 1,
+    maximumScale: 5,
+    viewportFit: "cover",
+  },
 };
 
 export default async function Page() {
-  // --- Server fetch banners ---
+  // --- Server fetch: banners ---
   let initialBanners = [];
   try {
-    const url = SITE_URL
-      ? `${SITE_URL}/api/website/banners?active=true`
-      : `/api/website/banners?active=true`;
+    const url = `${SITE_URL}/api/website/banners?active=true`;
     const res = await fetch(url, { next: { revalidate: 300 } });
-    const json = await res.json();
-    if (json?.success && Array.isArray(json.data)) {
-      initialBanners = [...json.data].sort(
-        (a, b) => (a.order ?? 0) - (b.order ?? 0)
-      );
+    if (res.ok) {
+      const json = await res.json();
+      if (json?.success && Array.isArray(json.data)) {
+        initialBanners = [...json.data].sort(
+          (a, b) => (a.order ?? 0) - (b.order ?? 0)
+        );
+      }
     }
   } catch (err) {
-    console.log(err.message);
+    console.warn("[banners] fetch failed:", err?.message || err);
   }
 
-  // --- Server fetch categories ---
+  // --- Server fetch: categories ---
   let initialCategories = [];
   try {
-    const url = SITE_URL
-      ? `${SITE_URL}/api/website/category`
-      : `/api/website/category`;
+    const url = `${SITE_URL}/api/website/category`;
     const res = await fetch(url, { next: { revalidate: 300 } });
-    const json = await res.json();
-    if (json?.success && Array.isArray(json.data)) {
-      // Show only the website-visible categories, keep original order
-      initialCategories = json.data.filter((c) => c?.showOnWebsite);
+    if (res.ok) {
+      const json = await res.json();
+      if (json?.success && Array.isArray(json.data)) {
+        initialCategories = json.data.filter((c) => c?.showOnWebsite);
+      }
     }
-  } catch {}
+  } catch (err) {
+    console.warn("[categories] fetch failed:", err?.message || err);
+  }
 
+  // --- JSON-LD ---
   const ldWebsite = {
     "@context": "https://schema.org",
     "@type": "WebSite",
@@ -96,6 +127,11 @@ export default async function Page() {
     url: SITE_URL,
     slogan: "Tune into Zen",
     founder: { "@type": "Person", name: "Kumod Begwani", jobTitle: "Founder" },
+    sameAs: [
+      "https://www.facebook.com/kicklifestyle.shop/",
+      "https://www.instagram.com/kicklifestyle.shop/",
+    ],
+    logo: `${SITE_URL}/meta-images/logo.png`,
   };
 
   return (

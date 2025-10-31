@@ -6,13 +6,13 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export const metadata = {
-  title: "Edit Profile | Kick Account",
+  title: "Edit Profile | Kick Lifestyle Account",
   description:
     "Manage your name, phone number, and password settings for your Kick account.",
   alternates: { canonical: "/account/profile" },
   robots: { index: false, follow: false },
   openGraph: {
-    title: "Edit Profile | Kick Account",
+    title: "Edit Profile | Kick Lifestyle Account",
     description:
       "Manage your name, phone number, and password settings for your Kick account.",
     url: "https://www.kick.com.np/account/profile",
@@ -21,7 +21,7 @@ export const metadata = {
   },
   twitter: {
     card: "summary",
-    title: "Edit Profile | Kick Account",
+    title: "Edit Profile | Kick Lifestyle Account",
     description:
       "Manage your name, phone number, and password settings for your Kick account.",
   },

@@ -1,77 +1,82 @@
-"use client";
+import WarrantyClient from "./WarrantyClient";
 
-import Link from "next/link";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { ShieldCheck, Wrench, RefreshCw } from "lucide-react";
-import { motion, useReducedMotion } from "framer-motion";
+const BRAND = "KICK LIFESTYLE";
+const BRAND_LONG = "Kick Lifestyle";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://kick.com.np";
+const PAGE_PATH = "/support/warranty";
+const PAGE_URL = `${SITE_URL}${PAGE_PATH}`;
 
-export default function WarrantySupport() {
-  const prefersReduced = useReducedMotion();
-  const fadeUp = {
-    hidden: { opacity: 0, y: prefersReduced ? 0 : 12 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.35 } },
-  };
-  const stagger = {
-    hidden: {},
-    visible: { transition: { staggerChildren: prefersReduced ? 0 : 0.07 } },
-  };
+// ✅ Default meta image
+const OG_IMAGE = `${SITE_URL}/meta-images/warranty.png`;
 
+export const metadata = {
+  metadataBase: new URL(SITE_URL),
+
+  title: `Warranty, Repair & Replacement | ${BRAND}`,
+  description: `Learn about ${BRAND_LONG}'s warranty coverage, repair process, and how to start a replacement claim.`,
+
+  alternates: { canonical: PAGE_PATH },
+
+  openGraph: {
+    type: "website",
+    url: PAGE_URL,
+    siteName: BRAND_LONG,
+    title: `Warranty, Repair & Replacement | ${BRAND}`,
+    description: `Understand what’s covered under ${BRAND_LONG} warranty and how to request a repair or replacement.`,
+    images: [
+      {
+        url: OG_IMAGE,
+        width: 1200,
+        height: 630,
+        alt: `${BRAND_LONG} — Warranty Support`,
+      },
+    ],
+    locale: "en_NP",
+    alternateLocale: ["ne_NP", "en_US"],
+  },
+
+  twitter: {
+    card: "summary_large_image",
+    title: `Warranty, Repair & Replacement | ${BRAND}`,
+    description: `What’s covered under warranty, and how to start a repair or replacement claim at ${BRAND_LONG}.`,
+    images: [OG_IMAGE],
+  },
+
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-snippet": -1,
+      "max-image-preview": "large",
+      "max-video-preview": -1,
+    },
+  },
+
+  category: "support",
+  applicationName: BRAND_LONG,
+  creator: BRAND,
+  publisher: BRAND_LONG,
+  viewport: {
+    width: "device-width",
+    initialScale: 1,
+    maximumScale: 5,
+    viewportFit: "cover",
+  },
+};
+
+export default function Page() {
   return (
-    <motion.div
-      initial="hidden"
-      animate="visible"
-      className="mx-auto max-w-5xl px-4 py-8 space-y-8"
-    >
-      <motion.header variants={fadeUp}>
-        <h1 className="text-xl md:text-2xl font-semibold">
-          Warranty, Repair & Replacement
-        </h1>
-        <p className="text-muted-foreground">
-          What’s covered and how to start a claim.
-        </p>
-      </motion.header>
+    <div className="relative">
+      {/* subtle background gradient */}
+      <div className="pointer-events-none absolute inset-0 -z-10">
+        <div className="absolute inset-x-0 top-0 h-[120px]" />
+      </div>
 
-      <motion.div
-        variants={stagger}
-        className="grid gap-4 md:grid-cols-2"
-      >
-        <motion.div variants={fadeUp}>
-          <Card>
-            <CardHeader className="flex items-center gap-2 font-medium">
-              <ShieldCheck className="h-5 w-5" />
-              Coverage overview
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground space-y-2">
-              <p>Standard warranty: <b>12 months</b> on manufacturing defects.</p>
-              <p>Physical damage and liquid damage are not covered.</p>
-              <p>Keep your order ID and purchase proof ready.</p>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        <motion.div variants={fadeUp}>
-          <Card>
-            <CardHeader className="flex items-center gap-2 font-medium">
-              <Wrench className="h-5 w-5" />
-              Repair / Replacement process
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground space-y-2">
-              <p>1) Submit a claim with issue detail & images/video.</p>
-              <p>2) Our team verifies within 24–48 hours.</p>
-              <p>3) We arrange repair or replacement as per policy.</p>
-            </CardContent>
-          </Card>
-        </motion.div>
-      </motion.div>
-
-      <motion.div variants={fadeUp} className="rounded-xl border p-4 flex flex-wrap items-center gap-2">
-        <RefreshCw className="h-4 w-4" />
-        <div className="text-sm">Ready to begin?</div>
-        <Button asChild className="ml-auto">
-          <Link href="/warranty">Start a warranty claim</Link>
-        </Button>
-      </motion.div>
-    </motion.div>
+      <div className="mx-auto max-w-5xl px-4 py-6">
+        <WarrantyClient />
+      </div>
+    </div>
   );
 }

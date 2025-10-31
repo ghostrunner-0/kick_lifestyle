@@ -1,4 +1,3 @@
-// app/(root)/(website)/about/page.jsx
 import Script from "next/script";
 import AboutClient from "./AboutClient";
 
@@ -7,7 +6,9 @@ const BRAND_LONG = "Kick Lifestyle";
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://kick.com.np";
 const ABOUT_PATH = "/about";
 const ABOUT_URL = `${SITE_URL}${ABOUT_PATH}`;
-const OG_IMAGE = "/og/about.jpg"; // 1200x630
+
+// ✅ Use the absolute URL for your new meta image
+const OG_IMAGE = `${SITE_URL}/meta-images/about.png`; // 1200x630 preferred size
 
 export const metadata = {
   metadataBase: new URL(SITE_URL),
@@ -25,12 +26,14 @@ export const metadata = {
     "audio brand Nepal",
     "premium earbuds Nepal",
   ],
-  // Strong canonical and alternates
+
+  // Canonical URL
   alternates: { canonical: ABOUT_PATH },
-  // Open Graph
+
+  // ✅ Open Graph
   openGraph: {
     type: "website",
-    url: ABOUT_PATH,
+    url: ABOUT_URL,
     siteName: BRAND_LONG,
     title: `About ${BRAND_LONG} & Founder Kumod Begwani | ${BRAND}`,
     description:
@@ -46,16 +49,15 @@ export const metadata = {
     locale: "en_NP",
     alternateLocale: ["ne_NP", "en_US"],
   },
-  // Twitter
+
+  // ✅ Twitter
   twitter: {
     card: "summary_large_image",
     title: `About ${BRAND_LONG} & Founder Kumod Begwani | ${BRAND}`,
     description: "Mission, craft, service and milestones — built for Nepal.",
     images: [OG_IMAGE],
-    // If you have handles, uncomment:
-    // site: "@yourhandle",
-    // creator: "@yourhandle",
   },
+
   // Robots
   robots: {
     index: true,
@@ -69,34 +71,27 @@ export const metadata = {
       "max-video-preview": -1,
     },
   },
-  // Useful extras
+
   category: "technology",
   applicationName: BRAND_LONG,
   creator: BRAND,
   publisher: BRAND_LONG,
-  // Optional favicons (ensure files exist or update paths)
+
   icons: {
     icon: [
-      { url: "/favicon.ico" },
+      { url: "/favicon.png" },
       { url: "/icons/icon-32.png", sizes: "32x32", type: "image/png" },
       { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
     ],
     apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180" }],
   },
-  // Viewport (Next supports this in metadata)
+
   viewport: {
     width: "device-width",
     initialScale: 1,
     maximumScale: 5,
     viewportFit: "cover",
   },
-  // Optional: verification tokens (uncomment and set if you have them)
-  // verification: {
-  //   google: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-  //   yandex: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-  //   bing: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-  //   facebook: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-  // },
 };
 
 export default function Page() {
@@ -136,7 +131,6 @@ export default function Page() {
     name: "Kumod Begwani",
     jobTitle: "Founder & CEO",
     worksFor: { "@type": "Organization", name: BRAND_LONG, url: SITE_URL },
-    // sameAs: ["https://www.linkedin.com/in/...", "https://twitter.com/..."], // if available
   };
 
   const ldFAQ = {
@@ -187,7 +181,7 @@ export default function Page() {
     isPartOf: { "@type": "WebSite", name: BRAND_LONG, url: SITE_URL },
     primaryImageOfPage: {
       "@type": "ImageObject",
-      url: `${SITE_URL}${OG_IMAGE}`,
+      url: OG_IMAGE, // ✅ Schema image matches meta
       width: 1200,
       height: 630,
     },

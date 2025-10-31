@@ -8,7 +8,7 @@ import ProductPageClient from "./ProductPageClient";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 
-const BRAND = "KICK";
+const BRAND = "KICK LIFESTYLE";
 const toTitle = (s = "") =>
   (s || "")
     .replace(/[-_]+/g, " ")
@@ -46,14 +46,45 @@ async function getProduct(slug) {
 
 export async function generateMetadata({ params }) {
   const { slug } = await params;
-  const name = toTitle(slug || "Product");
+  const base = getBaseUrl();
+
+  const product = await getProduct(slug);
+  const name = toTitle(product?.name || slug || "Product");
+
   const title = `${name} | ${BRAND}`;
-  const description = `Shop ${name} at ${BRAND}.`;
+  const description =
+    product?.shortDesc ||
+    `Shop ${name} at ${BRAND}. Explore premium quality at an honest price.`;
+
+  // Pick hero image → fallback to first media image → fallback null
+  const imagePath =
+    product?.heroImage?.path || product?.productMedia?.[0]?.path || null;
+
+  // Form full URL for image (important for OG/Twitter)
+  const imageUrl = imagePath ? `${base}${imagePath}` : `${base}/default-og.png`;
+
   return {
     title,
     description,
-    openGraph: { title, description, type: "website" },
-    twitter: { card: "summary_large_image", title, description },
+    openGraph: {
+      title,
+      description,
+      type: "website",
+      images: [
+        {
+          url: imageUrl,
+          width: 1200,
+          height: 630,
+          alt: name,
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [imageUrl],
+    },
   };
 }
 
