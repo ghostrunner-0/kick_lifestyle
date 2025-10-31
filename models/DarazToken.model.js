@@ -1,3 +1,4 @@
+// /models/DarazToken.model.js
 import mongoose from "mongoose";
 
 const DarazTokenSchema = new mongoose.Schema(

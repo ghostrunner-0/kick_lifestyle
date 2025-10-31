@@ -8,49 +8,65 @@ const normSku = (s) => norm(s).toUpperCase();
 const DarazProductMapSchema = new Schema(
   {
     // Daraz-side keys
-    seller_sku:     { type: String, default: "" },
-    seller_sku_norm:{ type: String, default: "", index: true }, // auto-filled uppercased
-    shop_sku:       { type: String, default: "" },
-    shop_sku_norm:  { type: String, default: "", index: true }, // auto-filled uppercased
-    daraz_sku_id:   { type: String, default: "", index: true }, // SkuId / order_item_id (string)
-    sku_id:         { type: String, default: "", index: true }, // optional alias if you stored it this way
+    seller_sku: { type: String, default: "" },
+    seller_sku_norm: { type: String, default: "", index: true }, // keep field-level index
+    shop_sku: { type: String, default: "" },
+    shop_sku_norm: { type: String, default: "", index: true }, // keep field-level index
+
+    // ⚠️ removed field-level index flags here to avoid duplicates
+    daraz_sku_id: { type: String, default: "" }, // was: index: true
+    sku_id: { type: String, default: "" }, // was: index: true
 
     // Website-side targets
-    product_id:     { type: Types.ObjectId, ref: "Product", required: true, index: true },
-    variant_id:     { type: Types.ObjectId, ref: "ProductVariant", default: null, index: true },
+    product_id: {
+      type: Types.ObjectId,
+      ref: "Product",
+      required: true,
+      index: true,
+    },
+    variant_id: {
+      type: Types.ObjectId,
+      ref: "ProductVariant",
+      default: null,
+      index: true,
+    },
 
     // Optional override
-    warranty_months:{ type: Number, default: null }, // if set, used as fallback when Product doc lacks it
+    warranty_months: { type: Number, default: null },
 
-    notes:          { type: String, default: "" },
+    notes: { type: String, default: "" },
   },
   { timestamps: true }
 );
 
 // Normalize keys on save/update
-DarazProductMapSchema.pre("save", function(next) {
+DarazProductMapSchema.pre("save", function (next) {
   this.seller_sku_norm = normSku(this.seller_sku);
-  this.shop_sku_norm   = normSku(this.shop_sku);
+  this.shop_sku_norm = normSku(this.shop_sku);
   next();
 });
-DarazProductMapSchema.pre("findOneAndUpdate", function(next) {
+
+DarazProductMapSchema.pre("findOneAndUpdate", function (next) {
   const u = this.getUpdate() || {};
   if (u.$set) {
-    if ("seller_sku" in u.$set) u.$set.seller_sku_norm = normSku(u.$set.seller_sku);
-    if ("shop_sku"   in u.$set) u.$set.shop_sku_norm   = normSku(u.$set.shop_sku);
+    if ("seller_sku" in u.$set)
+      u.$set.seller_sku_norm = normSku(u.$set.seller_sku);
+    if ("shop_sku" in u.$set) u.$set.shop_sku_norm = normSku(u.$set.shop_sku);
   } else {
     if ("seller_sku" in u) u.seller_sku_norm = normSku(u.seller_sku);
-    if ("shop_sku"   in u) u.shop_sku_norm   = normSku(u.shop_sku);
+    if ("shop_sku" in u) u.shop_sku_norm = normSku(u.shop_sku);
   }
   next();
 });
 
-// Helpful indexes
+// Indexes
 DarazProductMapSchema.index({ seller_sku_norm: 1, variant_id: 1 });
 DarazProductMapSchema.index({ shop_sku_norm: 1, variant_id: 1 });
-DarazProductMapSchema.index({ daraz_sku_id: 1 });
-DarazProductMapSchema.index({ sku_id: 1 });
+DarazProductMapSchema.index({ daraz_sku_id: 1 }); // single-field index here (no field-level duplicate)
+DarazProductMapSchema.index({ sku_id: 1 }); // single-field index here (no field-level duplicate)
 
 const MODEL = "DarazProductMap";
-try { mongoose.deleteModel(MODEL); } catch {}
+try {
+  mongoose.deleteModel(MODEL);
+} catch {}
 export default mongoose.model(MODEL, DarazProductMapSchema);
