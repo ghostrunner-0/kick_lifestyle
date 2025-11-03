@@ -49,7 +49,7 @@ async function reserveStockStrict(items, session) {
     const qty = Math.max(0, Number(it?.qty || 0));
     if (!qty) continue;
 
-    // Prefer variant stock if variantId present
+    // Variant-first
     if (it?.variantId) {
       const updated = await ProductVariant.findOneAndUpdate(
         {
@@ -65,16 +65,15 @@ async function reserveStockStrict(items, session) {
           `Insufficient stock for variant (${it?.variantName || "variant"})`
         );
       }
-      // Post 'findOneAndUpdate' hook on ProductVariant will recalc Product stock.
       continue;
     }
 
-    // Fallback: product-level stock (for products without variants)
+    // Product-level (only if no variants)
     const updatedProduct = await Product.findOneAndUpdate(
       {
         _id: new mongoose.Types.ObjectId(String(it.productId)),
         deletedAt: null,
-        hasVariants: { $ne: true }, // only allow direct product stock if not variant-based
+        hasVariants: { $ne: true },
         stock: { $gte: qty },
       },
       { $inc: { stock: -qty } },
@@ -101,7 +100,7 @@ export async function POST(req) {
 
     // --- Basic validations
     const pm = String(payload?.paymentMethod || "").toLowerCase();
-    if (!["cod", "qr", "khalti"].includes(pm)) {
+    if (!["cod", "khalti", "qr"].includes(pm)) {
       return response(false, 400, "Invalid payment method");
     }
 
@@ -111,13 +110,18 @@ export async function POST(req) {
     }
 
     const items = Array.isArray(payload?.items) ? payload.items : [];
-    if (items.length === 0) return response(false, 400, "No items to place order");
+    if (items.length === 0)
+      return response(false, 400, "No items to place order");
 
     // --- Amounts
     const subtotal = Number(payload?.amounts?.subtotal ?? 0);
     const discount = Math.max(0, Number(payload?.amounts?.discount ?? 0));
-    const shippingCost = pm === "cod" ? Math.max(0, Number(payload?.amounts?.shippingCost ?? 0)) : 0;
-    const codFee = pm === "cod" ? Math.max(0, Number(payload?.amounts?.codFee ?? 0)) : 0;
+    const shippingCost =
+      pm === "cod"
+        ? Math.max(0, Number(payload?.amounts?.shippingCost ?? 0))
+        : 0;
+    const codFee =
+      pm === "cod" ? Math.max(0, Number(payload?.amounts?.codFee ?? 0)) : 0;
     const baseTotal = Math.max(0, subtotal - discount);
     const total = pm === "cod" ? baseTotal + shippingCost + codFee : baseTotal;
 
@@ -126,7 +130,10 @@ export async function POST(req) {
     }
 
     const userId = new mongoose.Types.ObjectId(userIdRaw);
-    const prefix = ORDER_PREFIX[pm] || ORDER_PREFIX.default;
+
+    // **HARD ENFORCE QR -> BLQ**
+    const prefix =
+      pm === "qr" ? ORDER_PREFIX.qr : ORDER_PREFIX[pm] || ORDER_PREFIX.default;
 
     const baseDoc = {
       userId,
@@ -148,8 +155,10 @@ export async function POST(req) {
       coupon: payload?.coupon || undefined,
       paymentMethod: pm,
       payment: {
-        status: pm === "khalti" ? "unpaid" : payload?.payment?.status || "unpaid",
-        provider: pm === "khalti" ? "khalti" : payload?.payment?.provider || undefined,
+        status:
+          pm === "khalti" ? "unpaid" : payload?.payment?.status || "unpaid",
+        provider:
+          pm === "khalti" ? "khalti" : payload?.payment?.provider || undefined,
         providerRef: payload?.payment?.providerRef || undefined,
       },
       status:
@@ -194,11 +203,18 @@ export async function POST(req) {
       const seq = await getNextOrderSequence(session);
       const display_order_id = `${prefix}-${seq}`;
 
+      // Paranoid guard for QR
+      if (pm === "qr" && !display_order_id.startsWith("BLQ-")) {
+        throw new Error("QR orders must use BLQ prefix");
+      }
+
       // 2) Enforce coupon usage limits + reserve slot
       const couponSnap = payload?.coupon;
       if (couponSnap?.code) {
         const code = String(couponSnap.code).trim().toUpperCase();
-        const coupon = await Coupon.findOne({ code, deletedAt: null }, null, { session });
+        const coupon = await Coupon.findOne({ code, deletedAt: null }, null, {
+          session,
+        });
         if (!coupon) throw new Error("Coupon not found or inactive");
 
         if (
@@ -214,7 +230,9 @@ export async function POST(req) {
             { session }
           );
           if (used >= Number(coupon.perUserLimit)) {
-            throw new Error("You have already used this coupon the allowed number of times");
+            throw new Error(
+              "You have already used this coupon the allowed number of times"
+            );
           }
         }
 
@@ -225,7 +243,7 @@ export async function POST(req) {
         );
       }
 
-      // 3) STRICT stock reservation (includes free items present as normal items)
+      // 3) STRICT stock reservation
       await reserveStockStrict(items, session);
 
       // 4) Create order
@@ -249,12 +267,24 @@ export async function POST(req) {
               ...(u.name ? { name: u.name } : {}),
               ...(u.phone ? { phone: u.phone } : {}),
               ...(u.address ? { address: u.address } : {}),
-              ...(u.pathaoCityId != null ? { pathaoCityId: Number(u.pathaoCityId) } : {}),
-              ...(u.pathaoCityLabel != null ? { pathaoCityLabel: u.pathaoCityLabel } : {}),
-              ...(u.pathaoZoneId != null ? { pathaoZoneId: Number(u.pathaoZoneId) } : {}),
-              ...(u.pathaoZoneLabel != null ? { pathaoZoneLabel: u.pathaoZoneLabel } : {}),
-              ...(u.pathaoAreaId != null ? { pathaoAreaId: Number(u.pathaoAreaId) } : {}),
-              ...(u.pathaoAreaLabel != null ? { pathaoAreaLabel: u.pathaoAreaLabel } : {}),
+              ...(u.pathaoCityId != null
+                ? { pathaoCityId: Number(u.pathaoCityId) }
+                : {}),
+              ...(u.pathaoCityLabel != null
+                ? { pathaoCityLabel: u.pathaoCityLabel }
+                : {}),
+              ...(u.pathaoZoneId != null
+                ? { pathaoZoneId: Number(u.pathaoZoneId) }
+                : {}),
+              ...(u.pathaoZoneLabel != null
+                ? { pathaoZoneLabel: u.pathaoZoneLabel }
+                : {}),
+              ...(u.pathaoAreaId != null
+                ? { pathaoAreaId: Number(u.pathaoAreaId) }
+                : {}),
+              ...(u.pathaoAreaLabel != null
+                ? { pathaoAreaLabel: u.pathaoAreaLabel }
+                : {}),
             },
           },
           { session }
@@ -269,7 +299,7 @@ export async function POST(req) {
         success: true,
         data: {
           _id: order._id,
-          display_order_id: order.display_order_id,
+          display_order_id: order.display_order_id, // e.g., "BLQ-2034" for QR
           status: order.status,
           payment: order.payment,
           amounts: order.amounts,

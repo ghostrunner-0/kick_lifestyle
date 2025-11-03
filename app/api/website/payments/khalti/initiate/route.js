@@ -6,9 +6,11 @@ import { response } from "@/lib/helperFunctions";
 import Order from "@/models/Orders.model";
 
 const KHALTI_INIT_URL =
-  process.env.KHALTI_INIT_URL || "https://a.khalti.com/api/v2/epayment/initiate/";
-const KHALTI_SECRET_KEY = process.env.KHALTI_SECRET_KEY || process.env.KHALTI_SECRET;
-const WEB_BASE_URL = process.env.WEB_BASE_URL || "http://localhost:3000";
+  process.env.KHALTI_INIT_URL ||
+  "https://a.khalti.com/api/v2/epayment/initiate/";
+const KHALTI_SECRET_KEY =
+  process.env.KHALTI_SECRET_KEY || process.env.KHALTI_SECRET;
+const WEB_BASE_URL = process.env.NEXTAUTH_URL;
 
 export async function POST(req) {
   try {
@@ -20,7 +22,9 @@ export async function POST(req) {
 
     const body = await req.json().catch(() => ({}));
     // Accept either display_order_id or _id
-    const displayId = String(body?.display_order_id || body?.displayId || "").trim();
+    const displayId = String(
+      body?.display_order_id || body?.displayId || ""
+    ).trim();
     const orderId = String(body?.order_id || body?._id || "").trim();
 
     if (!displayId && !orderId) {
@@ -42,7 +46,11 @@ export async function POST(req) {
       return response(true, 200, "Order already paid; no initiation needed", {
         payment_url: order?.metadata?.khalti?.payment_url || null,
         pidx: order?.metadata?.khalti?.pidx || null,
-        order: { _id: order._id, display_order_id: order.display_order_id, status: order.status },
+        order: {
+          _id: order._id,
+          display_order_id: order.display_order_id,
+          status: order.status,
+        },
       });
     }
 
@@ -84,7 +92,11 @@ export async function POST(req) {
     const initJson = await initRes.json();
     const { pidx, payment_url, expires_at } = initJson || {};
     if (!pidx || !payment_url) {
-      return response(false, 502, "Khalti initiate did not return pidx/payment_url");
+      return response(
+        false,
+        502,
+        "Khalti initiate did not return pidx/payment_url"
+      );
     }
 
     // Save pidx + payment_url to existing order

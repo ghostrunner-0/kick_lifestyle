@@ -1,5 +1,6 @@
 import StudentDiscountClient from "./StudentDiscountClient";
-
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 const BRAND = "KICK LIFESTYLE";
 const BRAND_LONG = "Kick Lifestyle";
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://kick.com.np";

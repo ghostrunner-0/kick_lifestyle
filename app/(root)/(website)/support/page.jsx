@@ -1,6 +1,10 @@
 import Script from "next/script";
 import SupportHomeClient from "./SupportHomeClient";
 
+// ✅ Force dynamic render (avoid long static build)
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 const BRAND = "KICK LIFESTYLE";
 const BRAND_LONG = "Kick Lifestyle";
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://kick.com.np";
@@ -9,6 +13,14 @@ const SUPPORT_URL = `${SITE_URL}${SUPPORT_PATH}`;
 
 // ✅ Updated meta image (1200x630 recommended)
 const OG_IMAGE = `${SITE_URL}/meta-images/support.png`;
+
+// ✅ Moved viewport outside metadata
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: "cover",
+};
 
 export const metadata = {
   metadataBase: new URL(SITE_URL),
@@ -68,12 +80,6 @@ export const metadata = {
   applicationName: BRAND_LONG,
   creator: BRAND,
   publisher: BRAND_LONG,
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    maximumScale: 5,
-    viewportFit: "cover",
-  },
 };
 
 export default function Page() {

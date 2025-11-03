@@ -1,4 +1,5 @@
 import KhaltiReturnClient from "./KhaltiReturnClient";
+export const dynamic = "force-dynamic"; // ✅ prevents Next from prerendering at build time
 
 const BRAND = "KICK LIFESTYLE";
 const BRAND_LONG = "Kick Lifestyle";

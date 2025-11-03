@@ -10,14 +10,14 @@ import { isAuthenticated } from "@/lib/Authentication";
 import { connectDB } from "@/lib/DB";
 import StudentDiscount from "@/models/StudentDiscount.model";
 
-// pull session user to record decidedBy
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import User from "@/models/User.model";
 
+import { sendMail } from "@/lib/sendMail.js";
+
 export const revalidate = 0;
 
-// Map "student-id-cards/uuid.jpg" or "/student-id-cards/uuid.jpg" to absolute path
 function absFromStored(storedPath) {
   if (!storedPath) return null;
   const normalized = String(storedPath).replace(/\\/g, "/");
@@ -33,7 +33,6 @@ function absFromStored(storedPath) {
 
 export async function POST(req, { params }) {
   try {
-    // allow admin + sales
     const allowed = await isAuthenticated(["admin", "sales"]);
     if (!allowed) {
       return NextResponse.json(
@@ -44,23 +43,27 @@ export async function POST(req, { params }) {
 
     await connectDB();
 
-    // who is deciding? (best-effort)
+    // who decided (best-effort)
     let decidedBy = { user: null, email: null };
     try {
       const session = await getServerSession(authOptions);
       if (session?.user?.email) {
-        const u = await User.findOne({ email: session.user.email, deletedAt: null })
+        const u = await User.findOne({
+          email: session.user.email,
+          deletedAt: null,
+        })
           .select("_id email")
           .lean();
         if (u) decidedBy = { user: u._id, email: u.email };
       }
-    } catch {
-      // non-fatal; keep decidedBy as nulls
-    }
+    } catch {}
 
     const id = (await params)?.id;
-    const { action } = await req.json().catch(() => ({}));
-    const act = String(action || "").toLowerCase(); // "approve" | "reject"
+    const body = await req.json().catch(() => ({}));
+    const act = String(body?.action || "").toLowerCase(); // "approve" | "reject"
+    const emailFromClient = String(body?.email || "")
+      .trim()
+      .toLowerCase(); // optional
 
     if (!id || !["approve", "reject"].includes(act)) {
       return NextResponse.json(
@@ -83,28 +86,88 @@ export async function POST(req, { params }) {
       );
     }
 
-    // delete the private image file (if exists)
+    // delete private image after decision
     const stored = doc?.idCardPhoto?.path || "";
     if (stored) {
       try {
         const abs = absFromStored(stored);
         if (abs) await fs.unlink(abs).catch(() => {});
       } catch (e) {
-        // non-fatal
         console.warn("Failed deleting ID image:", e);
       }
     }
 
-    // update decision fields
+    // update decision
     doc.status = act === "approve" ? "approved" : "rejected";
     doc.decidedAt = new Date();
-    doc.decidedBy = decidedBy; // { user: ObjectId|null, email: string|null }
-    doc.idCardPhoto = undefined; // scrub original upload after decision
-
+    doc.decidedBy = decidedBy;
+    doc.idCardPhoto = undefined;
     await doc.save();
 
+    // ---------- EMAIL: approve only, try client email first, then DB -----------
+    let mail = { attempted: false, ok: false, tried: [], message: null };
+
+    async function attempt(toEmail) {
+      if (!toEmail) return { ok: false, message: "Missing email" };
+      const templateId =
+        parseInt(process.env.BREVO_TEMPLATE_ID_STUDENT_APPROVED ?? "", 10) || 4;
+      if (!templateId) return { ok: false, message: "Missing template id" };
+
+      const name =
+        doc.name || doc.fullName || doc.firstName || doc.studentName || "there";
+
+      const res = await sendMail(
+        "Student Discount Approved",
+        toEmail,
+        { name }, // {{ params.name }} in Brevo template
+        { templateId, tags: ["student-discount-approved"] }
+      );
+      return { ok: !!res?.success, message: res?.message || null };
+    }
+
+    if (doc.status === "approved") {
+      // Try email from client (if provided)
+      if (emailFromClient) {
+        mail.attempted = true;
+        mail.tried.push(emailFromClient);
+        const r1 = await attempt(emailFromClient);
+        mail.ok = r1.ok;
+        if (!r1.ok)
+          mail.message = `Client email failed: ${r1.message || "unknown"}`;
+      }
+
+      // If not provided or failed, re-fetch from DB and try doc.email
+      if (!mail.ok) {
+        const fresh = await StudentDiscount.findById(id)
+          .select("email name")
+          .lean();
+        const fallback = String(fresh?.email || doc.email || "").toLowerCase();
+        if (fallback && !mail.tried.includes(fallback)) {
+          mail.tried.push(fallback);
+          const r2 = await attempt(fallback);
+          // preserve earlier failure note, append if needed
+          if (!r2.ok) {
+            mail.message =
+              (mail.message ? mail.message + " | " : "") +
+              `DB email failed: ${r2.message || "unknown"}`;
+          }
+          mail.ok = r2.ok;
+          mail.attempted = true;
+        } else if (!fallback) {
+          mail.message =
+            (mail.message ? mail.message + " | " : "") + "No email in DB";
+          mail.attempted = true;
+        }
+      }
+    }
+    // -------------------------------------------------------------------------
+
     return NextResponse.json(
-      { success: true, data: { id: doc._id, status: doc.status } },
+      {
+        success: true,
+        data: { id: doc._id, status: doc.status },
+        ...(mail.attempted ? { mail } : {}),
+      },
       { status: 200 }
     );
   } catch (e) {

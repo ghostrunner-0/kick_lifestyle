@@ -1,18 +1,28 @@
 import OfflineRegistrationClient from "./OfflineRegisterClient";
 
+// ✅ Avoid static build hangs
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 const BRAND = "KICK LIFESTYLE";
 const BRAND_LONG = "Kick Lifestyle";
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://kick.com.np";
-const PAGE_PATH = "/offline-registeration";
+const PAGE_PATH = "/warranty/offline-register";
 const PAGE_URL = `${SITE_URL}${PAGE_PATH}`;
-const OG_IMAGE = `${SITE_URL}/meta-images/warranty.png`; // ✅ Use warranty.png
+const OG_IMAGE = `${SITE_URL}/meta-images/warranty.png`;
+
+// ✅ Moved viewport outside metadata
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: "cover",
+};
 
 export const metadata = {
   metadataBase: new URL(SITE_URL),
-
   title: `Offline Warranty Registration | ${BRAND}`,
   description: `Register your ${BRAND_LONG} product warranty for purchases made from Kick Lifestyle, Daraz, or other retail partners. Upload proof and activate your coverage instantly.`,
-
   alternates: { canonical: PAGE_PATH },
 
   openGraph: {
@@ -56,13 +66,6 @@ export const metadata = {
   applicationName: BRAND_LONG,
   creator: BRAND,
   publisher: BRAND_LONG,
-
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    maximumScale: 5,
-    viewportFit: "cover",
-  },
 };
 
 export default function Page() {

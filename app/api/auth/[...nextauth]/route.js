@@ -1,3 +1,4 @@
+// app/api/auth/[...nextauth]/route.js
 import NextAuth from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
@@ -9,15 +10,48 @@ import OTP from "@/models/OTP.model";
 import User from "@/models/User.model";
 import { zSchema } from "@/lib/zodSchema";
 
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-const SECRET_KEY = process.env.SECRET_KEY;
+/* ===================== RUNTIME ===================== */
+export const runtime = "nodejs";
 
-// Validate credentials (email + otp)
+/* ===================== ENV VARS (validated) ===================== */
+const {
+  GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET,
+  NEXTAUTH_URL: _NEXTAUTH_URL,
+  NEXTAUTH_SECRET,
+  SECRET_KEY: _SECRET_KEY, // optional: for custom cookie signing
+  NODE_ENV,
+} = process.env;
+
+if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+  throw new Error("Missing Google OAuth env vars.");
+}
+if (!NEXTAUTH_SECRET && !_SECRET_KEY) {
+  throw new Error("Missing NEXTAUTH_SECRET or SECRET_KEY.");
+}
+if (!_NEXTAUTH_URL) {
+  throw new Error("Missing NEXTAUTH_URL. Set it in production.");
+}
+
+const NEXTAUTH_URL = _NEXTAUTH_URL;
+const SECRET_KEY = _SECRET_KEY || NEXTAUTH_SECRET;
+
+/* ===================== COOKIE DOMAIN ===================== */
+let COOKIE_DOMAIN;
+try {
+  const host = new URL(NEXTAUTH_URL).hostname;
+  COOKIE_DOMAIN =
+    host && !/^(localhost|127\.0\.0\.1)$/.test(host) ? `.${host}` : undefined;
+} catch {
+  COOKIE_DOMAIN = undefined;
+}
+
+/* ===================== VALIDATION ===================== */
 const authValidationSchema = zSchema.pick({ email: true, otp: true });
 
-/** Write our long-lived cookie (await cookies() to fix Next warning). */
+/* ===================== CUSTOM COOKIE (optional) ===================== */
 async function setNextAuthCookie(userDoc) {
+  // If you don't need a separate app cookie, you can remove this function + its calls.
   const token = jwt.sign(
     {
       id: userDoc._id?.toString() || userDoc.id,
@@ -29,26 +63,57 @@ async function setNextAuthCookie(userDoc) {
     { expiresIn: "365d" }
   );
 
-  const store = await cookies(); // ⬅️ important: await
+  const store = await cookies();
   store.set({
     name: "next-auth.session-token",
     value: token,
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
+    secure: NODE_ENV === "production",
+    sameSite: "lax", // 'strict' can break some OAuth flows
     path: "/",
+    domain: COOKIE_DOMAIN,
     maxAge: 60 * 60 * 24 * 365,
   });
 
   return token;
 }
 
+/* ===================== NEXTAUTH CONFIG ===================== */
 export const authOptions = {
+  secret: NEXTAUTH_SECRET || SECRET_KEY,
+
+  session: { strategy: "jwt", maxAge: 60 * 60 * 24 * 365 },
+  jwt: { maxAge: 60 * 60 * 24 * 365 },
+
+  // If you want to override NextAuth's own cookies (optional):
+  // cookies: {
+  //   sessionToken: {
+  //     name:
+  //       NODE_ENV === "production"
+  //         ? "__Secure-next-auth.session-token"
+  //         : "next-auth.session-token",
+  //     options: {
+  //       httpOnly: true,
+  //       sameSite: "lax",
+  //       path: "/",
+  //       secure: NODE_ENV === "production",
+  //       domain: COOKIE_DOMAIN,
+  //     },
+  //   },
+  // },
+
   providers: [
     GoogleProvider({
       clientId: GOOGLE_CLIENT_ID,
       clientSecret: GOOGLE_CLIENT_SECRET,
-      allowDangerousEmailAccountLinking: true,
+      allowDangerousEmailAccountLinking: false,
+      authorization: {
+        params: {
+          prompt: "select_account",
+          access_type: "offline",
+          response_type: "code",
+        },
+      },
     }),
 
     CredentialsProvider({
@@ -62,51 +127,58 @@ export const authOptions = {
 
         const parsed = authValidationSchema.safeParse(credentials);
         if (!parsed.success) {
-          throw new Error(parsed.error.errors[0]?.message || "Invalid input");
+          throw new Error(
+            parsed.error.errors[0]?.message || "Invalid credentials"
+          );
         }
 
         const { email, otp } = parsed.data;
-        const otpRecord = await OTP.findOne({ email, otp });
+
+        // optional hardening
+        if (!/^\d{4,8}$/.test(String(otp))) throw new Error("Invalid OTP");
+
+        const otpRecord = await OTP.findOne({ email, otp }).lean();
         if (!otpRecord) throw new Error("Invalid OTP");
+
+        // optional expiry check if your schema has it
+        // if (otpRecord.expiresAt && new Date(otpRecord.expiresAt) < new Date()) {
+        //   throw new Error("OTP expired");
+        // }
 
         const user = await User.findOne({
           email,
           isEmailVerified: true,
           deletedAt: null,
         }).lean();
-        if (!user) throw new Error("User not found or email not verified");
 
-        await OTP.deleteOne({ _id: otpRecord._id });
+        if (!user) throw new Error("User not found or not verified");
 
-        // mirror cookie behavior for credentials
-        await setNextAuthCookie(user);
+        await OTP.deleteOne({ _id: otpRecord._id }); // invalidate used OTP
+
+        await setNextAuthCookie(user); // remove if unneeded
 
         return {
           id: user._id.toString(),
           email: user.email,
           name: user.name,
-          role: user.role || "user", // "admin" | "sales" | "editor" | "user"
+          role: user.role || "user",
         };
       },
     }),
   ],
 
-  session: {
-    strategy: "jwt",
-    maxAge: 60 * 60 * 24 * 365,
-  },
-
-  jwt: {
-    maxAge: 60 * 60 * 24 * 365,
-  },
-
   callbacks: {
-    // Ensure Google users exist & set our cookie too
     async signIn({ account, profile }) {
       try {
         await connectDB();
 
         if (account?.provider === "google" && profile?.email) {
+          const emailVerified =
+            typeof profile.email_verified === "boolean"
+              ? profile.email_verified
+              : true;
+          if (!emailVerified) return false;
+
           let user = await User.findOne({
             email: profile.email,
             deletedAt: null,
@@ -122,7 +194,7 @@ export const authOptions = {
             });
           }
 
-          await setNextAuthCookie(user);
+          await setNextAuthCookie(user); // remove if unneeded
         }
 
         return true;
@@ -132,7 +204,6 @@ export const authOptions = {
       }
     },
 
-    // Put id/role into token, hydrate if needed
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id || user._id?.toString() || token.id;
@@ -144,49 +215,53 @@ export const authOptions = {
       if ((!token.id || !token.role) && token?.email) {
         try {
           await connectDB();
-          const u = await User.findOne({ email: token.email, deletedAt: null }).lean();
+          const u = await User.findOne({
+            email: token.email,
+            deletedAt: null,
+          }).lean();
           if (u) {
             token.id = u._id?.toString();
             token.role = u.role || "user";
             token.name = u.name || token.name;
           }
         } catch (e) {
-          console.error("jwt callback hydrate error:", e?.message);
+          console.error("jwt hydrate error:", e?.message);
         }
       }
+
       return token;
     },
 
     async session({ session, token }) {
-      if (token) {
+      if (session.user && token) {
         session.user.id = token.id;
         session.user.email = token.email;
         session.user.name = token.name;
-        session.user.role = token.role || "user"; // "admin" | "sales" | "editor" | "user"
+        session.user.role = token.role || "user";
       }
       return session;
     },
 
-    /**
-     * Redirect rules:
-     * - Default everyone to /account (fixes old /my-account).
-     * - If a safe callbackUrl within site is provided, honor it but normalize /my-account -> /account.
-     */
     async redirect({ url, baseUrl }) {
       try {
-        // external URLs: block, go home
-        const isExternal = !url.startsWith(baseUrl);
-        if (isExternal) return baseUrl;
+        const base = new URL(baseUrl);
+        const next = new URL(url, base);
 
-        // normalize legacy my-account
-        const normalized = url.replace(/\/my-account\/?$/i, "/account");
+        // same-origin only
+        if (next.origin !== base.origin) return baseUrl;
 
-        // If NextAuth gives just the site root, send to /account
-        if (normalized === baseUrl || normalized === `${baseUrl}/`) {
-          return `${baseUrl}/account`;
+        // normalize /my-account -> /account
+        const normalizedPath = next.pathname.replace(
+          /\/my-account\/?$/i,
+          "/account"
+        );
+        const result = new URL(normalizedPath + next.search + next.hash, base);
+
+        if (result.pathname === "/" || result.pathname === "") {
+          result.pathname = "/account";
         }
 
-        return normalized;
+        return result.toString();
       } catch {
         return `${baseUrl}/account`;
       }
@@ -195,9 +270,8 @@ export const authOptions = {
 
   pages: {
     signIn: "/auth/login",
+    error: "/auth/error",
   },
-
-  secret: SECRET_KEY,
 };
 
 const handler = NextAuth(authOptions);

@@ -5,8 +5,9 @@ import { connectDB } from "@/lib/DB";
 import QROrderPayment from "@/models/QrOrderPayment.model";
 import Order from "@/models/Orders.model";
 
-// Save inside /public/payments so it's directly accessible at /payments/<file>
-const PAY_DIR = process.env.PAYMENTS_DIR || path.join(process.cwd(), "public", "payments");
+// ✅ Save directly inside your main Next.js project folder (not /public)
+const PAY_DIR =
+  process.env.PAYMENTS_DIR || path.join(process.cwd(), "payments");
 
 export async function POST(req) {
   try {
@@ -15,31 +16,68 @@ export async function POST(req) {
     const form = await req.formData();
     const file = form.get("file");
     const orderId = String(form.get("order_id") || "");
-    const displayOrderId = String(form.get("display_order_id") || "");
     let amount = Number(form.get("amount") || 0);
 
     if (!file || typeof file === "string") {
-      return NextResponse.json({ success: false, message: "File required" }, { status: 400 });
+      return NextResponse.json(
+        { success: false, message: "File required" },
+        { status: 400 }
+      );
     }
     if (!orderId) {
-      return NextResponse.json({ success: false, message: "order_id is required" }, { status: 400 });
+      return NextResponse.json(
+        { success: false, message: "order_id is required" },
+        { status: 400 }
+      );
     }
 
-    // Fallback: read amount from the order if client didn't send a good amount
+    // Fetch and verify order
+    const order = await Order.findById(orderId)
+      .select({
+        paymentMethod: 1,
+        display_order_id: 1,
+        display_order_prefix: 1,
+        amounts: 1,
+        metadata: 1,
+      })
+      .lean();
+
+    if (!order) {
+      return NextResponse.json(
+        { success: false, message: "Order not found" },
+        { status: 404 }
+      );
+    }
+
+    // ✅ Ensure it's a QR order with the proper BLQ prefix
+    if (
+      order.paymentMethod !== "qr" ||
+      !(order.display_order_id || "").startsWith("BLQ-")
+    ) {
+      return NextResponse.json(
+        { success: false, message: "Not a QR order / bad prefix" },
+        { status: 400 }
+      );
+    }
+
+    // Fallback: read amount from order if missing
     if (!Number.isFinite(amount) || amount <= 0) {
-      const order = await Order.findById(orderId).select({ amounts: 1, metadata: 1 }).lean();
       amount =
         Number(order?.amounts?.total) ||
         Number(order?.metadata?.qr?.expected_amount) ||
         0;
     }
     if (!Number.isFinite(amount) || amount <= 0) {
-      return NextResponse.json({ success: false, message: "Invalid amount" }, { status: 400 });
+      return NextResponse.json(
+        { success: false, message: "Invalid amount" },
+        { status: 400 }
+      );
     }
 
+    // ✅ Ensure the /payments folder exists in your main project dir
     await fs.mkdir(PAY_DIR, { recursive: true });
 
-    // Safe extension detection
+    // Detect extension safely
     const mime = (file.type || "").toLowerCase();
     const ext =
       (mime.includes("png") && "png") ||
@@ -47,36 +85,39 @@ export async function POST(req) {
       (mime.includes("webp") && "webp") ||
       "png";
 
-    const base = (displayOrderId || orderId || `PAY-${Date.now()}`).replace(/[^\w\-]+/g, "-");
+    // ✅ Always use server-side order ID as filename (guarantees BLQ prefix)
+    const base = order.display_order_id; // e.g., "BLQ-2034"
     const filename = `${base}.${ext}`;
     const filepath = path.join(PAY_DIR, filename);
 
+    // Write file
     const buf = Buffer.from(await file.arrayBuffer());
     await fs.writeFile(filepath, buf);
 
-    // Public URL served by Next static (because we saved into /public)
-    const publicUrl = `/payments/${filename}`;
+    // The file is saved inside your app folder under `/payments`
+    const relativeUrl = `/payments/${filename}`;
 
+    // Save DB record
     const doc = await QROrderPayment.create({
       order: orderId,
-      displayOrderId,
+      displayOrderId: order.display_order_id,
       amount,
       proof: {
         filename,
-        path: filepath, // absolute path (server ref)
+        path: filepath, // absolute path on disk
         mime,
         size: buf.length,
-        url: publicUrl, // what the client should render
+        url: relativeUrl, // internal ref (not public)
       },
-      status: "pending", // will change to 'verified' after manual review
+      status: "pending",
     });
 
-    // Mark the order as "submitted" best-effort (do not fail the request if this errors)
+    // Mark order as proof submitted
     await Order.findByIdAndUpdate(orderId, {
       $set: {
         "metadata.qr.submitted": true,
         "metadata.qr.proofId": doc._id,
-        "metadata.qr.proofUrl": publicUrl,
+        "metadata.qr.proofUrl": relativeUrl,
         "metadata.qr.submittedAt": new Date(),
       },
     }).catch(() => {});

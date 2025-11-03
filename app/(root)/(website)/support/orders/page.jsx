@@ -1,13 +1,26 @@
 import OrderClient from "./OrderClient";
 
+// ✅ Tell Next.js this page must be rendered dynamically (no static build)
+export const dynamic = "force-dynamic";
+
+// ✅ Optional: skip caching completely (recommended for live order lookups)
+export const revalidate = 0;
+
 const BRAND = "KICK LIFESTYLE";
 const BRAND_LONG = "Kick Lifestyle";
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://kick.com.np";
 const PAGE_PATH = "/support/orders";
 const PAGE_URL = `${SITE_URL}${PAGE_PATH}`;
 
-// ✅ Default meta image
 const OG_IMAGE = `${SITE_URL}/meta-images/logo.png`;
+
+// ✅ Move viewport outside metadata (Next.js requirement)
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: "cover",
+};
 
 export const metadata = {
   metadataBase: new URL(SITE_URL),

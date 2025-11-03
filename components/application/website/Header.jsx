@@ -10,14 +10,15 @@ import React, {
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-
+import { AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 /* Sidebars */
 import CartSidebar from "./CartSidebar";
 import SearchSidebar from "@/components/application/SearchSidebar";
 
 /* Redux */
 import { useSelector } from "react-redux";
-import { selectCartCount } from "@/store/cartSlice";
+import { selectCartCount, selectUniqueCount } from "@/store/cartSlice";
 
 /* Assets */
 import LOGO_BLACK from "@/public/assets/images/logo-black.png";
@@ -89,6 +90,7 @@ export default function Header() {
   const isHome = pathname === "/";
 
   const cartCount = useSelector(selectCartCount);
+  const uniqueCount = useSelector(selectUniqueCount);
 
   const [isStickyShade, setIsStickyShade] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
@@ -525,17 +527,39 @@ export default function Header() {
               </Link>
             </Button>
 
+            {/* Cart button with animated badge (unique product count) */}
             <button
               type="button"
               onClick={() => setCartOpen(true)}
               className={`relative inline-flex h-10 w-10 items-center justify-center rounded-md ${textCls}`}
+              aria-label="Open cart"
             >
               <ShoppingCart className="h-5 w-5" />
-              {cartCount > 0 && (
-                <span className="absolute -top-1 -right-1 grid place-items-center rounded-full bg-black text-white text-[10px] h-4 min-w-4 px-1 leading-[16px]">
-                  {cartCount > 99 ? "99+" : cartCount}
-                </span>
-              )}
+
+              <AnimatePresence initial={false}>
+                {uniqueCount > 0 && (
+                  <motion.span
+                    key="cart-badge"
+                    initial={{ scale: 0.6, opacity: 0, y: -6 }}
+                    animate={{ scale: 1, opacity: 1, y: 0 }}
+                    exit={{ scale: 0.6, opacity: 0, y: -6 }}
+                    transition={{ type: "spring", stiffness: 420, damping: 22 }}
+                    className="absolute -top-1 -right-1 grid place-items-center rounded-full bg-black text-white text-[10px] h-4 min-w-4 px-1 leading-[16px]"
+                  >
+                    <AnimatePresence mode="popLayout" initial={false}>
+                      <motion.span
+                        key={uniqueCount} // re-mount on change -> animates number
+                        initial={{ y: 6, opacity: 0, scale: 0.9 }}
+                        animate={{ y: 0, opacity: 1, scale: 1 }}
+                        exit={{ y: -6, opacity: 0, scale: 0.95 }}
+                        transition={{ type: "tween", duration: 0.18 }}
+                      >
+                        {uniqueCount > 99 ? "99+" : uniqueCount}
+                      </motion.span>
+                    </AnimatePresence>
+                  </motion.span>
+                )}
+              </AnimatePresence>
             </button>
           </div>
         </div>
