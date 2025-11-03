@@ -1,5 +1,9 @@
 // store/cartSlice.js
-import { createSlice, createSelector, createAsyncThunk } from "@reduxjs/toolkit";
+import {
+  createSlice,
+  createSelector,
+  createAsyncThunk,
+} from "@reduxjs/toolkit";
 
 /** Public website endpoints */
 const PRODUCT_URL = (id) => `/api/website/product/${id}`;
@@ -180,10 +184,12 @@ const cartSlice = createSlice({
           line.mrp = Number(r.latestMrp);
 
           if (r.newName) line.name = r.newName;
-          if (r.newVariantName && line.variant) line.variant.name = r.newVariantName;
+          if (r.newVariantName && line.variant)
+            line.variant.name = r.newVariantName;
           if (r.imageGuess) {
             line.image = r.imageGuess;
-            if (line.variant && !line.variant.image) line.variant.image = r.imageGuess;
+            if (line.variant && !line.variant.image)
+              line.variant.image = r.imageGuess;
           }
 
           line.flags = {
@@ -211,17 +217,40 @@ const cartSlice = createSlice({
   },
 });
 
-export const { addItem, setQty, removeItem, clearCart, setCoupon } = cartSlice.actions;
+export const { addItem, setQty, removeItem, clearCart, setCoupon } =
+  cartSlice.actions;
 export default cartSlice.reducer;
 
 /* selectors */
-const selectCartState = (s) => s?.cart ?? { items: {}, meta: { repricing: false } };
-export const selectItemsMap = createSelector([selectCartState], (c) => c.items ?? {});
-export const selectItems = createSelector([selectItemsMap], (m) => Object.values(m));
+const selectCartState = (s) =>
+  s?.cart ?? { items: {}, meta: { repricing: false } };
+export const selectItemsMap = createSelector(
+  [selectCartState],
+  (c) => c.items ?? {}
+);
+export const selectItems = createSelector([selectItemsMap], (m) =>
+  Object.values(m)
+);
+
+/** qty-based count (kept if you still need it elsewhere) */
 export const selectCartCount = createSelector([selectItems], (items) =>
   items.reduce((n, it) => n + (it.qty || 0), 0)
 );
-export const selectSubtotal = createSelector([selectItems], (items) =>
-  items.reduce((sum, it) => sum + (Number(it.price) || 0) * (Number(it.qty) || 0), 0)
+
+/** ✅ NEW: distinct products count (lines) */
+export const selectUniqueCount = createSelector(
+  [selectItems],
+  (items) => items.length
 );
-export const selectRepricing = createSelector([selectCartState], (c) => !!c.meta?.repricing);
+
+/** totals */
+export const selectSubtotal = createSelector([selectItems], (items) =>
+  items.reduce(
+    (sum, it) => sum + (Number(it.price) || 0) * (Number(it.qty) || 0),
+    0
+  )
+);
+export const selectRepricing = createSelector(
+  [selectCartState],
+  (c) => !!c.meta?.repricing
+);
