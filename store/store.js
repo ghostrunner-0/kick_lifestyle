@@ -1,18 +1,25 @@
-// store/index.js
+// store/store.js
 import { combineReducers, configureStore } from "@reduxjs/toolkit";
 import storage from "redux-persist/lib/storage";
 import { persistReducer, persistStore } from "redux-persist";
 
 // existing
 import authreducer from "./reducer/AuthReducer";
-
-// NEW
 import cartReducer from "./cartSlice";
 
-const rootReducer = combineReducers({
+// 1) App reducers
+const appReducer = combineReducers({
   authStore: authreducer,
-  cart: cartReducer, // <-- add cart under the 'cart' key
+  cart: cartReducer,
 });
+
+// 2) Root reducer that clears state on logout
+const rootReducer = (state, action) => {
+  if (action.type === "authStore/logout" || action.type === "RESET_STORE") {
+    state = undefined; // ← causes a full reset to initial state for all slices
+  }
+  return appReducer(state, action);
+};
 
 const persistConfig = {
   key: "root",

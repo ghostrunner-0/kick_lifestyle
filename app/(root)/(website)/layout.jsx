@@ -2,6 +2,7 @@
 import Footer from "@/components/application/website/Footer";
 import Header from "@/components/application/website/Header";
 import React from "react";
+import PopupRenderer from "@/components/application/website/PopupRenderer";
 
 import ReactQueryProvider from "@/components/providers/ReactQueryProvider";
 import { CategoriesProvider } from "@/components/providers/CategoriesProvider";
@@ -11,7 +12,6 @@ import { deriveKey } from "@/components/providers/ProductProvider";
 import AuthHydrator from "@/components/providers/AuthHydrator";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Analytics } from "@vercel/analytics/next";
-import PopupRuntime from "@/components/marketing/PopupRuntime";
 // If you truly need a different font *just for this subtree*,
 // import it and apply on a wrapper <div>. Do NOT render <html>/<body> here.
 // import { Poppins } from "next/font/google";
@@ -63,10 +63,8 @@ export default async function Layout({ children }) {
             initialProducts={initialProducts}
           >
             <Header />
-            <main className="pb-16 md:pb-0">
-              {children}
-              <PopupRuntime autoOpenDelayMs={1500} oncePerSession />
-            </main>
+            <main className="pb-16 md:pb-0">{children}</main>
+            <PopupRenderer />
             <SpeedInsights />
             <Footer />
             <BottomNav />

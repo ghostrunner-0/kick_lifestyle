@@ -188,40 +188,40 @@ function ComboBox({
   );
 }
 
-/* =========================== Edit Address Dialog =========================== */
+/* =========================== Edit Address Dialog (fixed) =========================== */
 function EditAddressDialog({ open, onOpenChange, initialUser, onSaved }) {
   const [saving, setSaving] = useState(false);
+
+  // controlled selects
   const [city, setCity] = useState("");
   const [zone, setZone] = useState("");
   const [area, setArea] = useState("");
   const [landmark, setLandmark] = useState("");
+
+  // show saved labels instantly (even if options not loaded yet)
   const [savedLabels, setSavedLabels] = useState({
     city: "",
     zone: "",
     area: "",
   });
+
+  // option lists
   const [cityOptions, setCityOptions] = useState([]);
   const [zoneOptions, setZoneOptions] = useState([]);
   const [areaOptions, setAreaOptions] = useState([]);
+
+  // spinners
   const [loadingLoc, setLoadingLoc] = useState({
     city: false,
     zone: false,
     area: false,
   });
 
-  useEffect(() => {
-    if (!open) return;
-    const u = initialUser || {};
-    setSavedLabels({
-      city: u.pathaoCityLabel || "",
-      zone: u.pathaoZoneLabel || "",
-      area: u.pathaoAreaLabel || "",
-    });
-    setCity(u.pathaoCityId ? String(u.pathaoCityId) : "");
-    setZone(u.pathaoZoneId ? String(u.pathaoZoneId) : "");
-    setArea(u.pathaoAreaId ? String(u.pathaoAreaId) : "");
-    setLandmark(u.address || "");
-  }, [open, initialUser]);
+  // helpers to find current labels from options (fallback to savedLabels)
+  const pickLabel = (opts, value, fallback = "") =>
+    opts.find((o) => String(o.value) === String(value))?.label ||
+    fallback ||
+    "";
 
   const fetchCities = useCallback(async () => {
     setLoadingLoc((s) => ({ ...s, city: true }));
@@ -244,7 +244,10 @@ function EditAddressDialog({ open, onOpenChange, initialUser, onSaved }) {
   }, []);
 
   const fetchZones = useCallback(async (cityId) => {
-    if (!cityId) return setZoneOptions([]);
+    if (!cityId) {
+      setZoneOptions([]);
+      return;
+    }
     setLoadingLoc((s) => ({ ...s, zone: true }));
     try {
       const res = await axios.get(`/api/pathao/zones?cityId=${cityId}`);
@@ -265,7 +268,10 @@ function EditAddressDialog({ open, onOpenChange, initialUser, onSaved }) {
   }, []);
 
   const fetchAreas = useCallback(async (zoneId) => {
-    if (!zoneId) return setAreaOptions([]);
+    if (!zoneId) {
+      setAreaOptions([]);
+      return;
+    }
     setLoadingLoc((s) => ({ ...s, area: true }));
     try {
       const res = await axios.get(`/api/pathao/areas?zoneId=${zoneId}`);
@@ -285,10 +291,61 @@ function EditAddressDialog({ open, onOpenChange, initialUser, onSaved }) {
     }
   }, []);
 
+  // When dialog opens, hydrate from initialUser and preload cascading options so selections render properly
   useEffect(() => {
-    if (open) fetchCities();
-  }, [open, fetchCities]);
+    let cancelled = false;
+    if (!open) return;
+
+    const u = initialUser || {};
+    const initCityId = u.pathaoCityId ? String(u.pathaoCityId) : "";
+    const initZoneId = u.pathaoZoneId ? String(u.pathaoZoneId) : "";
+    const initAreaId = u.pathaoAreaId ? String(u.pathaoAreaId) : "";
+    const initAddr = u.address || "";
+
+    setSavedLabels({
+      city: u.pathaoCityLabel || "",
+      zone: u.pathaoZoneLabel || "",
+      area: u.pathaoAreaLabel || "",
+    });
+    setCity(initCityId);
+    setZone(initZoneId);
+    setArea(initAreaId);
+    setLandmark(initAddr);
+
+    // sequential preload so dropdowns contain the saved selections
+    (async () => {
+      await fetchCities();
+      if (cancelled) return;
+
+      if (initCityId) {
+        await fetchZones(initCityId);
+        if (cancelled) return;
+      } else {
+        setZone("");
+        setArea("");
+        setZoneOptions([]);
+        setAreaOptions([]);
+        return;
+      }
+
+      if (initZoneId) {
+        await fetchAreas(initZoneId);
+        if (cancelled) return;
+      } else {
+        setArea("");
+        setAreaOptions([]);
+        return;
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, initialUser, fetchCities, fetchZones, fetchAreas]);
+
+  // when city changes by user, clear lower levels and fetch zones
   useEffect(() => {
+    if (!open) return;
     if (!city) {
       setZone("");
       setArea("");
@@ -296,27 +353,43 @@ function EditAddressDialog({ open, onOpenChange, initialUser, onSaved }) {
       setAreaOptions([]);
       return;
     }
+    setZone("");
+    setArea("");
+    setAreaOptions([]);
     fetchZones(city);
-  }, [city, fetchZones]);
+  }, [city, open, fetchZones]);
+
+  // when zone changes by user, clear area and fetch areas
   useEffect(() => {
+    if (!open) return;
     if (!zone) {
       setArea("");
       setAreaOptions([]);
       return;
     }
+    setArea("");
     fetchAreas(zone);
-  }, [zone, fetchAreas]);
+  }, [zone, open, fetchAreas]);
 
   const onSave = async () => {
     if (!city || !zone || !area || !landmark.trim()) return;
     setSaving(true);
     try {
+      // derive labels from options (fallback to savedLabels so we always send something sensible)
+      const cityLabel = pickLabel(cityOptions, city, savedLabels.city);
+      const zoneLabel = pickLabel(zoneOptions, zone, savedLabels.zone);
+      const areaLabel = pickLabel(areaOptions, area, savedLabels.area);
+
       await axios.put("/api/account/address", {
         cityId: city,
         zoneId: zone,
         areaId: area,
+        cityLabel,
+        zoneLabel,
+        areaLabel,
         landmark: landmark.trim(),
       });
+
       onOpenChange(false);
       onSaved?.();
     } catch (e) {
@@ -342,7 +415,7 @@ function EditAddressDialog({ open, onOpenChange, initialUser, onSaved }) {
             <Label className="mb-1.5 block">City</Label>
             <ComboBox
               value={city}
-              valueLabel={savedLabels.city}
+              valueLabel={pickLabel(cityOptions, city, savedLabels.city)}
               onChange={setCity}
               options={cityOptions}
               placeholder={loadingLoc.city ? "Loading..." : "Select city"}
@@ -350,30 +423,45 @@ function EditAddressDialog({ open, onOpenChange, initialUser, onSaved }) {
               disabled={loadingLoc.city}
             />
           </div>
+
           <div>
             <Label className="mb-1.5 block">Zone</Label>
             <ComboBox
               value={zone}
-              valueLabel={savedLabels.zone}
+              valueLabel={pickLabel(zoneOptions, zone, savedLabels.zone)}
               onChange={setZone}
               options={zoneOptions}
-              placeholder={loadingLoc.zone ? "Loading..." : "Select zone"}
-              emptyText="No zones"
+              placeholder={
+                loadingLoc.zone
+                  ? "Loading..."
+                  : city
+                  ? "Select zone"
+                  : "Select city first"
+              }
+              emptyText={city ? "No zones" : "Select city first"}
               disabled={loadingLoc.zone || !city}
             />
           </div>
+
           <div>
             <Label className="mb-1.5 block">Area</Label>
             <ComboBox
               value={area}
-              valueLabel={savedLabels.area}
+              valueLabel={pickLabel(areaOptions, area, savedLabels.area)}
               onChange={setArea}
               options={areaOptions}
-              placeholder={loadingLoc.area ? "Loading..." : "Select area"}
-              emptyText="No areas"
+              placeholder={
+                loadingLoc.area
+                  ? "Loading..."
+                  : zone
+                  ? "Select area"
+                  : "Select zone first"
+              }
+              emptyText={zone ? "No areas" : "Select zone first"}
               disabled={loadingLoc.area || !zone}
             />
           </div>
+
           <div>
             <Label className="mb-1.5 block">Landmark</Label>
             <Input
@@ -608,36 +696,37 @@ export default function AccountPage() {
           >
             {initials}
           </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-semibold truncate">
-                {user.name || "My Account"}
-              </h1>
-              {user.role ? (
-                <Badge
-                  variant="secondary"
-                  className="uppercase tracking-wide text-black"
-                  style={{
-                    backgroundColor: `${PRIMARY}33`,
-                    borderColor: `${PRIMARY}55`,
-                  }}
-                >
-                  {user.role}
-                </Badge>
-              ) : null}
-            </div>
-            <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-              {user.email ? (
-                <span className="inline-flex items-center gap-1.5">
-                  <Mail className="h-4 w-4" /> {user.email}
-                </span>
-              ) : null}
-              {user.phone ? (
-                <span className="inline-flex items-center gap-1.5">
-                  <Phone className="h-4 w-4" /> {user.phone}
-                </span>
-              ) : null}
-            </div>
+        </div>
+
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-semibold truncate">
+              {user.name || "My Account"}
+            </h1>
+            {user.role ? (
+              <Badge
+                variant="secondary"
+                className="uppercase tracking-wide text-black"
+                style={{
+                  backgroundColor: `${PRIMARY}33`,
+                  borderColor: `${PRIMARY}55`,
+                }}
+              >
+                {user.role}
+              </Badge>
+            ) : null}
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+            {user.email ? (
+              <span className="inline-flex items-center gap-1.5">
+                <Mail className="h-4 w-4" /> {user.email}
+              </span>
+            ) : null}
+            {user.phone ? (
+              <span className="inline-flex items-center gap-1.5">
+                <Phone className="h-4 w-4" /> {user.phone}
+              </span>
+            ) : null}
           </div>
         </div>
 
@@ -1175,20 +1264,31 @@ export default function AccountPage() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {addresses.map((a) => (
-                    <div key={a._id || a.id} className="rounded border p-3">
-                      <div className="flex items-center gap-2 text-sm font-medium">
-                        <MapPin className="h-4 w-4" />
-                        {a.label || "Address"}
+                  {addresses.map((a) => {
+                    const parts = [
+                      a.line1 || "",
+                      a.line2 || "",
+                      a.city || "",
+                      a.state || "",
+                      a.zip || "",
+                    ].filter(Boolean);
+                    const composed = parts.join(", ");
+
+                    return (
+                      <div
+                        key={a._id || a.id || a.label}
+                        className="rounded border p-3"
+                      >
+                        <div className="flex items-center gap-2 text-sm font-medium">
+                          <MapPin className="h-4 w-4" />
+                          {a.label || "Address"}
+                        </div>
+                        <div className="mt-1 text-sm text-muted-foreground">
+                          {composed || "—"}
+                        </div>
                       </div>
-                      <div className="mt-1 text-sm text-muted-foreground">
-                        {a.line1}
-                        {a.line2 ? `, ${a.line2}` : ""}
-                        {a.city ? `, ${a.city}` : ""}
-                        {a.state ? `, ${a.state}` : ""} {a.zip ? a.zip : ""}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
