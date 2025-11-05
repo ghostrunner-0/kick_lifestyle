@@ -1,61 +1,59 @@
 import mongoose from "mongoose";
 
+const imageSchema = new mongoose.Schema(
+  {
+    _id: { type: String, required: true },
+    alt: { type: String, default: "" },
+    path: { type: String, required: true },
+  },
+  { _id: false }
+);
+
 const PopupSchema = new mongoose.Schema(
   {
-    title: { type: String, trim: true },
-    type: {
-      type: String,
-      enum: ["discount", "image-link", "launch"],
-      required: true,
-    },
+    type: { type: String, enum: ["image-link", "discount"], required: true },
 
-    // Visuals
-    imageUrl: { type: String, trim: true, required: true },
-    noBackdrop: { type: Boolean, default: false }, // for image-link style "no bg"
+    // Visual
+    image: { type: imageSchema, required: true },
 
-    // Targeting
-    pages: [{ type: String }], // ["/", "/category/*", "/product/*"] supports prefix wildcard
-    priority: { type: Number, default: 10 },
-    startAt: { type: Date, default: Date.now },
-    endAt: { type: Date, default: null },
+    // For image-link
+    linkHref: { type: String, trim: true, default: "" },
+
+    // For discount
+    couponCode: { type: String, trim: true, default: "" },
+
+    // Display controls
     isActive: { type: Boolean, default: true },
+    startAt: { type: Date, default: null },
+    endAt: { type: Date, default: null },
+    priority: { type: Number, default: 10 },
 
-    // Frequency control (front-end honors)
+    // Optional path targeting (prefix "*" wildcard: "/product/*")
+    pages: [{ type: String }],
+
+    // Frequency (frontend honors)
     frequency: {
       scope: {
         type: String,
         enum: ["once", "daily", "session", "always"],
         default: "session",
       },
-      maxShows: { type: Number, default: 1 }, // for "once" or "daily" you can still cap
+      maxShows: { type: Number, default: 1 },
     },
 
-    // DISCOUNT fields
-    couponCode: { type: String, trim: true },
-    ctaText: { type: String, trim: true, default: "Shop Now" },
-    ctaHref: { type: String, trim: true, default: "/" },
-
-    // IMAGE-LINK fields
-    linkHref: { type: String, trim: true },
-
-    // LAUNCH fields
-    launchTitle: { type: String, trim: true },
-    launchSubtitle: { type: String, trim: true },
-    launchAt: { type: Date, default: null },
-    launchCtaText: { type: String, trim: true, default: "Notify Me" },
-    launchCtaHref: { type: String, trim: true, default: "/notify" },
-
-    // Tracking (simple counters)
-    stats: {
-      impressions: { type: Number, default: 0 },
-      clicks: { type: Number, default: 0 },
-      copies: { type: Number, default: 0 },
+    // UI overrides
+    ui: {
+      layout: {
+        type: String,
+        enum: ["centered", "edge", "sheet"],
+        default: undefined,
+      },
     },
 
-    // Admin audit
+    // Soft-delete & audit
+    deletedAt: { type: Date, default: null, index: true },
     createdBy: { type: String, default: null },
     updatedBy: { type: String, default: null },
-    deletedAt: { type: Date, default: null, index: true },
   },
   { timestamps: true }
 );

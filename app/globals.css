@@ -121,7 +121,9 @@
 }
 
 /* Ensure the app root fills full height to prevent extra whitespace below full-screen layouts */
-html, body, #__next {
+html,
+body,
+#__next {
   height: 100%;
 }
 body {
@@ -149,6 +151,17 @@ html {
     transform: translateX(-50%);
   }
 }
+
+/* reactjs-popup reset + centering fix */
+.kick-popup-content {
+  padding: 0;
+}
+.kick-popup-overlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .animate-marquee {
   animation: marquee 26s linear infinite;
 }

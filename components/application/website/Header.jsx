@@ -63,6 +63,7 @@ const STATIC_NAV = [
       { label: "Blogs", href: "/blogs" },
       { label: "About Us", href: "/about" },
       { label: "Contact Us", href: "/contact" },
+      { label: "Kick Yatayat Daraz", href: "/KickYatayatDaraz" },
     ],
   },
   { label: "Student Discount", href: "/student-discount" },

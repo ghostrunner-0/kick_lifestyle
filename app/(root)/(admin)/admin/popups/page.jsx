@@ -1,477 +1,497 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import { Button } from "@/components/ui/button";
+import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+
+import BreadCrumb from "@/components/application/admin/BreadCrumb";
+import { ADMIN_DASHBOARD } from "@/routes/AdminRoutes";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
-  SelectTrigger,
-  SelectValue,
   SelectContent,
   SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { Loader2, Plus, Pencil, Trash2 } from "lucide-react";
+import ButtonLoading from "@/components/application/ButtonLoading";
+import MediaSelector from "@/components/application/admin/MediaSelector";
+import { showToast } from "@/lib/ShowToast";
+import { zSchema } from "@/lib/zodSchema";
 
-const TYPE_FIELDS_HELP = {
-  discount: "Needs: imageUrl, couponCode (optional), ctaText, ctaHref.",
-  "image-link": "Needs: imageUrl, linkHref. Set noBackdrop=true for no bg.",
-  launch:
-    "Needs: imageUrl, launchTitle, launchSubtitle, launchAt, launchCtaText, launchCtaHref.",
-};
+const BreadCrumbData = [
+  { href: ADMIN_DASHBOARD, label: "Home" },
+  { href: "/admin/popups", label: "Popups" },
+  { href: "", label: "Configure" },
+];
 
-function Row({ item, onEdit, onDelete }) {
-  return (
-    <div className="rounded border p-3 flex flex-wrap items-center gap-3">
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <div className="text-sm font-semibold truncate">
-            {item.title || item.launchTitle || "(untitled)"}
-          </div>
-          <Badge variant="secondary" className="capitalize">
-            {item.type}
-          </Badge>
-          {item.isActive ? (
-            <Badge className="bg-green-500">Active</Badge>
-          ) : (
-            <Badge>Inactive</Badge>
-          )}
-        </div>
-        <div className="mt-1 text-xs text-muted-foreground truncate">
-          Pages: {(item.pages || []).length ? item.pages.join(", ") : "Global"}
-        </div>
-      </div>
-      <div className="flex items-center gap-2">
-        <Button size="sm" variant="outline" onClick={() => onEdit(item)}>
-          <Pencil className="h-4 w-4 mr-1" /> Edit
-        </Button>
-        <Button size="sm" variant="destructive" onClick={() => onDelete(item)}>
-          <Trash2 className="h-4 w-4 mr-1" /> Delete
-        </Button>
-      </div>
-    </div>
-  );
-}
+const formZ = z.object({
+  _id: z.string().optional(),
+  type: z.enum(["image-link", "discount"]),
+  image: zSchema.shape.image,
 
-function Editor({ open, onOpenChange, initial, onSaved }) {
+  // conditional
+  linkHref: z
+    .string()
+    .url({ message: "Enter full URL e.g. https://kick.com.np/deals" })
+    .optional()
+    .or(z.literal(""))
+    .default(""),
+  couponCode: z.string().optional().default(""),
+
+  // controls
+  isActive: z.boolean().default(true),
+  startAt: z.coerce.date().nullable().optional(),
+  endAt: z.coerce.date().nullable().optional(),
+  priority: z.number().int().default(10),
+  pages: z.string().optional().default(""), // CSV in UI, will split before submit
+
+  frequencyScope: z
+    .enum(["once", "daily", "session", "always"])
+    .default("session"),
+  frequencyMax: z.coerce.number().int().min(0).default(1),
+
+  uiLayout: z.enum(["centered", "edge", "sheet"]).optional(),
+});
+
+const sanitizeMedia = (file) =>
+  file ? { _id: file._id, alt: file.alt || "", path: file.path } : undefined;
+
+export default function AdminPopupConfigPage() {
+  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState(
-    initial || {
-      type: "discount",
+
+  const form = useForm({
+    resolver: zodResolver(formZ),
+    defaultValues: {
+      type: "image-link",
+      image: undefined,
+      linkHref: "",
+      couponCode: "",
       isActive: true,
-      pages: [],
-      frequency: { scope: "session", maxShows: 1 },
-    }
-  );
+      startAt: null,
+      endAt: null,
+      priority: 10,
+      pages: "",
+      frequencyScope: "session",
+      frequencyMax: 1,
+      uiLayout: undefined,
+    },
+  });
 
+  // Load existing
   useEffect(() => {
-    setForm(
-      initial || {
-        type: "discount",
-        isActive: true,
-        pages: [],
-        frequency: { scope: "session", maxShows: 1 },
+    let mounted = true;
+    (async () => {
+      try {
+        setLoading(true);
+        const { data } = await axios.get("/api/admin/popups/config", {
+          withCredentials: true,
+        });
+        if (mounted && data?.success && data?.data) {
+          const d = data.data;
+          form.reset({
+            _id: d._id,
+            type: d.type,
+            image: d.image,
+            linkHref: d.linkHref || "",
+            couponCode: d.couponCode || "",
+            isActive: !!d.isActive,
+            startAt: d.startAt ? new Date(d.startAt) : null,
+            endAt: d.endAt ? new Date(d.endAt) : null,
+            priority: d.priority ?? 10,
+            pages:
+              Array.isArray(d.pages) && d.pages.length
+                ? d.pages.join(", ")
+                : "",
+            frequencyScope: d.frequency?.scope || "session",
+            frequencyMax: d.frequency?.maxShows ?? 1,
+            uiLayout: d.ui?.layout || undefined,
+          });
+        }
+      } catch {
+        // no config yet—ignore
+      } finally {
+        if (mounted) setLoading(false);
       }
-    );
-  }, [initial]);
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [form]);
 
-  const set = (k, v) => setForm((s) => ({ ...s, [k]: v }));
+  const imagePreview = useMemo(() => {
+    const img = form.getValues("image");
+    return img?.path || "";
+  }, [form.watch("image")]);
 
-  const onSubmit = async () => {
-    setSaving(true);
+  const submit = async (values) => {
     try {
-      if (form._id) {
-        await axios.put(`/api/admin/popups/${form._id}`, form);
-      } else {
-        await axios.post(`/api/admin/popups`, form);
-      }
-      onSaved?.();
-      onOpenChange(false);
+      setSaving(true);
+
+      // Prepare payload
+      const pagesArr = (values.pages || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      const payload = {
+        _id: values._id,
+        type: values.type,
+        image: values.image,
+        linkHref: values.type === "image-link" ? values.linkHref || "" : "",
+        couponCode: values.type === "discount" ? values.couponCode || "" : "",
+
+        isActive: values.isActive,
+        startAt: values.startAt || null,
+        endAt: values.endAt || null,
+        priority: Number(values.priority ?? 10),
+        pages: pagesArr,
+        frequency: {
+          scope: values.frequencyScope,
+          maxShows: Number(values.frequencyMax ?? 1),
+        },
+        ui: { layout: values.uiLayout || undefined },
+      };
+
+      const method = values._id ? "put" : "post";
+      const { data } = await axios({
+        method,
+        url: "/api/admin/popups/config",
+        data: payload,
+        withCredentials: true,
+      });
+
+      if (!data?.success) throw new Error(data?.message || "Save failed");
+      // reflect _id after create
+      if (data?.data?._id) form.setValue("_id", data.data._id);
+
+      showToast("success", "Popup configuration saved.");
     } catch (e) {
-      console.error(e?.response?.data || e?.message);
+      showToast(
+        "error",
+        e?.response?.data?.message || e?.message || "Save failed"
+      );
     } finally {
       setSaving(false);
     }
   };
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{form._id ? "Edit Popup" : "New Popup"}</DialogTitle>
-        </DialogHeader>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <Label>Type</Label>
-            <Select value={form.type} onValueChange={(v) => set("type", v)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="discount">discount</SelectItem>
-                <SelectItem value="image-link">image-link</SelectItem>
-                <SelectItem value="launch">launch</SelectItem>
-              </SelectContent>
-            </Select>
-            <div className="text-xs text-muted-foreground mt-1">
-              {TYPE_FIELDS_HELP[form.type]}
-            </div>
-          </div>
-
-          <div>
-            <Label>Title</Label>
-            <Input
-              value={form.title || ""}
-              onChange={(e) => set("title", e.target.value)}
-              placeholder="(optional)"
-            />
-          </div>
-
-          <div>
-            <Label>Image URL</Label>
-            <Input
-              value={form.imageUrl || ""}
-              onChange={(e) => set("imageUrl", e.target.value)}
-              placeholder="/media/..."
-            />
-          </div>
-
-          <div>
-            <Label>Pages (comma separated)</Label>
-            <Input
-              value={(form.pages || []).join(", ")}
-              onChange={(e) =>
-                set(
-                  "pages",
-                  e.target.value
-                    .split(",")
-                    .map((s) => s.trim())
-                    .filter(Boolean)
-                )
-              }
-              placeholder='e.g., "/", "/product/*"'
-            />
-          </div>
-
-          <div>
-            <Label>Priority</Label>
-            <Input
-              type="number"
-              value={form.priority ?? 10}
-              onChange={(e) => set("priority", Number(e.target.value))}
-            />
-          </div>
-
-          <div className="flex items-center gap-2">
-            <input
-              id="active"
-              type="checkbox"
-              checked={!!form.isActive}
-              onChange={(e) => set("isActive", e.target.checked)}
-            />
-            <Label htmlFor="active">Active</Label>
-          </div>
-
-          <div className="sm:col-span-2 grid grid-cols-2 gap-4">
-            <div>
-              <Label>Start At</Label>
-              <Input
-                type="datetime-local"
-                value={
-                  form.startAt
-                    ? new Date(form.startAt).toISOString().slice(0, 16)
-                    : ""
-                }
-                onChange={(e) =>
-                  set(
-                    "startAt",
-                    e.target.value
-                      ? new Date(e.target.value).toISOString()
-                      : null
-                  )
-                }
-              />
-            </div>
-            <div>
-              <Label>End At</Label>
-              <Input
-                type="datetime-local"
-                value={
-                  form.endAt
-                    ? new Date(form.endAt).toISOString().slice(0, 16)
-                    : ""
-                }
-                onChange={(e) =>
-                  set(
-                    "endAt",
-                    e.target.value
-                      ? new Date(e.target.value).toISOString()
-                      : null
-                  )
-                }
-              />
-            </div>
-          </div>
-
-          <Separator className="sm:col-span-2" />
-
-          {/* Type-specific */}
-          {form.type === "discount" && (
-            <>
-              <div>
-                <Label>Coupon Code</Label>
-                <Input
-                  value={form.couponCode || ""}
-                  onChange={(e) => set("couponCode", e.target.value)}
-                />
-              </div>
-              <div>
-                <Label>CTA Text</Label>
-                <Input
-                  value={form.ctaText || ""}
-                  onChange={(e) => set("ctaText", e.target.value)}
-                  placeholder="Shop Now"
-                />
-              </div>
-              <div className="sm:col-span-2">
-                <Label>CTA Link</Label>
-                <Input
-                  value={form.ctaHref || ""}
-                  onChange={(e) => set("ctaHref", e.target.value)}
-                  placeholder="/, /deals"
-                />
-              </div>
-            </>
-          )}
-
-          {form.type === "image-link" && (
-            <>
-              <div>
-                <Label>Link Href</Label>
-                <Input
-                  value={form.linkHref || ""}
-                  onChange={(e) => set("linkHref", e.target.value)}
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  id="nobg"
-                  type="checkbox"
-                  checked={!!form.noBackdrop}
-                  onChange={(e) => set("noBackdrop", e.target.checked)}
-                />
-                <Label htmlFor="nobg">No Backdrop (transparent)</Label>
-              </div>
-            </>
-          )}
-
-          {form.type === "launch" && (
-            <>
-              <div>
-                <Label>Launch Title</Label>
-                <Input
-                  value={form.launchTitle || ""}
-                  onChange={(e) => set("launchTitle", e.target.value)}
-                />
-              </div>
-              <div>
-                <Label>Launch Subtitle</Label>
-                <Input
-                  value={form.launchSubtitle || ""}
-                  onChange={(e) => set("launchSubtitle", e.target.value)}
-                />
-              </div>
-              <div>
-                <Label>Launch At</Label>
-                <Input
-                  type="datetime-local"
-                  value={
-                    form.launchAt
-                      ? new Date(form.launchAt).toISOString().slice(0, 16)
-                      : ""
-                  }
-                  onChange={(e) =>
-                    set(
-                      "launchAt",
-                      e.target.value
-                        ? new Date(e.target.value).toISOString()
-                        : null
-                    )
-                  }
-                />
-              </div>
-              <div>
-                <Label>CTA Text</Label>
-                <Input
-                  value={form.launchCtaText || ""}
-                  onChange={(e) => set("launchCtaText", e.target.value)}
-                  placeholder="Notify Me"
-                />
-              </div>
-              <div className="sm:col-span-2">
-                <Label>CTA Link</Label>
-                <Input
-                  value={form.launchCtaHref || ""}
-                  onChange={(e) => set("launchCtaHref", e.target.value)}
-                  placeholder="/notify"
-                />
-              </div>
-            </>
-          )}
-
-          <Separator className="sm:col-span-2" />
-
-          <div>
-            <Label>Frequency Scope</Label>
-            <Select
-              value={form.frequency?.scope || "session"}
-              onValueChange={(v) =>
-                set("frequency", { ...(form.frequency || {}), scope: v })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="session" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="session">session</SelectItem>
-                <SelectItem value="daily">daily</SelectItem>
-                <SelectItem value="once">once</SelectItem>
-                <SelectItem value="always">always</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>Max Shows</Label>
-            <Input
-              type="number"
-              value={form.frequency?.maxShows ?? 1}
-              onChange={(e) =>
-                set("frequency", {
-                  ...(form.frequency || {}),
-                  maxShows: Number(e.target.value),
-                })
-              }
-            />
-          </div>
-        </div>
-
-        <DialogFooter className="mt-4">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button onClick={onSubmit} disabled={saving}>
-            {saving ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Saving
-              </>
-            ) : (
-              "Save"
-            )}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-export default function AdminPopupsPage() {
-  const [loading, setLoading] = useState(true);
-  const [items, setItems] = useState([]);
-  const [open, setOpen] = useState(false);
-  const [current, setCurrent] = useState(null);
-  const [q, setQ] = useState("");
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const { data } = await axios.get("/api/admin/popups", { params: { q } });
-      setItems(Array.isArray(data?.data?.items) ? data.data.items : []);
-    } catch {
-      setItems([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    load();
-  }, []); // initial
-
-  const onEdit = (it) => {
-    setCurrent(it);
-    setOpen(true);
-  };
-  const onDelete = async (it) => {
-    if (!confirm("Delete popup?")) return;
-    await axios.delete(`/api/admin/popups/${it._id}`);
-    load();
-  };
+  const type = form.watch("type");
 
   return (
-    <div className="max-w-5xl mx-auto p-4 sm:p-8 space-y-4">
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-xl font-semibold">Website Popups</div>
-        <div className="flex items-center gap-2">
-          <Input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search..."
-          />
-          <Button onClick={load}>Search</Button>
-          <Button
-            onClick={() => {
-              setCurrent(null);
-              setOpen(true);
-            }}
-          >
-            <Plus className="h-4 w-4 mr-1" /> New
-          </Button>
-        </div>
-      </div>
+    <div>
+      <BreadCrumb BreadCrumbData={BreadCrumbData} />
+      <Card className="py-0 rounded shadow-sm">
+        <CardHeader className="py-0 px-3 border-b [.border-b]:pb-2">
+          <h4 className="text-xl font-semibold mt-3">Popup Configuration</h4>
+          <p className="text-sm text-muted-foreground mb-3">
+            Configure a single website popup. Choose type and content. This will
+            be used across the site (with optional page targeting).
+          </p>
+        </CardHeader>
+        <CardContent className="pb-5">
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(submit)} className="space-y-6">
+              {/* Type */}
+              <FormField
+                control={form.control}
+                name="type"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Popup Type</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="image-link">
+                          Image with Link
+                        </SelectItem>
+                        <SelectItem value="discount">
+                          Coupon (no redirect)
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-      <Card>
-        <CardHeader className="pb-2">Manage popups</CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="text-sm text-muted-foreground">Loading...</div>
-          ) : items.length === 0 ? (
-            <div className="text-sm text-muted-foreground">
-              No popups found.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {items.map((it) => (
-                <Row
-                  key={it._id}
-                  item={it}
-                  onEdit={onEdit}
-                  onDelete={onDelete}
+              {/* Image */}
+              <FormField
+                control={form.control}
+                name="image"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Popup Image</FormLabel>
+                    <MediaSelector
+                      multiple={false}
+                      onSelect={(selected) => {
+                        if (Array.isArray(selected) && selected.length > 0) {
+                          field.onChange(sanitizeMedia(selected[0]));
+                        } else if (selected) {
+                          field.onChange(sanitizeMedia(selected));
+                        } else {
+                          field.onChange(undefined);
+                        }
+                      }}
+                      triggerLabel={
+                        field.value ? "Change Image" : "Select Image"
+                      }
+                    />
+                    <div className="mt-3">
+                      {imagePreview ? (
+                        <div className="inline-block rounded-lg border bg-white p-2">
+                          <Image
+                            src={imagePreview}
+                            alt={field.value?.alt || "popup"}
+                            width={260}
+                            height={260}
+                            className="rounded-md object-contain"
+                          />
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          No image selected.
+                        </p>
+                      )}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Conditionally show fields */}
+              {type === "image-link" && (
+                <FormField
+                  control={form.control}
+                  name="linkHref"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Link (on click)</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="https://kick.com.np/deals"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
-              ))}
-            </div>
-          )}
+              )}
+
+              {type === "discount" && (
+                <FormField
+                  control={form.control}
+                  name="couponCode"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Coupon Code</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. KICK11" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
+              {/* Targeting & Display */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="isActive"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                      <FormLabel className="mb-0">Active</FormLabel>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="priority"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Priority</FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="10" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="startAt"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Start At</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="datetime-local"
+                          value={
+                            field.value
+                              ? new Date(field.value).toISOString().slice(0, 16)
+                              : ""
+                          }
+                          onChange={(e) =>
+                            field.onChange(
+                              e.target.value ? new Date(e.target.value) : null
+                            )
+                          }
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="endAt"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>End At</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="datetime-local"
+                          value={
+                            field.value
+                              ? new Date(field.value).toISOString().slice(0, 16)
+                              : ""
+                          }
+                          onChange={(e) =>
+                            field.onChange(
+                              e.target.value ? new Date(e.target.value) : null
+                            )
+                          }
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="pages"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Pages (comma separated)</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder='e.g. "/", "/product/*", "/deals"'
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Frequency & UI */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <FormField
+                  control={form.control}
+                  name="frequencyScope"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Frequency Scope</FormLabel>
+                      <Select
+                        value={field.value}
+                        onValueChange={field.onChange}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="session" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="session">session</SelectItem>
+                          <SelectItem value="daily">daily</SelectItem>
+                          <SelectItem value="once">once</SelectItem>
+                          <SelectItem value="always">always</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="frequencyMax"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Max Shows</FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="1" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="uiLayout"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>UI Layout (optional)</FormLabel>
+                      <Select
+                        value={field.value}
+                        onValueChange={field.onChange}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Auto" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="centered">centered</SelectItem>
+                          <SelectItem value="edge">edge</SelectItem>
+                          <SelectItem value="sheet">sheet</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <ButtonLoading
+                type="submit"
+                text={form.getValues("_id") ? "Update" : "Save"}
+                loading={saving || loading}
+                className="w-full"
+              />
+            </form>
+          </Form>
         </CardContent>
       </Card>
-
-      <Editor
-        open={open}
-        onOpenChange={setOpen}
-        initial={current}
-        onSaved={load}
-      />
     </div>
   );
 }

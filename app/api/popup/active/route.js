@@ -1,31 +1,46 @@
-// app/api/popup/active/route.js
 import { NextResponse } from "next/server";
 import Popup from "@/models/Popup.model";
 import { connectDB } from "@/lib/DB";
+
+// path match util (prefix wildcard "/foo/*")
+function pathMatches(pages, path) {
+  if (!Array.isArray(pages) || pages.length === 0) return true; // global
+  return pages.some((pattern) => {
+    if (!pattern) return false;
+    if (pattern.endsWith("*")) {
+      const base = pattern.slice(0, -1);
+      return path.startsWith(base);
+    }
+    return path === pattern;
+  });
+}
 
 export async function GET(req) {
   try {
     await connectDB();
     const { searchParams } = new URL(req.url);
-    const id = searchParams.get("id");
+    const forcedId = searchParams.get("id");
+    const path = searchParams.get("path") || "/";
 
-    if (id) {
-      const forced = await Popup.findById(id);
-      return NextResponse.json(forced || null);
+    if (forcedId) {
+      const forced = await Popup.findById(forcedId);
+      return NextResponse.json({ data: forced || null });
     }
 
     const now = new Date();
-    const active = await Popup.find({
-      enabled: true,
+    const doc = await Popup.findOne({
+      deletedAt: null,
+      isActive: true,
       $and: [
-        { $or: [{ startAt: { $lte: now } }, { startAt: { $exists: false } }] },
-        { $or: [{ endAt: { $gte: now } }, { endAt: { $exists: false } }] },
+        { $or: [{ startAt: null }, { startAt: { $lte: now } }] },
+        { $or: [{ endAt: null }, { endAt: { $gte: now } }] },
       ],
-    })
-      .sort({ priority: -1, updatedAt: -1 })
-      .limit(1);
+    }).sort({ priority: -1, updatedAt: -1 });
 
-    return NextResponse.json(active[0] || null);
+    if (!doc || !pathMatches(doc.pages, path)) {
+      return NextResponse.json({ data: null });
+    }
+    return NextResponse.json({ data: doc });
   } catch (err) {
     return NextResponse.json(
       { ok: false, message: "Failed to fetch active popup" },

@@ -41,6 +41,26 @@ const staggerWrap = (staggerChildren = 0.08, delayChildren = 0) => ({
   show: { transition: { staggerChildren, delayChildren } },
 });
 
+/** Safe animation prop injector:
+ * - If reduced motion: returns empty props (no initial/whileInView).
+ * - Else: returns variants + initial/whileInView with a mobile-friendly viewport.
+ */
+const useAnim = (prefersReducedMotion) => {
+  return (variantsObj) =>
+    prefersReducedMotion
+      ? {}
+      : {
+          variants: variantsObj,
+          initial: "hidden",
+          whileInView: "show",
+          viewport: {
+            once: true,
+            amount: 0.2, // easier threshold on small mobile screens
+            margin: "0px 0px -20% 0px", // trigger a bit earlier
+          },
+        };
+};
+
 /* -------------------- FLOATING CENTER BAR (PORTAL) -------------------- */
 function FloatingCenterBar({
   instagramTicketUrl,
@@ -55,16 +75,13 @@ function FloatingCenterBar({
 
   const bar = (
     <motion.div
-      className="fixed left-1/2 -translate-x-1/2 flex items-center justify-center gap-3 md:gap-4 bottom-[calc(env(safe-area-inset-bottom)+88px)] md:bottom-10 z-[100000]"
+      className="pointer-events-none fixed left-1/2 -translate-x-1/2 bottom-[calc(env(safe-area-inset-bottom)+88px)] md:bottom-10"
       initial={{ opacity: 0, y: 24 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: "easeOut" }}
-      style={{
-        // in case you pass custom offsets via props:
-        bottom: undefined,
-      }}
+      style={{ zIndex }}
     >
-      <div className="flex items-center justify-center gap-3 md:gap-4">
+      <div className="pointer-events-auto flex items-center justify-center gap-3 md:gap-4">
         {instagramTicketUrl && (
           <HoverFab
             side="left"
@@ -73,7 +90,7 @@ function FloatingCenterBar({
             icon={<Instagram className="h-5 w-5 md:h-6 md:w-6" />}
             label="Get Ticket"
             pillClass="bg-white/90 backdrop-blur-sm text-black shadow-lg border border-black/5"
-            btnClass="bg-[#fcba17] text-black ring-1 ring-black/5 hover:brightness-110 active:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#fcba17]/60 focus-visible:ring-offset-white"
+            btnClass="bg-[#fcba17] text-black ring-1 ring-black/5 hover:brightness-110 active:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#fcba17]/60 focus-visible:ring-offset-white shadow-lg shadow-black/10 md:shadow-xl hover:shadow-2xl hover:shadow-black/20 transition-transform transition-shadow duration-200"
           />
         )}
         <HoverFab
@@ -85,7 +102,7 @@ function FloatingCenterBar({
           }
           label="Shop on Daraz"
           pillClass="bg-black/90 backdrop-blur-sm text-white shadow-lg border border-white/10"
-          btnClass="bg-black text-white ring-1 ring-black/10 hover:bg-gray-900 active:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-black/50 focus-visible:ring-offset-white"
+          btnClass="bg-black text-white ring-1 ring-black/10 hover:bg-gray-900 active:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-black/50 focus-visible:ring-offset-white shadow-lg shadow-black/10 md:shadow-xl hover:shadow-2xl hover:shadow-black/20 transition-transform transition-shadow duration-200"
         />
       </div>
     </motion.div>
@@ -122,12 +139,6 @@ function HoverFab({
       title={ariaLabel}
       className={[
         "group relative grid place-items-center h-12 w-12 md:h-14 md:w-14 rounded-full",
-        // ✨ premium shadow
-        "shadow-lg shadow-black/10 md:shadow-xl",
-        "hover:shadow-2xl hover:shadow-black/20",
-        // smoothen
-        "transition-transform transition-shadow duration-200",
-        // keep your incoming styles
         btnClass,
       ].join(" ")}
     >
@@ -136,7 +147,6 @@ function HoverFab({
         className={[
           "pointer-events-none absolute top-1/2 hidden md:inline-flex -translate-y-1/2",
           pos,
-          // pill styling comes from props, we just ensure smooth anim
           "opacity-0 scale-95 group-hover:opacity-100 group-hover:scale-100",
           "whitespace-nowrap rounded-full px-3 py-2 text-sm font-semibold",
           "transition-all duration-200 ease-out",
@@ -162,6 +172,7 @@ export default function KickYatayatDarazLight({
   fabOffsetDesktop = 40,
 }) {
   const prefersReducedMotion = useReducedMotion();
+  const anim = useAnim(prefersReducedMotion);
 
   /* UTM-safe Daraz link */
   const trackedDarazUrl = useMemo(() => {
@@ -203,9 +214,9 @@ export default function KickYatayatDarazLight({
     } catch {}
   }, [shareCaption, instagramTicketUrl, instagramUrl, copyCaption]);
 
-  /* Motion safety for prefers-reduced-motion users */
-  const safeFade = prefersReducedMotion ? {} : fadeUp;
-  const safePop = prefersReducedMotion ? {} : pop;
+  /* Motion safety mappings */
+  const safeFade = prefersReducedMotion ? () => ({}) : fadeUp;
+  const safePop = prefersReducedMotion ? () => ({}) : pop;
   const safeStagger = prefersReducedMotion
     ? () => ({ hidden: {}, show: {} })
     : staggerWrap;
@@ -222,16 +233,13 @@ export default function KickYatayatDarazLight({
         </div>
 
         <motion.div
-          variants={safeStagger(0.08)}
-          initial="hidden"
-          whileInView="show"
-          viewport={{ once: true, amount: 0.35 }}
+          {...anim(safeStagger(0.08))}
           className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-10 md:py-16 grid lg:grid-cols-[1.02fr_1fr] items-center gap-10"
         >
           {/* LEFT COPY */}
-          <motion.div variants={safeFade(0.06)}>
+          <motion.div {...anim(safeFade(0.06))}>
             <motion.div
-              variants={safePop(0.04)}
+              {...anim(safePop(0.04))}
               className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white/90 backdrop-blur px-3 py-1 text-[11px] sm:text-xs text-gray-700 shadow"
             >
               <Bus className="h-3.5 w-3.5 text-[#fcba17]" />
@@ -239,7 +247,7 @@ export default function KickYatayatDarazLight({
             </motion.div>
 
             <motion.h1
-              variants={safeFade(0.1)}
+              {...anim(safeFade(0.1))}
               className="mt-3 text-[30px] sm:text-5xl font-extrabold leading-[1.12] tracking-tight"
             >
               Kick Yatayat this Daraz 11.11
@@ -249,7 +257,7 @@ export default function KickYatayatDarazLight({
             </motion.h1>
 
             <motion.p
-              variants={safeFade(0.14)}
+              {...anim(safeFade(0.14))}
               className="mt-3 text-base sm:text-lg text-gray-600"
             >
               Up to 70% OFF on Kick products • Special 11.11 fares • Daily
@@ -257,12 +265,12 @@ export default function KickYatayatDarazLight({
             </motion.p>
 
             <motion.div
-              variants={safeStagger(0.06, 0.16)}
+              {...anim(safeStagger(0.06, 0.16))}
               className="mt-6 flex flex-wrap gap-3"
             >
               {instagramTicketUrl && (
                 <motion.a
-                  variants={safePop(0)}
+                  {...anim(safePop(0))}
                   href={instagramTicketUrl}
                   target="_blank"
                   rel="noreferrer"
@@ -273,14 +281,14 @@ export default function KickYatayatDarazLight({
                 </motion.a>
               )}
               <motion.a
-                variants={safePop(0.02)}
+                {...anim(safePop(0.02))}
                 href="#how-to"
                 className="inline-flex items-center gap-2 rounded-full border border-[#fcba17]/70 px-5 py-2.5 text-sm font-semibold text-[#fcba17] hover:bg-[#fcba17]/10 transition"
               >
                 How to Participate
               </motion.a>
               <motion.a
-                variants={safePop(0.04)}
+                {...anim(safePop(0.04))}
                 href="#offers"
                 className="inline-flex items-center gap-2 rounded-full border border-gray-300 px-5 py-2.5 text-sm font-semibold hover:bg-gray-50 transition"
               >
@@ -288,7 +296,7 @@ export default function KickYatayatDarazLight({
               </motion.a>
             </motion.div>
 
-            <motion.div variants={safeFade(0.18)} className="mt-8">
+            <motion.div {...anim(safeFade(0.18))} className="mt-8">
               <ul className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-[13px] sm:text-sm text-gray-700">
                 {[
                   {
@@ -312,7 +320,7 @@ export default function KickYatayatDarazLight({
 
           {/* RIGHT POSTER */}
           <motion.div
-            variants={safePop(0.12)}
+            {...anim(safePop(0.12))}
             className="relative flex justify-center lg:justify-end"
           >
             <div className="relative w-full max-w-[480px] md:max-w-[560px]">
@@ -340,7 +348,7 @@ export default function KickYatayatDarazLight({
                 </span>
               </div>
               <motion.div
-                variants={safePop(0.18)}
+                {...anim(safePop(0.18))}
                 className="pointer-events-none absolute -right-3 -bottom-4"
               >
                 <span className="inline-flex items-center rounded-full bg-[#fcba17] px-3 py-1.5 text-xs font-bold text-black shadow">
@@ -353,22 +361,16 @@ export default function KickYatayatDarazLight({
       </section>
 
       {/* ================= WHAT IS IT ================= */}
-      <motion.section
-        className="bg-gray-50"
-        variants={safeFade(0.05)}
-        initial="hidden"
-        whileInView="show"
-        viewport={{ once: true, amount: 0.35 }}
-      >
+      <motion.section className="bg-gray-50" {...anim(safeFade(0.05))}>
         <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-12 md:py-16">
           <motion.h2
-            variants={safeFade(0.02)}
+            {...anim(safeFade(0.02))}
             className="text-2xl sm:text-3xl font-bold"
           >
             What is Kick Yatayat?
           </motion.h2>
           <motion.p
-            variants={safeFade(0.05)}
+            {...anim(safeFade(0.05))}
             className="mt-2 text-gray-700 text-[15px] sm:text-base"
           >
             Kick Yatayat = Kick Lifestyle’s 11.11 festival ride on Daraz. Four{" "}
@@ -378,7 +380,7 @@ export default function KickYatayatDarazLight({
           </motion.p>
 
           <motion.div
-            variants={safeStagger(0.07, 0.05)}
+            {...anim(safeStagger(0.07, 0.05))}
             className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3.5 md:gap-5"
           >
             {[
@@ -389,7 +391,7 @@ export default function KickYatayatDarazLight({
             ].map((s, i) => (
               <motion.div
                 key={s.label}
-                variants={safePop(i * 0.05)}
+                variants={prefersReducedMotion ? {} : pop(i * 0.05)}
                 whileHover={
                   prefersReducedMotion
                     ? {}
@@ -412,21 +414,18 @@ export default function KickYatayatDarazLight({
       <motion.section
         id="how-to"
         style={{ scrollMarginTop: offset }}
-        variants={safeFade(0.05)}
-        initial="hidden"
-        whileInView="show"
-        viewport={{ once: true, amount: 0.35 }}
+        {...anim(safeFade(0.05))}
       >
         <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-12 md:py-16">
           <motion.h2
-            variants={safeFade(0.02)}
+            {...anim(safeFade(0.02))}
             className="text-2xl sm:text-3xl font-bold"
           >
             How to Win the Singapore–Malaysia Trip
           </motion.h2>
 
           <motion.div
-            variants={safeStagger(0.08, 0.05)}
+            {...anim(safeStagger(0.08, 0.05))}
             className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-5"
           >
             <Card title="1) Open the Ticket Post" icon={<Instagram />}>
@@ -487,26 +486,24 @@ export default function KickYatayatDarazLight({
       <motion.section
         id="offers"
         style={{ scrollMarginTop: offset }}
-        variants={safeFade(0.05)}
-        initial="hidden"
-        whileInView="show"
-        viewport={{ once: true, amount: 0.35 }}
+        {...anim(safeFade(0.05))}
       >
         <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-12 md:py-16">
           <motion.h2
-            variants={safeFade(0.02)}
+            {...anim(safeFade(0.02))}
             className="text-2xl sm:text-3xl font-bold mb-5 md:mb-6"
           >
             Product Stops (Offers)
           </motion.h2>
+
           <motion.div
-            variants={safeStagger(0.08, 0.05)}
+            {...anim(safeStagger(0.08, 0.05))}
             className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6"
           >
             {products.map((p, i) => (
               <motion.div
-                key={p.id}
-                variants={safePop(i * 0.03)}
+                key={p?.id ?? i}
+                variants={prefersReducedMotion ? {} : pop(i * 0.03)}
                 whileHover={
                   prefersReducedMotion
                     ? {}
@@ -515,7 +512,7 @@ export default function KickYatayatDarazLight({
                 className="rounded-2xl overflow-hidden border border-gray-200 bg-white hover:shadow-md transition"
               >
                 {/* IMAGE ON TOP */}
-                {!!p.image && (
+                {!!p?.image && (
                   <motion.div
                     className="aspect-[1/1] relative rounded-t-2xl overflow-hidden border-b border-gray-100 bg-gray-50 shadow-inner"
                     whileHover={prefersReducedMotion ? {} : { scale: 1.02 }}
@@ -533,19 +530,21 @@ export default function KickYatayatDarazLight({
                 {/* TEXT BELOW IMAGE */}
                 <div className="px-4 md:px-5 pt-4 md:pt-5">
                   <div className="inline-flex items-center gap-2 text-[#fcba17] font-semibold text-sm">
-                    <Ticket className="h-4 w-4" /> Stop {p.stop}
+                    <Ticket className="h-4 w-4" /> Stop {p?.stop ?? i + 1}
                   </div>
                   <h3 className="mt-1 text-base md:text-lg font-semibold">
-                    {p.name}
+                    {p?.name || "Kick Product"}
                   </h3>
-                  <p className="text-xs md:text-sm text-gray-600">{p.spec}</p>
+                  <p className="text-xs md:text-sm text-gray-600">
+                    {p?.spec || "Great audio • Long battery • Premium build"}
+                  </p>
                 </div>
 
                 {/* CTA BUTTON */}
                 <div className="px-4 md:px-5 pb-4 md:pb-5 pt-3 md:pt-4">
                   <motion.a
                     whileTap={prefersReducedMotion ? {} : { scale: 0.98 }}
-                    href={p.link || trackedDarazUrl}
+                    href={p?.link || trackedDarazUrl}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center justify-center w-full rounded-full bg-[#fcba17] px-4 py-2 font-semibold text-black shadow hover:brightness-110 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#fcba17]/60 focus-visible:ring-offset-white"
@@ -558,7 +557,7 @@ export default function KickYatayatDarazLight({
           </motion.div>
 
           <motion.div
-            variants={safeFade(0.05)}
+            {...anim(safeFade(0.05))}
             className="mt-5 md:mt-6 flex items-center gap-2 text-gray-600 text-sm"
           >
             <AlarmClock className="h-4 w-4 text-[#fcba17]" />
@@ -568,22 +567,16 @@ export default function KickYatayatDarazLight({
       </motion.section>
 
       {/* ================= FAQs ================= */}
-      <motion.section
-        className="bg-gray-50"
-        variants={safeFade(0.05)}
-        initial="hidden"
-        whileInView="show"
-        viewport={{ once: true, amount: 0.35 }}
-      >
+      <motion.section className="bg-gray-50" {...anim(safeFade(0.05))}>
         <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-12 md:py-16">
           <motion.h2
-            variants={safeFade(0.02)}
+            {...anim(safeFade(0.02))}
             className="text-2xl sm:text-3xl font-bold"
           >
             FAQs
           </motion.h2>
           <motion.div
-            variants={safeStagger(0.08, 0.05)}
+            {...anim(safeStagger(0.08, 0.05))}
             className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-5"
           >
             <Faq
@@ -619,21 +612,18 @@ export default function KickYatayatDarazLight({
       <motion.section
         id="tnc"
         style={{ scrollMarginTop: offset }}
-        variants={safeFade(0.05)}
-        initial="hidden"
-        whileInView="show"
-        viewport={{ once: true, amount: 0.35 }}
+        {...anim(safeFade(0.05))}
       >
         <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-12 md:py-16">
           <motion.h2
-            variants={safeFade(0.02)}
+            {...anim(safeFade(0.02))}
             className="text-2xl sm:text-3xl font-bold"
           >
             Terms & Conditions
           </motion.h2>
 
           <motion.ul
-            variants={safeStagger(0.06, 0.05)}
+            {...anim(safeStagger(0.06, 0.05))}
             className="mt-4 space-y-2 text-gray-700 text-sm"
           >
             {[
@@ -645,7 +635,7 @@ export default function KickYatayatDarazLight({
             ].map((item, i) => (
               <motion.li
                 key={i}
-                variants={safeFade(i * 0.02)}
+                variants={prefersReducedMotion ? {} : fadeUp(i * 0.02)}
                 className="flex items-start gap-2"
               >
                 <CircleHelp className="mt-0.5 h-4 w-4 text-[#fcba17]" />
