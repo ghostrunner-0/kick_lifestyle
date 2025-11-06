@@ -60,7 +60,7 @@ export default function PopupProvider({ currentPath }) {
   const [isMobile, setIsMobile] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // refs before return
+  // swipe for sheet on mobile
   const startY = useRef(null);
   const deltaY = useRef(0);
 
@@ -121,6 +121,7 @@ export default function PopupProvider({ currentPath }) {
 
   const close = useCallback(() => setOpen(false), []);
 
+  // swipe down to close (sheet only)
   const onTouchStart = (e) => {
     startY.current = e.touches[0].clientY;
     deltaY.current = 0;
@@ -138,29 +139,47 @@ export default function PopupProvider({ currentPath }) {
   if (!popup) return null;
 
   /* ---------- Layout ---------- */
-  const layout = popup.ui?.layout || (isMobile ? "sheet" : "centered");
+  const forcedLayout = popup.ui?.layout; // 'sheet' | 'centered' | 'edge'
+  const layout = forcedLayout || (isMobile ? "sheet" : "centered");
   const isDiscount = popup.type === "discount";
   const isImageLink = popup.type === "image-link";
   const img = popup.image;
 
+  /* ---------- Panel & container classes tuned for mobile ---------- */
   const panelBase =
-    "relative overflow-visible bg-white dark:bg-neutral-900 shadow-2xl";
+    "relative overflow-hidden bg-white dark:bg-neutral-900 shadow-2xl";
   const panelRadii = layout === "sheet" ? "rounded-t-2xl" : "rounded-2xl";
-  const panelSize = layout === "sheet" ? "w-full max-w-[680px]" : "";
+  const panelClass =
+    layout === "sheet"
+      ? // full width bottom sheet on mobile, with max width on larger screens
+        "w-full max-w-[720px]"
+      : // centered/edge: responsive width; height capped by svh (safe viewport)
+        "w-[min(92vw,720px)] max-h-[85svh]";
   const panelStyle =
     layout === "sheet"
-      ? {}
+      ? undefined
       : {
           width: Math.min(box.w, Math.floor(window.innerWidth * 0.92)),
-          height: Math.min(box.h, Math.floor(window.innerHeight * 0.85)),
         };
 
-  const imageWrapperClass =
-    layout === "sheet" ? "relative w-full" : "absolute inset-0";
-  const footerClass =
-    layout === "sheet" ? "px-4 py-3" : "absolute left-0 right-0 bottom-0 p-3";
+  const containerAlign =
+    layout === "sheet"
+      ? "items-end"
+      : layout === "edge"
+      ? "items-end justify-end pr-4 pb-4"
+      : "items-center justify-center";
 
-  /* ---------- UI ---------- */
+  // image area gets a predictable height on mobile to avoid jumpiness
+  const imageAreaClass =
+    layout === "sheet"
+      ? "relative w-full h-[clamp(240px,65svh,560px)]"
+      : "relative w-full h-[min(65svh,560px)]";
+
+  const footerClass =
+    layout === "sheet"
+      ? "px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))]"
+      : "px-3 py-3";
+
   return (
     <Transition appear show={open} as="div" className="relative z-[9999]">
       <Dialog as="div" className="relative z-[9999]" onClose={close}>
@@ -178,9 +197,8 @@ export default function PopupProvider({ currentPath }) {
 
         {/* Container */}
         <div
-          className={`fixed inset-0 ${
-            layout === "sheet" ? "flex items-end" : "flex items-center"
-          } justify-center p-4`}
+          className={`fixed inset-0 flex ${containerAlign} p-0 sm:p-4`}
+          style={{ overscrollBehaviorY: "contain" }}
         >
           <Transition.Child
             as="div"
@@ -206,33 +224,43 @@ export default function PopupProvider({ currentPath }) {
                 ? "translate-y-full"
                 : "opacity-0 scale-95 translate-y-3"
             }
-            className={`${panelBase} ${panelRadii} ${panelSize}`}
+            className={`${panelBase} ${panelRadii} ${panelClass}`}
             style={panelStyle}
             onTouchStart={layout === "sheet" ? onTouchStart : undefined}
             onTouchMove={layout === "sheet" ? onTouchMove : undefined}
             onTouchEnd={layout === "sheet" ? onTouchEnd : undefined}
           >
-            {/* Inner clip wrapper */}
-            <div
-              className={`${panelRadii} overflow-hidden relative`}
-              style={
-                layout === "sheet" ? {} : { width: "100%", height: "100%" }
-              }
+            {/* Grabber for sheet */}
+            {layout === "sheet" && (
+              <div className="absolute top-2 left-1/2 -translate-x-1/2 h-1.5 w-10 rounded-full bg-neutral-300 dark:bg-neutral-700" />
+            )}
+
+            {/* Close button */}
+            <button
+              onClick={close}
+              className="absolute top-2 right-2 h-10 w-10 rounded-full bg-white/95 dark:bg-neutral-800/95 text-black dark:text-white shadow flex items-center justify-center hover:opacity-95 transition"
+              aria-label="Close"
             >
+              <span className="text-lg leading-none">✕</span>
+            </button>
+
+            {/* Content */}
+            <div className="flex flex-col">
               {/* Image */}
-              <div className={imageWrapperClass}>
+              <div className={imageAreaClass}>
                 {isImageLink && popup.linkHref ? (
                   <Link
                     href={popup.linkHref}
                     onClick={close}
                     className="block w-full h-full"
+                    aria-label="Open link"
                   >
                     <Image
                       src={img?.path}
                       alt={img?.alt || "popup"}
                       fill
                       className="object-contain"
-                      sizes="(max-width: 768px) 92vw, 680px"
+                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 680px, 720px"
                       priority
                       onLoadingComplete={onImageLoaded}
                     />
@@ -243,19 +271,19 @@ export default function PopupProvider({ currentPath }) {
                     alt={img?.alt || "popup"}
                     fill
                     className="object-contain"
-                    sizes="(max-width: 768px) 92vw, 680px"
+                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 680px, 720px"
                     priority
                     onLoadingComplete={onImageLoaded}
                   />
                 )}
               </div>
 
-              {/* Coupon footer */}
+              {/* Discount footer */}
               {isDiscount && (
                 <div
                   className={`flex items-center gap-2 border-t bg-white/95 dark:bg-neutral-900/95 ${footerClass}`}
                 >
-                  <span className="text-xs font-medium text-neutral-500">
+                  <span className="text-[11px] sm:text-xs font-medium text-neutral-500">
                     Coupon
                   </span>
                   <span className="px-2 py-1 rounded-md font-mono text-sm bg-neutral-100 dark:bg-neutral-800">
@@ -269,29 +297,15 @@ export default function PopupProvider({ currentPath }) {
                         );
                       } catch {}
                       setCopied(true);
-                      setTimeout(() => setCopied(false), 1000);
+                      setTimeout(() => setCopied(false), 900);
                     }}
-                    className="ml-auto px-3 py-1.5 rounded-md bg-black text-white text-xs font-semibold hover:opacity-90"
+                    className="ml-auto px-3 py-2 rounded-md bg-black text-white text-xs sm:text-sm font-semibold hover:opacity-90 active:scale-[0.99] transition"
                   >
                     {copied ? "Copied!" : "Copy"}
                   </button>
                 </div>
               )}
             </div>
-
-            {/* Close button — no crop now */}
-            <button
-              onClick={close}
-              className="absolute top-2 right-2 h-9 w-9 rounded-full bg-white text-black shadow hover:opacity-90 transition"
-              aria-label="Close"
-            >
-              ✕
-            </button>
-
-            {/* Grabber */}
-            {layout === "sheet" && (
-              <div className="absolute top-1 left-1/2 -translate-x-1/2 h-1.5 w-10 rounded-full bg-neutral-300 dark:bg-neutral-700" />
-            )}
           </Transition.Child>
         </div>
       </Dialog>

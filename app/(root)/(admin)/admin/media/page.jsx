@@ -9,6 +9,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import Image from "next/image";
 import { showToast } from "@/lib/ShowToast";
 import axios from "axios";
+
+/* shadcn/ui */
 import {
   Select,
   SelectContent,
@@ -24,6 +26,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const BreadCrumbData = [
   { href: ADMIN_DASHBOARD, label: "Home" },
@@ -54,13 +66,16 @@ const MediaPage = () => {
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  // Tag edit/delete dialogs
-  const [editTagDialogOpen, setEditTagDialogOpen] = useState(false);
-  const [tagToEdit, setTagToEdit] = useState(null);
-  const [editTagName, setEditTagName] = useState("");
+  // Manage Tags modal controls
+  const [manageTagsOpen, setManageTagsOpen] = useState(false);
 
-  const [deleteTagDialogOpen, setDeleteTagDialogOpen] = useState(false);
-  const [tagToDelete, setTagToDelete] = useState(null);
+  // Inline edit inside Manage Tags modal
+  const [editingTagId, setEditingTagId] = useState(null);
+  const [editingTagName, setEditingTagName] = useState("");
+
+  // Delete confirm for tags
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [pendingDeleteTag, setPendingDeleteTag] = useState(null);
 
   // To debounce search input
   const searchTimeout = useRef(null);
@@ -75,7 +90,7 @@ const MediaPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Fetch media with pagination, filtering by tag and search text
+  /* ----------------------- DATA FETCHERS ----------------------- */
   const fetchMedia = async (
     tagId = filterTag,
     searchText = altSearch,
@@ -103,7 +118,7 @@ const MediaPage = () => {
         setPage((prev) => prev + 1);
       }
 
-      setHasMore((reset ? 1 : page + 1) * LIMIT < data.total);
+      setHasMore(((reset ? 1 : page + 1) * LIMIT) < data.total);
     } catch {
       showToast("error", "Failed to fetch media.");
     } finally {
@@ -120,6 +135,7 @@ const MediaPage = () => {
     }
   };
 
+  /* ----------------------- UPLOAD HANDLERS ----------------------- */
   const handleFileChange = (e) => {
     const files = Array.from(e.target.files);
     setFileInput(files);
@@ -164,6 +180,7 @@ const MediaPage = () => {
     }
   };
 
+  /* ----------------------- IMAGE DELETE ----------------------- */
   const handleDelete = async () => {
     if (!imageToDelete) return;
     try {
@@ -177,7 +194,7 @@ const MediaPage = () => {
     }
   };
 
-  // Debounced search input handler
+  /* ----------------------- SEARCH ----------------------- */
   const onSearchChange = (e) => {
     const val = e.target.value;
     setAltSearch(val);
@@ -188,48 +205,52 @@ const MediaPage = () => {
     }, 500);
   };
 
-  // Tag edit handlers
-  const openEditTag = (tag) => {
-    setTagToEdit(tag);
-    setEditTagName(tag.name);
-    setEditTagDialogOpen(true);
+  /* ----------------------- TAG EDIT/DELETE ----------------------- */
+  const beginEditTag = (tag) => {
+    setEditingTagId(tag._id);
+    setEditingTagName(tag.name);
   };
 
-  const submitEditTag = async () => {
-    if (!tagToEdit?._id || !editTagName.trim()) return;
+  const cancelEditTag = () => {
+    setEditingTagId(null);
+    setEditingTagName("");
+  };
+
+  const saveEditTag = async (tagId) => {
+    if (!editingTagName.trim()) {
+      showToast("error", "Name cannot be empty.");
+      return;
+    }
     try {
-      await axios.patch(`/api/admin/tags/${tagToEdit._id}`, {
-        name: editTagName.trim(),
+      await axios.patch(`/api/admin/tags/${tagId}`, {
+        name: editingTagName.trim(),
       });
       showToast("success", "Tag updated.");
-      setEditTagDialogOpen(false);
-      setTagToEdit(null);
-      setEditTagName("");
-      fetchTags();
+      cancelEditTag();
+      await fetchTags();
     } catch {
       showToast("error", "Failed to update tag.");
     }
   };
 
-  // Tag delete handlers
-  const openDeleteTag = (tag) => {
-    setTagToDelete(tag);
-    setDeleteTagDialogOpen(true);
+  const askDeleteTag = (tag) => {
+    setPendingDeleteTag(tag);
+    setConfirmDeleteOpen(true);
   };
 
   const confirmDeleteTag = async () => {
-    if (!tagToDelete?._id) return;
+    if (!pendingDeleteTag?._id) return;
     try {
-      await axios.delete(`/api/admin/tags/${tagToDelete._id}`);
+      await axios.delete(`/api/admin/tags/${pendingDeleteTag._id}`);
       showToast("success", "Tag deleted.");
-      setDeleteTagDialogOpen(false);
-      setTagToDelete(null);
-      // In case current filter was the deleted tag, reset
-      if (filterTag === tagToDelete._id) {
+      // If the active filter was this tag, reset it
+      if (filterTag === pendingDeleteTag._id) {
         setFilterTag("all");
-        fetchMedia("all", altSearch, true);
+        await fetchMedia("all", altSearch, true);
       }
-      fetchTags();
+      setPendingDeleteTag(null);
+      setConfirmDeleteOpen(false);
+      await fetchTags();
     } catch {
       showToast("error", "Failed to delete tag.");
     }
@@ -250,10 +271,7 @@ const MediaPage = () => {
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-3 mt-4">
-            <Button
-              variant="outline"
-              onClick={() => setDeleteDialogOpen(false)}
-            >
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
               Cancel
             </Button>
             <Button variant="destructive" onClick={handleDelete}>
@@ -264,7 +282,12 @@ const MediaPage = () => {
       </Dialog>
 
       {/* Active image preview dialog */}
-      <Dialog open={!!activeImage} onOpenChange={() => setActiveImage(null)}>
+      <Dialog
+        open={!!activeImage}
+        onOpenChange={(open) => {
+          if (!open) setActiveImage(null);
+        }}
+      >
         <DialogContent className="max-w-[90vw] max-h-[90vh] overflow-auto">
           <DialogTitle>{activeImage?.alt || "media"}</DialogTitle>
           {activeImage && (
@@ -292,73 +315,36 @@ const MediaPage = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Tag Dialog */}
-      <Dialog open={editTagDialogOpen} onOpenChange={setEditTagDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit Tag</DialogTitle>
-            <DialogDescription>Update the name of this tag.</DialogDescription>
-          </DialogHeader>
-          <Input
-            value={editTagName}
-            onChange={(e) => setEditTagName(e.target.value)}
-            placeholder="Tag name"
-          />
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setEditTagDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button onClick={submitEditTag} disabled={!editTagName.trim()}>
-              Save
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Tag Dialog */}
-      <Dialog open={deleteTagDialogOpen} onOpenChange={setDeleteTagDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Tag</DialogTitle>
-            <DialogDescription>
+      {/* Delete Tag Confirmation */}
+      <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Tag</AlertDialogTitle>
+            <AlertDialogDescription>
               Are you sure you want to delete{" "}
-              <span className="font-semibold">{tagToDelete?.name}</span>? This
+              <span className="font-semibold">{pendingDeleteTag?.name}</span>? This
               action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setDeleteTagDialogOpen(false)}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={confirmDeleteTag}
             >
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={confirmDeleteTag}>
               Delete
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <div className="mt-6 space-y-6">
         {/* Upload section */}
         <div>
           <h2 className="text-xl font-semibold mb-3">Upload Files</h2>
-          <Input
-            type="file"
-            multiple
-            onChange={handleFileChange}
-            disabled={uploading}
-          />
+          <Input type="file" multiple onChange={handleFileChange} disabled={uploading} />
           <div className="flex items-center gap-4 mt-4 flex-wrap">
-            <Select
-              onValueChange={setSelectedTag}
-              value={selectedTag}
-              disabled={uploading}
-            >
+            <Select onValueChange={setSelectedTag} value={selectedTag} disabled={uploading}>
               <SelectTrigger className="w-[200px]">
                 <SelectValue placeholder="Select a tag" />
               </SelectTrigger>
@@ -381,9 +367,7 @@ const MediaPage = () => {
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Create New Tag</DialogTitle>
-                  <DialogDescription>
-                    Give a name for the new tag.
-                  </DialogDescription>
+                  <DialogDescription>Give a name for the new tag.</DialogDescription>
                 </DialogHeader>
                 <Input
                   value={newTagName}
@@ -445,39 +429,90 @@ const MediaPage = () => {
           </Button>
         </div>
 
-        {/* Tag management section */}
+        {/* Manage Tags (Modal) */}
         <div className="mt-10">
-          <h2 className="text-xl font-semibold mb-3">Manage Tags</h2>
-          {tagOptions.length === 0 ? (
-            <p className="text-muted-foreground">No tags created yet.</p>
-          ) : (
-            <div className="space-y-2">
-              {tagOptions.map((tag) => (
-                <div
-                  key={tag._id}
-                  className="flex items-center justify-between border rounded-md px-3 py-2"
-                >
-                  <span className="truncate max-w-[60%]">{tag.name}</span>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openEditTag(tag)}
-                    >
-                      ✏️ Edit
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => openDeleteTag(tag)}
-                    >
-                      🗑️ Delete
-                    </Button>
-                  </div>
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold">Tags</h2>
+            <Button variant="outline" onClick={() => setManageTagsOpen(true)}>
+              Manage Tags
+            </Button>
+          </div>
+
+          <Dialog open={manageTagsOpen} onOpenChange={setManageTagsOpen}>
+            <DialogContent className="sm:max-w-xl">
+              <DialogHeader>
+                <DialogTitle>Manage Tags</DialogTitle>
+                <DialogDescription>
+                  Rename or delete existing tags. Deleting a tag cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+
+              {tagOptions.length === 0 ? (
+                <p className="text-muted-foreground">No tags created yet.</p>
+              ) : (
+                <div className="space-y-2 max-h-[50vh] overflow-auto pr-1">
+                  {tagOptions.map((tag) => {
+                    const isEditing = editingTagId === tag._id;
+                    return (
+                      <div
+                        key={tag._id}
+                        className="flex items-center justify-between border rounded-md px-3 py-2"
+                      >
+                        <div className="flex-1 mr-3">
+                          {isEditing ? (
+                            <Input
+                              autoFocus
+                              value={editingTagName}
+                              onChange={(e) => setEditingTagName(e.target.value)}
+                              placeholder="Tag name"
+                            />
+                          ) : (
+                            <span className="truncate">{tag.name}</span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {isEditing ? (
+                            <>
+                              <Button size="sm" onClick={() => saveEditTag(tag._id)}>
+                                Save
+                              </Button>
+                              <Button size="sm" variant="outline" onClick={cancelEditTag}>
+                                Cancel
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => beginEditTag(tag)}
+                              >
+                                ✏️ Edit
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => askDeleteTag(tag)}
+                              >
+                                🗑️ Delete
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
-            </div>
-          )}
+              )}
+
+              <div className="flex justify-end pt-2">
+                <Button variant="outline" onClick={() => setManageTagsOpen(false)}>
+                  Close
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
 
         {/* Media library filter and list */}

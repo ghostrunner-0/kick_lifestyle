@@ -33,6 +33,18 @@ import MediaSelector from "@/components/application/admin/MediaSelector";
 import { showToast } from "@/lib/ShowToast";
 import { zSchema } from "@/lib/zodSchema";
 
+/* shadcn confirm dialog for Delete */
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
 const BreadCrumbData = [
   { href: ADMIN_DASHBOARD, label: "Home" },
   { href: "/admin/popups", label: "Popups" },
@@ -71,26 +83,30 @@ const formZ = z.object({
 const sanitizeMedia = (file) =>
   file ? { _id: file._id, alt: file.alt || "", path: file.path } : undefined;
 
+const DEFAULT_VALUES = {
+  type: "image-link",
+  image: undefined,
+  linkHref: "",
+  couponCode: "",
+  isActive: true,
+  startAt: null,
+  endAt: null,
+  priority: 10,
+  pages: "",
+  frequencyScope: "session",
+  frequencyMax: 1,
+  uiLayout: undefined,
+};
+
 export default function AdminPopupConfigPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   const form = useForm({
     resolver: zodResolver(formZ),
-    defaultValues: {
-      type: "image-link",
-      image: undefined,
-      linkHref: "",
-      couponCode: "",
-      isActive: true,
-      startAt: null,
-      endAt: null,
-      priority: 10,
-      pages: "",
-      frequencyScope: "session",
-      frequencyMax: 1,
-      uiLayout: undefined,
-    },
+    defaultValues: DEFAULT_VALUES,
   });
 
   // Load existing
@@ -191,19 +207,65 @@ export default function AdminPopupConfigPage() {
     }
   };
 
+  const onDelete = async () => {
+    const id = form.getValues("_id");
+    if (!id) return;
+
+    try {
+      setDeleting(true);
+      const { data } = await axios.delete(`/api/admin/popups/${id}`, {
+        withCredentials: true,
+      });
+      if (!data?.success && !data?.ok) {
+        throw new Error(data?.message || "Delete failed");
+      }
+
+      // Reset form to defaults
+      form.reset(DEFAULT_VALUES);
+      showToast("success", "Popup deleted.");
+      setConfirmDeleteOpen(false);
+    } catch (e) {
+      showToast(
+        "error",
+        e?.response?.data?.message || e?.message || "Delete failed"
+      );
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const type = form.watch("type");
+  const hasId = !!form.watch("_id");
 
   return (
     <div>
       <BreadCrumb BreadCrumbData={BreadCrumbData} />
       <Card className="py-0 rounded shadow-sm">
         <CardHeader className="py-0 px-3 border-b [.border-b]:pb-2">
-          <h4 className="text-xl font-semibold mt-3">Popup Configuration</h4>
-          <p className="text-sm text-muted-foreground mb-3">
-            Configure a single website popup. Choose type and content. This will
-            be used across the site (with optional page targeting).
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="text-xl font-semibold mt-3">
+                Popup Configuration
+              </h4>
+              <p className="text-sm text-muted-foreground mb-3">
+                Configure a single website popup. Choose type and content. This
+                will be used across the site (with optional page targeting).
+              </p>
+            </div>
+
+            {/* Delete button (only when editing existing) */}
+            <div className="mt-3 mb-2">
+              <Button
+                variant="destructive"
+                disabled={!hasId}
+                onClick={() => setConfirmDeleteOpen(true)}
+              >
+                Delete
+              </Button>
+            </div>
+          </div>
         </CardHeader>
+
         <CardContent className="pb-5">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(submit)} className="space-y-6">
@@ -484,7 +546,7 @@ export default function AdminPopupConfigPage() {
 
               <ButtonLoading
                 type="submit"
-                text={form.getValues("_id") ? "Update" : "Save"}
+                text={hasId ? "Update" : "Save"}
                 loading={saving || loading}
                 className="w-full"
               />
@@ -492,6 +554,29 @@ export default function AdminPopupConfigPage() {
           </Form>
         </CardContent>
       </Card>
+
+      {/* Confirm Delete dialog */}
+      <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Popup</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will soft-delete the popup (sets <code>deletedAt</code>). You
+              can create a new one later. Are you sure?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={onDelete}
+              disabled={deleting}
+            >
+              {deleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
