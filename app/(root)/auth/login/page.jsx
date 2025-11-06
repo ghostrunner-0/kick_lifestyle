@@ -10,8 +10,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useDispatch } from "react-redux";
 import { FcGoogle } from "react-icons/fc";
-import { FaRegEyeSlash } from "react-icons/fa";
-import { FaRegEye } from "react-icons/fa6";
+import { FaRegEyeSlash, FaRegEye } from "react-icons/fa6";
 import { HiOutlineMail } from "react-icons/hi";
 import { LuLock } from "react-icons/lu";
 
@@ -39,12 +38,14 @@ import {
   ADMIN_BANNERS_ALL,
 } from "@/routes/AdminRoutes";
 
-// Website routes (we won't use the old my-account constant anymore)
-import { WEBSITE_FORGOT_PASSWORD, WEBSITE_REGISTER } from "@/routes/WebsiteRoutes";
+// Website routes
+import {
+  WEBSITE_FORGOT_PASSWORD,
+  WEBSITE_REGISTER,
+} from "@/routes/WebsiteRoutes";
 
 /* ---------------- helpers ---------------- */
 const toInternal = (url) => {
-  // normalize legacy my-account -> account
   if (!url) return "/account";
   return url.replace(/\/my-account\/?$/i, "/account");
 };
@@ -62,13 +63,15 @@ const routeForRole = (role) => {
   }
 };
 
+// ✅ now relative
+const RESET_PASSWORD_URL = "/auth/reset-password";
+
 export default function LoginPage() {
   const dispatch = useDispatch();
   const { data: session, status } = useSession();
   const router = useRouter();
   const sp = useSearchParams();
 
-  // if already authenticated, dispatch and redirect quickly
   useEffect(() => {
     if (session?.user) dispatch(Login(session.user));
   }, [session, dispatch]);
@@ -129,17 +132,48 @@ export default function LoginPage() {
     }
   };
 
-  /* ---------- Login form submit (send OTP) ---------- */
+  /* ---------- Login form submit (send OTP or redirect to reset) ---------- */
   const handleLoginSubmit = async (values) => {
     try {
       setLoading(true);
-      const { data } = await axios.post("/api/auth/login", values);
-      if (!data?.success) throw new Error(data?.message || "Login failed");
-      showToast("success", data.message);
+      const res = await axios.post("/api/auth/login", values);
+
+      // success → OTP flow
+      if (!res?.data?.success)
+        throw new Error(res?.data?.message || "Login failed");
+      showToast("success", res.data.message);
       setOtpEmail(values.email);
       form.reset();
     } catch (e) {
-      showToast("error", e?.message || "Login failed");
+      const status = e?.response?.status;
+      const action = e?.response?.data?.action;
+      const redirectURL = e?.response?.data?.redirectURL;
+
+      if (status === 409 && action === "RESET_REQUIRED") {
+        showToast(
+          "info",
+          "Password reset required. Please set a new password to continue."
+        );
+
+        const target =
+          redirectURL ||
+          `${RESET_PASSWORD_URL}?email=${encodeURIComponent(values.email)}`;
+
+        setOtpEmail(null);
+        form.reset();
+
+        router.push(
+          `${target}${
+            target.includes("?") ? "&" : "?"
+          }email=${encodeURIComponent(values.email)}`
+        );
+        return;
+      }
+
+      showToast(
+        "error",
+        e?.response?.data?.message || e?.message || "Login failed"
+      );
     } finally {
       setLoading(false);
     }
@@ -151,7 +185,6 @@ export default function LoginPage() {
     if (googleLoading) return;
     setGoogleLoading(true);
     try {
-      // If a callback is provided, normalize it; else go to /account
       const callbackUrl = toInternal(sp.get("callback") || "/account");
       await signIn("google", { callbackUrl });
     } catch (err) {
@@ -164,7 +197,6 @@ export default function LoginPage() {
 
   return (
     <AuthShell>
-      {/* widened wrapper */}
       <div className="mx-auto w-full max-w-[640px] sm:max-w-[720px]">
         <div className="mb-6 text-center">
           <h1 className="text-2xl sm:text-[28px] font-extrabold tracking-tight">
@@ -177,7 +209,10 @@ export default function LoginPage() {
 
         {!otpEmail ? (
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(handleLoginSubmit)} className="space-y-5">
+            <form
+              onSubmit={form.handleSubmit(handleLoginSubmit)}
+              className="space-y-5"
+            >
               {/* Email */}
               <FormField
                 control={form.control}
@@ -228,7 +263,9 @@ export default function LoginPage() {
                         type="button"
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
                         onClick={() => setIsPasswordVisible((p) => !p)}
-                        aria-label={isPasswordVisible ? "Hide password" : "Show password"}
+                        aria-label={
+                          isPasswordVisible ? "Hide password" : "Show password"
+                        }
                       >
                         {isPasswordVisible ? <FaRegEye /> : <FaRegEyeSlash />}
                       </button>
@@ -241,7 +278,10 @@ export default function LoginPage() {
               {/* Meta row */}
               <div className="flex items-center justify-between text-sm">
                 <div className="text-slate-500 dark:text-slate-400" />
-                <Link href={WEBSITE_FORGOT_PASSWORD} className="text-[#b88a00] hover:underline">
+                <Link
+                  href={WEBSITE_FORGOT_PASSWORD}
+                  className="text-[#b88a00] hover:underline"
+                >
                   Forgot password?
                 </Link>
               </div>
@@ -281,14 +321,21 @@ export default function LoginPage() {
               {/* Register */}
               <p className="text-center text-sm text-slate-600 dark:text-slate-300">
                 Don’t have an account?{" "}
-                <Link href={WEBSITE_REGISTER} className="text-[#b88a00] hover:underline">
+                <Link
+                  href={WEBSITE_REGISTER}
+                  className="text-[#b88a00] hover:underline"
+                >
                   Create an account
                 </Link>
               </p>
             </form>
           </Form>
         ) : (
-          <OTPVerification email={otpEmail} loading={otpLoading} onsubmit={handleOtpSubmit} />
+          <OTPVerification
+            email={otpEmail}
+            loading={otpLoading}
+            onsubmit={handleOtpSubmit}
+          />
         )}
       </div>
     </AuthShell>

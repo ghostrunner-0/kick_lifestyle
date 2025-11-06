@@ -1,3 +1,4 @@
+// app/api/auth/[...nextauth]/route.js
 import NextAuth from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
@@ -72,7 +73,6 @@ async function setNextAuthCookie(userDoc) {
   return token;
 }
 
-/* ===================== NEXTAUTH CONFIG ===================== */
 export const authOptions = {
   secret: NEXTAUTH_SECRET || SECRET_KEY,
   session: { strategy: "jwt", maxAge: 60 * 60 * 24 * 365 },
@@ -92,7 +92,7 @@ export const authOptions = {
       },
     }),
 
-    /* ============ OTP LOGIN DEBUG AREA ============ */
+    // OTP finalize step (only AFTER password is validated in /api/auth/login)
     CredentialsProvider({
       name: "OTP",
       credentials: {
@@ -100,65 +100,47 @@ export const authOptions = {
         otp: { label: "OTP", type: "text" },
       },
       async authorize(credentials) {
-        console.log("🔹 OTP Login Attempt:", credentials);
-
         await connectDB();
-        console.log("✅ MongoDB connected");
 
         const parsed = authValidationSchema.safeParse(credentials);
         if (!parsed.success) {
-          console.error("❌ Zod validation failed:", parsed.error.errors);
-          throw new Error(
-            parsed.error.errors[0]?.message || "Invalid credentials"
-          );
+          throw new Error(parsed.error.errors[0]?.message || "Invalid input");
         }
 
         const { email, otp } = parsed.data;
-        console.log("📩 Parsed Credentials -> Email:", email, "| OTP:", otp);
 
         if (!/^\d{4,8}$/.test(String(otp))) {
-          console.warn("⚠️ OTP format invalid");
           throw new Error("Invalid OTP");
         }
 
-        console.log("🔍 Searching OTP in DB...");
-        const otpRecord = await OTP.findOne({ email, otp }).lean();
-        if (!otpRecord) {
-          console.warn("❌ No OTP record found for:", email);
-          throw new Error("Invalid OTP");
+        // fetch user
+        const user = await User.findOne({ email, deletedAt: null }).lean();
+        if (!user) throw new Error("User not found");
+
+        // 🚫 block legacy/WP users from OTP signin -> force password reset
+        if (user.provider === "wordpress" || user?.legacy?.hash) {
+          throw new Error("Password reset required");
         }
 
-        console.log("✅ OTP found:", otpRecord);
-
-        // optional expiry check
-        // if (otpRecord.expiresAt && new Date(otpRecord.expiresAt) < new Date()) {
-        //   console.warn("⚠️ OTP expired:", otpRecord.expiresAt);
-        //   throw new Error("OTP expired");
-        // }
-
-        console.log("🔍 Fetching user for email:", email);
-        const user = await User.findOne({
+        // Validate OTP: not expired & not used
+        const now = new Date();
+        const otpRecord = await OTP.findOne({
           email,
-          isEmailVerified: true,
-          deletedAt: null,
+          otp,
+          expiresAt: { $gt: now },
+          used: { $ne: true },
         }).lean();
 
-        if (!user) {
-          console.warn("❌ User not found or not verified:", email);
-          throw new Error("User not found or not verified");
+        if (!otpRecord) {
+          throw new Error("Invalid or expired OTP");
         }
 
-        console.log("✅ User found:", user._id.toString());
+        // mark used
+        await OTP.updateOne({ _id: otpRecord._id }, { $set: { used: true } });
 
-        console.log("🗑️ Deleting used OTP...");
-        await OTP.deleteOne({ _id: otpRecord._id });
-        console.log("✅ OTP deleted");
-
-        console.log("🍪 Setting NextAuth cookie...");
+        // convenience cookie
         await setNextAuthCookie(user);
-        console.log("✅ Cookie set successfully");
 
-        console.log("🎉 OTP Login Success for:", email);
         return {
           id: user._id.toString(),
           email: user.email,
@@ -172,7 +154,6 @@ export const authOptions = {
   callbacks: {
     async signIn({ account, profile }) {
       try {
-        console.log("🌐 signIn callback (provider):", account?.provider);
         await connectDB();
 
         if (account?.provider === "google" && profile?.email) {
@@ -180,10 +161,7 @@ export const authOptions = {
             typeof profile.email_verified === "boolean"
               ? profile.email_verified
               : true;
-          if (!emailVerified) {
-            console.warn("⚠️ Google email not verified");
-            return false;
-          }
+          if (!emailVerified) return false;
 
           let user = await User.findOne({
             email: profile.email,
@@ -191,7 +169,6 @@ export const authOptions = {
           });
 
           if (!user) {
-            console.log("🆕 Creating new Google user:", profile.email);
             user = await User.create({
               name: profile.name,
               email: profile.email,
@@ -202,7 +179,6 @@ export const authOptions = {
           }
 
           await setNextAuthCookie(user);
-          console.log("✅ Google user cookie set");
         }
 
         return true;
@@ -218,7 +194,6 @@ export const authOptions = {
         token.email = user.email || token.email;
         token.name = user.name || token.name;
         token.role = user.role || token.role || "user";
-        console.log("💾 JWT updated with user info:", token.email);
       }
 
       if ((!token.id || !token.role) && token?.email) {
@@ -232,13 +207,11 @@ export const authOptions = {
             token.id = u._id?.toString();
             token.role = u.role || "user";
             token.name = u.name || token.name;
-            console.log("💾 JWT hydrated from DB:", token.email);
           }
         } catch (e) {
           console.error("jwt hydrate error:", e?.message);
         }
       }
-
       return token;
     },
 
@@ -249,7 +222,6 @@ export const authOptions = {
         session.user.name = token.name;
         session.user.role = token.role || "user";
       }
-      console.log("🧾 Session generated for:", session.user.email);
       return session;
     },
   },
@@ -262,4 +234,3 @@ export const authOptions = {
 
 const handler = NextAuth(authOptions);
 export { handler as GET, handler as POST };
-  

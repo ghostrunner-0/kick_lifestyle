@@ -1,4 +1,4 @@
-// app/api/auth/send-otp/route.js
+// app/api/auth/reset-password/send-otp/route.js
 export const runtime = "nodejs";
 
 import { connectDB } from "@/lib/DB";
