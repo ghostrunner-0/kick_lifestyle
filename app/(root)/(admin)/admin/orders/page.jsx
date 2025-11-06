@@ -384,28 +384,35 @@ export default function AdminOrdersPage() {
     window.open(url, "_blank");
   };
 
-const bulkBookPathao = async () => {
-  const ids = table.getSelectedRowModel().rows.map(r => String(r.original?._id));
-  if (!ids.length) return showToast("info", "Select at least one row");
-  try {
-    const { data } = await axios.post(
-      "/api/admin/orders/pathao/book",
-      { ids },
-      { withCredentials: true }
-    );
-    if (data?.success) {
-      showToast("success", data.message || `Booked ${ids.length} shipment(s)`);
-    } else {
-      showToast("error", data?.message || "Booking failed");
-      // optionally inspect data.data.failed / data.data.skipped for reasons
-      console.log("PATHAO FAIL:", data?.data);
+  const bulkBookPathao = async () => {
+    const ids = table
+      .getSelectedRowModel()
+      .rows.map((r) => String(r.original?._id));
+    if (!ids.length) return showToast("info", "Select at least one row");
+    try {
+      const { data } = await axios.post(
+        "/api/admin/orders/pathao/book",
+        { ids },
+        { withCredentials: true }
+      );
+      if (data?.success) {
+        showToast(
+          "success",
+          data.message || `Booked ${ids.length} shipment(s)`
+        );
+      } else {
+        showToast("error", data?.message || "Booking failed");
+        // optionally inspect data.data.failed / data.data.skipped for reasons
+        console.log("PATHAO FAIL:", data?.data);
+      }
+      fetchList(); // refresh your table
+    } catch (e) {
+      showToast(
+        "error",
+        e?.response?.data?.message || e?.message || "Booking failed"
+      );
     }
-    fetchList(); // refresh your table
-  } catch (e) {
-    showToast("error", e?.response?.data?.message || e?.message || "Booking failed");
-  }
-};
-
+  };
 
   const doBulkStatus = async () => {
     if (!bulkStatus || selectedIds.length === 0) return;
