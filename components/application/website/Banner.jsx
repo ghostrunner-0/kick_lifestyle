@@ -46,18 +46,25 @@ export default function Banner({
   const [overlayBg, setOverlayBg] = useState(initialBg);
   const [overlayVisible, setOverlayVisible] = useState(false);
 
-  // Embla with Fade plugin
+  // Embla + Fade
   const [emblaRef, emblaApi] = useEmblaCarousel(
-    {
-      loop: true,
-      containScroll: false,
-      align: "center",
-      duration: 25,
-    },
+    { loop: true, containScroll: false, align: "center", duration: 25 },
     [Fade()]
   );
 
-  // Autoplay (pause on hover / pointer)
+  // We also want a DOM ref to force the viewport height (kill first-render gap)
+  const viewportRef = useRef(null);
+  const setBothRefs = useCallback(
+    (node) => {
+      // attach to Embla
+      emblaRef(node);
+      // keep a handle for height control
+      viewportRef.current = node;
+    },
+    [emblaRef]
+  );
+
+  // Autoplay
   const timerRef = useRef(null);
   const isPausedRef = useRef(false);
 
@@ -66,34 +73,64 @@ export default function Banner({
     clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
       emblaApi.scrollNext();
-      play(); // keep looping
+      play();
     }, autoplayMs);
   }, [emblaApi, autoplayMs]);
 
-  const pause = useCallback(() => {
-    clearTimeout(timerRef.current);
+  const pause = useCallback(() => clearTimeout(timerRef.current), []);
+
+  // Viewport height sync
+  const syncViewportHeight = useCallback(() => {
+    try {
+      const root = viewportRef.current;
+      if (!root) return;
+      const activeCard = root.querySelector(
+        ".embla__slide[data-active='true'] .js-slide-card"
+      );
+      const fallbackCard = root.querySelector(".js-slide-card");
+      const el = activeCard || fallbackCard;
+      if (!el) return;
+      const h = Math.ceil(el.getBoundingClientRect().height);
+      if (h > 0) root.style.height = `${h}px`;
+    } catch {}
   }, []);
 
-  // handle select
+  // Embla events
   useEffect(() => {
     if (!emblaApi) return;
 
     const onSelect = () => {
-      const idx = emblaApi.selectedScrollSnap();
-      setActive(idx);
+      setActive(emblaApi.selectedScrollSnap());
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => syncViewportHeight())
+      );
+    };
+
+    const onReInit = () => {
+      onSelect();
+    };
+
+    const onResize = () => {
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => syncViewportHeight())
+      );
     };
 
     emblaApi.on("select", onSelect);
-    emblaApi.on("reInit", onSelect);
-    onSelect();
-    play();
+    emblaApi.on("reInit", onReInit);
+    emblaApi.on("resize", onResize);
+
+    // first paint
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => syncViewportHeight())
+    );
 
     return () => {
       emblaApi.off("select", onSelect);
-      emblaApi.off("reInit", onSelect);
-      clearTimeout(timerRef.current);
+      emblaApi.off("reInit", onReInit);
+      emblaApi.off("resize", onResize);
     };
-  }, [emblaApi, play]);
+  }, [emblaApi, syncViewportHeight]);
 
   // pause/resume on interaction
   useEffect(() => {
@@ -114,10 +151,8 @@ export default function Banner({
     root.addEventListener("pointerdown", onEnter);
     window.addEventListener("pointerup", onLeave);
 
-    const onVis = () => {
-      if (document.hidden) pause();
-      else if (!isPausedRef.current) play();
-    };
+    const onVis = () =>
+      document.hidden ? pause() : !isPausedRef.current && play();
     document.addEventListener("visibilitychange", onVis);
 
     return () => {
@@ -146,7 +181,7 @@ export default function Banner({
 
   return (
     <div className="relative w-full bg-white isolate">
-      {/* gradient wash: base + fading overlay */}
+      {/* gradient wash */}
       <div className="absolute left-0 right-0 top-0 -z-10 overflow-hidden h-[45vh] min-h-[260px] max-h-[520px]">
         <div
           className="absolute inset-0"
@@ -161,87 +196,118 @@ export default function Banner({
         />
       </div>
 
-      <div className="relative z-10 max-w-[1980px] mx-auto px-2 sm:px-4 pt-20 pb-12">
+      {/* keep your section paddings; no bottom band */}
+      <div className="relative z-10 max-w-[1980px] mx-auto px-2 sm:px-4 pt-20 pb-0">
         {loading || banners.length === 0 ? (
           <div className="px-2 sm:px-5">
             <Skeleton className="w-full h-[200px] md:h-[400px] rounded-2xl" />
           </div>
         ) : (
           <div className="px-2 sm:px-5">
-            <div className="embla" ref={emblaRef}>
-              <div className="embla__container">
-                {banners.map(({ _id, desktopImage, mobileImage, href }, i) => {
-                  const desktopSrc =
-                    desktopImage?.path || mobileImage?.path || "";
-                  const mobileSrc =
-                    mobileImage?.path || desktopImage?.path || "";
-                  const alt = desktopImage?.alt || mobileImage?.alt || "Banner";
-                  const isLCP = i === 0;
+            {/* OUTER rounded wrapper restores visible corners */}
+            <div className="relative rounded-2xl overflow-hidden">
+              {/* embla viewport gets both refs: embla + viewport for height control */}
+              <div className="embla" ref={setBothRefs}>
+                {/* gutter trick: keep px on slides, negate on track */}
+                <div className="embla__container -mx-2 sm:-mx-5">
+                  {banners.map(
+                    ({ _id, desktopImage, mobileImage, href }, i) => {
+                      const desktopSrc =
+                        desktopImage?.path || mobileImage?.path || "";
+                      const mobileSrc =
+                        mobileImage?.path || desktopImage?.path || "";
+                      const alt =
+                        desktopImage?.alt || mobileImage?.alt || "Banner";
+                      const isLCP = i === 0;
 
-                  return (
-                    <div className="embla__slide" key={_id || i}>
-                      <a
-                        href={href || "#"}
-                        target={href && href !== "#" ? "_blank" : undefined}
-                        rel="noreferrer"
-                        className="block rounded-2xl overflow-hidden shadow-lg"
-                      >
-                        {/* Desktop */}
-                        <div className="hidden md:block">
-                          <Image
-                            src={desktopSrc}
-                            alt={alt}
-                            width={1600}
-                            height={900}
-                            sizes="(min-width: 1280px) 1263px, (min-width: 768px) 100vw, 100vw"
-                            className="w-full h-auto object-cover rounded-2xl"
-                            priority={isLCP}
-                            quality={75}
-                          />
-                        </div>
+                      return (
+                        <div
+                          className="embla__slide px-2 sm:px-5"
+                          key={_id || i}
+                          data-active={i === active ? "true" : "false"}
+                        >
+                          <a
+                            href={href || "#"}
+                            target={href && href !== "#" ? "_blank" : undefined}
+                            rel="noreferrer"
+                            className="relative block overflow-hidden rounded-2xl shadow-lg js-slide-card"
+                            style={{ lineHeight: 0 }} // kills inline baseline gap
+                          >
+                            {/* Desktop: intrinsic sizing (your original look) */}
+                            <div className="hidden md:block">
+                              <Image
+                                src={desktopSrc}
+                                alt={alt}
+                                width={1600}
+                                height={900}
+                                sizes="(min-width: 1280px) 1263px, (min-width: 768px) 100vw, 100vw"
+                                className="block w-full h-auto object-cover rounded-2xl"
+                                priority={isLCP}
+                                loading={isLCP ? "eager" : "lazy"}
+                                quality={75}
+                                onLoad={() =>
+                                  requestAnimationFrame(() =>
+                                    requestAnimationFrame(syncViewportHeight)
+                                  )
+                                }
+                              />
+                            </div>
 
-                        {/* Mobile */}
-                        <div className="block md:hidden relative w-full h-[500px] rounded-2xl overflow-hidden">
-                          <Image
-                            src={mobileSrc}
-                            alt={alt}
-                            fill
-                            sizes="100vw"
-                            className="object-cover rounded-2xl"
-                            priority={isLCP}
-                            quality={75}
-                          />
+                            {/* Mobile: tall hero */}
+                            <div className="block md:hidden relative w-full h-[500px] rounded-2xl overflow-hidden">
+                              <Image
+                                src={mobileSrc}
+                                alt={alt}
+                                fill
+                                sizes="100vw"
+                                className="object-cover rounded-2xl"
+                                priority={isLCP}
+                                loading={isLCP ? "eager" : "lazy"}
+                                quality={75}
+                                onLoad={() =>
+                                  requestAnimationFrame(() =>
+                                    requestAnimationFrame(syncViewportHeight)
+                                  )
+                                }
+                              />
+                            </div>
+
+                            {/* OVER-IMAGE DOTS */}
+                            {slideCount > 1 && (
+                              <div className="pointer-events-none absolute inset-x-0 bottom-3 z-20 flex justify-center">
+                                <div className="pointer-events-auto flex items-center gap-2 bg-black/40 backdrop-blur-sm rounded-full px-3 py-1 border border-white/20 shadow-sm">
+                                  {Array.from({ length: slideCount }).map(
+                                    (_, i) => {
+                                      const isActive = i === active;
+                                      return (
+                                        <button
+                                          key={i}
+                                          aria-label={`Go to slide ${i + 1}`}
+                                          onClick={(e) => {
+                                            e.preventDefault();
+                                            emblaApi?.scrollTo(i);
+                                          }}
+                                          className={`h-1.5 rounded-full transition-all duration-300 ${
+                                            isActive
+                                              ? "w-4 bg-white"
+                                              : "w-1.5 bg-white/60 hover:bg-white/80"
+                                          }`}
+                                        />
+                                      );
+                                    }
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </a>
                         </div>
-                      </a>
-                    </div>
-                  );
-                })}
+                      );
+                    }
+                  )}
+                </div>
               </div>
             </div>
-
-            {/* dots */}
-            {slideCount > 1 && (
-              <div className="absolute left-0 right-0 bottom-4 flex justify-center pointer-events-none">
-                <ul className="flex gap-2 pointer-events-auto">
-                  {Array.from({ length: slideCount }).map((_, i) => {
-                    const isActive = i === active;
-                    return (
-                      <li key={i}>
-                        <button
-                          aria-label={`Go to slide ${i + 1}`}
-                          onClick={() => emblaApi?.scrollTo(i)}
-                          className={`h-2 w-2 rounded-full transition-all ${
-                            isActive
-                              ? "bg-black scale-150"
-                              : "bg-neutral-400 opacity-80"
-                          }`}
-                        />
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            )}
+            {/* /rounded wrapper */}
           </div>
         )}
       </div>
@@ -249,7 +315,7 @@ export default function Banner({
       <style jsx global>{`
         .embla {
           position: relative;
-          overflow: hidden;
+          overflow: visible; /* allow slide rounded corners to show */
           width: 100%;
         }
         .embla__container {
@@ -259,14 +325,17 @@ export default function Banner({
         .embla__slide {
           flex: 0 0 100%;
           min-width: 0;
-          padding-left: 0.5rem;
-          padding-right: 0.5rem;
+          /* keep only horizontal gutters; zero vertical padding so it never pushes height */
+          padding-top: 0;
+          padding-bottom: 0;
         }
-        @media (min-width: 640px) {
-          .embla__slide {
-            padding-left: 1.25rem;
-            padding-right: 1.25rem;
-          }
+        /* baseline safety across browsers */
+        img,
+        picture,
+        video,
+        canvas,
+        svg {
+          display: block;
         }
       `}</style>
     </div>

@@ -1596,6 +1596,16 @@ export default function CheckoutClient({ initialUser = null }) {
                 >
                   {`Place Order — ${formatNpr(total)}`}
                 </Button>
+                <p className="text-sm text-gray-500 text-center">
+                  By placing your order, you agree to our{" "}
+                  <a
+                    href="/policies/terms"
+                    className="underline hover:text-primary"
+                  >
+                    Terms &amp; Conditions
+                  </a>
+                  .
+                </p>
               </CardContent>
             </Card>
           </div>

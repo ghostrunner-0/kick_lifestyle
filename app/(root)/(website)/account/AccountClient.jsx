@@ -530,6 +530,9 @@ export default function AccountPage() {
   const [addrLoading, setAddrLoading] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 
+  // NEW: Khalti pay-now button state
+  const [khaltiLoadingId, setKhaltiLoadingId] = useState(null);
+
   // auth + guard
   useEffect(() => {
     let mounted = true;
@@ -666,6 +669,43 @@ export default function AccountPage() {
     try {
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch {}
+  };
+
+  // NEW: detect if an order is Khalti & pending payment
+  const isKhaltiPending = (o) => {
+    const pm = String(
+      o?.paymentMethod || o?.payment?.provider || ""
+    ).toLowerCase();
+    const st = String(o?.status || "").toLowerCase();
+    const paid = String(o?.payment?.status || "").toLowerCase();
+    return pm === "khalti" && (st === "pending payment" || paid === "unpaid");
+  };
+
+  // NEW: initiate Khalti and redirect to payment_url
+  const initiateKhalti = async (o) => {
+    if (!o?.displayOrderId && !o?._id && !o?.id) return;
+    try {
+      setKhaltiLoadingId(String(o._id || o.id || o.displayOrderId));
+      const res = await fetch("/api/website/payments/khalti/initiate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          o.displayOrderId
+            ? { display_order_id: o.displayOrderId }
+            : { order_id: o._id || o.id }
+        ),
+      });
+      const json = await res.json();
+      if (!json?.success || !json?.payment_url) {
+        throw new Error(json?.message || "Failed to initiate payment");
+      }
+      // redirect to Khalti hosted page
+      window.location.href = json.payment_url;
+    } catch (e) {
+      alert(e?.message || "Could not initiate Khalti payment");
+    } finally {
+      setKhaltiLoadingId(null);
+    }
   };
 
   if (loadingUser) {
@@ -1032,13 +1072,21 @@ export default function AccountPage() {
                             >
                               {o.status || "—"}
                             </Badge>
+
+                            {/* Optional tiny hint when pending */}
+                            {isKhaltiPending(o) ? (
+                              <span className="text-xs text-muted-foreground">
+                                • Payment pending
+                              </span>
+                            ) : null}
+
                             <div className="text-xs text-muted-foreground inline-flex items-center gap-1.5 ml-auto">
                               <CalendarDays className="h-4 w-4" />
                               {niceDate(o.createdAt)}
                             </div>
                           </div>
 
-                          {/* Second row: summary + count + total + view button */}
+                          {/* Second row: summary + count + total + actions */}
                           <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm">
                             <span className="font-medium">
                               {o.summary || `${o.itemsCount || 0} item(s)`}
@@ -1055,6 +1103,28 @@ export default function AccountPage() {
                               <span className="font-semibold">
                                 {formatNpr(o.total)} {o.currency || ""}
                               </span>
+
+                              {isKhaltiPending(o) ? (
+                                <Button
+                                  size="sm"
+                                  className="h-8"
+                                  style={{
+                                    backgroundColor: PRIMARY,
+                                    color: "#111",
+                                  }}
+                                  onClick={() => initiateKhalti(o)}
+                                  disabled={
+                                    khaltiLoadingId ===
+                                    String(o._id || o.id || o.displayOrderId)
+                                  }
+                                  title="Pay now with Khalti"
+                                >
+                                  {khaltiLoadingId ===
+                                  String(o._id || o.id || o.displayOrderId)
+                                    ? "Opening Khalti…"
+                                    : "Pay with Khalti"}
+                                </Button>
+                              ) : null}
 
                               {viewHref ? (
                                 <Button

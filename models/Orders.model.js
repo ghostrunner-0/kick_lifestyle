@@ -57,9 +57,34 @@ const CouponSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const KhaltiMetaSchema = new mongoose.Schema(
+  {
+    pidx: String,
+    status: String,
+    transaction_id: String,
+    total_amount: Number,
+    khalti_id: String, // ✅ NEW: payer's Khalti ID (mobile or wallet ID)
+    verifiedAt: Date,
+    payment_url: String,
+    expires_at: Date,
+    initiateAt: Date,
+  },
+  { _id: false }
+);
+
+const PaymentSchema = new mongoose.Schema(
+  {
+    status: { type: String, enum: ["paid", "unpaid"], default: "unpaid" },
+    provider: String, // e.g., "khalti"
+    providerRef: String, // txn/ref id
+    khalti: KhaltiMetaSchema, // ✅ nested Khalti details
+  },
+  { _id: false }
+);
+
 const OrderSchema = new mongoose.Schema(
   {
-    // User linkage + snapshot
+    // User linkage
     userId: { type: String, required: true, index: true },
     userRef: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     user: {
@@ -67,40 +92,31 @@ const OrderSchema = new mongoose.Schema(
       email: { type: String, index: true },
     },
 
-    // Customer details at time of order
     customer: {
       fullName: String,
       phone: String,
     },
 
-    // Address snapshot
     address: AddressSchema,
-
-    // Items
     items: { type: [ItemSchema], required: true },
-
-    // Amounts snapshot
     amounts: AmountsSchema,
 
-    // Payment (status: only paid/unpaid)
-    paymentMethod: { type: String, enum: ["cod", "khalti", "qr"], required: true },
-    payment: {
-      status: { type: String, enum: ["paid", "unpaid"], default: "unpaid" },
-      provider: String,      // e.g., "khalti"
-      providerRef: String,   // gateway txn/ref id
+    paymentMethod: {
+      type: String,
+      enum: ["cod", "khalti", "qr"],
+      required: true,
     },
 
-    // Shipping (no status enum)
+    payment: PaymentSchema, // ✅ now includes full Khalti meta
+
     shipping: {
       carrier: { type: String, default: "pathao" },
       trackingId: String,
       pricePlanPayload: mongoose.Schema.Types.Mixed,
     },
 
-    // Coupon snapshot
     coupon: CouponSchema,
 
-    // Main order status
     status: {
       type: String,
       enum: [
@@ -120,12 +136,20 @@ const OrderSchema = new mongoose.Schema(
     notes: String,
     orderNumber: { type: String, index: true },
 
-    // Display order fields
-    display_order_id: { type: String, required: true, unique: true, index: true, trim: true },
-    display_order_seq: { type: Number, required: true, index: true }, // 2000, 2001, ...
-    display_order_prefix: { type: String, required: true }, // AXC/BLQ/MNP/ZQX
+    display_order_id: {
+      type: String,
+      required: true,
+      unique: true,
+      index: true,
+      trim: true,
+    },
+    display_order_seq: { type: Number, required: true, index: true },
+    display_order_prefix: { type: String, required: true },
   },
   { timestamps: true }
 );
+
+// Optional performance optimization
+OrderSchema.index({ "payment.khalti.pidx": 1 }, { sparse: true });
 
 export default mongoose.models.Order || mongoose.model("Order", OrderSchema);

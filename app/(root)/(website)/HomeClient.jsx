@@ -245,7 +245,6 @@ export default function HomeClient({ initialBanners = [] }) {
                 { name: "HUKUT", src: "/assets/images/hukut.png" },
                 { name: "DARAZ", src: "/assets/images/daraz.png" },
                 { name: "KHALTI", src: "/assets/images/khalti.png" },
-                { name: "IMEPAY", src: "/assets/images/imepay.png" },
                 { name: "BROTHER MART", src: "/assets/images/Brothermart.png" },
               ]}
               height="h-16"

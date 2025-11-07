@@ -14,32 +14,38 @@ const REVIEWS = [
       "Kick Lifestyle blends design and innovation that rivals global tech brands — from sound to finish, it’s world-class.",
   },
   {
-    logo: "/assets/coverage/techsathi.png",
-    name: "TechSathi",
+    logo: "/assets/coverage/ict-frame.png",
+    name: "ICT Frame",
     quote:
       "Kick is not just a Nepali brand — it’s a statement of modern craftsmanship and digital vision.",
   },
   {
-    logo: "/assets/coverage/madtech.png",
-    name: "MAD Tech Reviews",
+    logo: "/assets/coverage/kathmandu post.png",
+    name: "MKathmandu Post",
     quote:
       "Every Kick product feels premium. You sense the detail — packaging, materials, the experience.",
   },
   {
-    logo: "/assets/coverage/nepalitelevision.png",
-    name: "Nepali Television",
+    logo: "/assets/coverage/makalu khabar.png",
+    name: "Makalu Khabar",
     quote:
       "Kick Lifestyle stands among Nepal’s leading homegrown tech pioneers.",
   },
   {
-    logo: "/assets/coverage/neptech.png",
-    name: "NepTech",
+    logo: "/assets/coverage/seto khabar.png",
+    name: "Seto Khabar",
     quote:
       "A perfect mix of bold design and practical innovation — made for Nepali lifestyles.",
   },
   {
-    logo: "/assets/coverage/uktv.png",
-    name: "UK Tech View",
+    logo: "/assets/coverage/tekhlekh.png",
+    name: "Techlekh",
+    quote:
+      "Design-first, detail-obsessed — Kick is raising expectations for homegrown tech brands.",
+  },
+  {
+    logo: "/assets/coverage/yednap.png",
+    name: "Sanjeev Yednap",
     quote:
       "Design-first, detail-obsessed — Kick is raising expectations for homegrown tech brands.",
   },
@@ -172,7 +178,6 @@ export default function KickReviewsCoverage() {
         <div className="pointer-events-none absolute inset-y-0 right-0 w-10 sm:w-16 bg-gradient-to-l from-white to-transparent dark:from-neutral-950" />
 
         {/* Progress bar */}
-
       </div>
     </section>
   );

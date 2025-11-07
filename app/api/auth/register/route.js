@@ -52,7 +52,7 @@ export async function POST(req) {
       .setProtectedHeader({ alg: "HS256" })
       .sign(secret);
 
-    const verificationUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/auth/verify-email/${token}`;
+    const verificationUrl = `${process.env.NEXTAUTH_URL}/auth/verify-email/${token}`;
 
     // Send verification email via Brevo TEMPLATE ONLY
     const templateIdVerify =
