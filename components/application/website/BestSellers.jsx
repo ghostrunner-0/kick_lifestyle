@@ -10,13 +10,12 @@ import React, {
 } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import useEmblaCarousel from "embla-carousel-react";
 
 import ProductCard from "@/components/application/website/ProductCard";
 import { useCategories } from "@/components/providers/CategoriesProvider";
 import { useProducts, deriveKey } from "@/components/providers/ProductProvider";
 
-/* ----------------------- utils (kept from your logic) ---------------------- */
+/* ----------------------- utils ---------------------- */
 const canonicalKey = (p) => {
   if (!p) return null;
   const slug =
@@ -28,6 +27,7 @@ const canonicalKey = (p) => {
   const basePrice = p.specialPrice ?? p.price ?? p.mrp ?? p.data?.price ?? "";
   return `name:${name}|price:${basePrice}`;
 };
+
 const dedupeByCanonical = (arr) => {
   const seen = new Set();
   const out = [];
@@ -40,10 +40,29 @@ const dedupeByCanonical = (arr) => {
   return out;
 };
 
-const fade = { hidden: { opacity: 0 }, show: { opacity: 1 } };
 const PINNED_SLUG = "true-wireless-earbuds";
 
-/* ------------------- inline compact premium tab bar (TabsNeo) ------------------- */
+/* product has ANY stock (base or variant) */
+function hasAnyStock(p) {
+  if (!p) return false;
+
+  const baseRaw =
+    p.stock ?? p.quantity ?? p.qty ?? p.inventory ?? p.availableQty ?? null;
+  const base = Number(baseRaw);
+  const baseHas = Number.isFinite(base) && base > 0;
+
+  const variants = Array.isArray(p.variants) ? p.variants : [];
+  const variantHas = variants.some((v) => {
+    const vRaw =
+      v.stock ?? v.quantity ?? v.qty ?? v.inventory ?? v.availableQty ?? null;
+    const vs = Number(vRaw);
+    return Number.isFinite(vs) && vs > 0;
+  });
+
+  return baseHas || variantHas;
+}
+
+/* ------------------- TabsNeo (unchanged) ------------------- */
 function TabsNeo({ tabs = [], activeIndex = 0, onChange, className = "" }) {
   const btnRefs = useRef([]);
   const trackRef = useRef(null);
@@ -123,8 +142,8 @@ function TabsNeo({ tabs = [], activeIndex = 0, onChange, className = "" }) {
         >
           <span
             className="block h-full w-full rounded-full shadow-sm ring-1 ring-black/5 dark:ring-white/10
-                           bg-[linear-gradient(135deg,#ffe08a,#fcba17_45%,#f39c12)]
-                           dark:bg-[linear-gradient(135deg,#facc15,#eab308_45%,#d97706)]"
+                       bg-[linear-gradient(135deg,#ffe08a,#fcba17_45%,#f39c12)]
+                       dark:bg-[linear-gradient(135deg,#facc15,#eab308_45%,#d97706)]"
           />
         </motion.span>
 
@@ -136,7 +155,6 @@ function TabsNeo({ tabs = [], activeIndex = 0, onChange, className = "" }) {
               ref={(el) => (btnRefs.current[i] = el)}
               role="tab"
               aria-selected={active}
-              data-tab-idx={i}
               onClick={() => onChange?.(i)}
               className={[
                 "relative z-[1] shrink-0",
@@ -153,7 +171,7 @@ function TabsNeo({ tabs = [], activeIndex = 0, onChange, className = "" }) {
                 <span className="truncate max-w-[56vw] sm:max-w-none">
                   {t.label}
                 </span>
-                {typeof t.count === "number" ? (
+                {typeof t.count === "number" && (
                   <span
                     className={[
                       "rounded-full text-[10.5px] leading-5 px-1.5",
@@ -164,7 +182,7 @@ function TabsNeo({ tabs = [], activeIndex = 0, onChange, className = "" }) {
                   >
                     {t.count}
                   </span>
-                ) : null}
+                )}
               </span>
             </button>
           );
@@ -181,10 +199,10 @@ export default function BestSellers({ className = "" }) {
     products = [],
     isLoading: prodLoading,
     activeKey,
-    setActiveKey, // provider fetches when this changes
+    setActiveKey,
   } = useProducts();
 
-  // 1) order categories with pinned first
+  /* order categories with pinned first */
   const orderedCategories = useMemo(() => {
     if (!Array.isArray(categories) || categories.length === 0) return [];
     const pinned = [];
@@ -197,14 +215,13 @@ export default function BestSellers({ className = "" }) {
     return [...pinned, ...rest];
   }, [categories]);
 
-  // 2) keys aligned to ordered list
   const catKeys = useMemo(
     () =>
       Array.isArray(orderedCategories) ? orderedCategories.map(deriveKey) : [],
     [orderedCategories]
   );
 
-  // 3) initial selection: prefer pinned; don't override valid user selection
+  /* initial selection: pinned or first */
   useEffect(() => {
     if (!orderedCategories.length) return;
     const pinnedCat = orderedCategories.find(
@@ -215,7 +232,7 @@ export default function BestSellers({ className = "" }) {
     if (!activeIsValid && preferredKey) setActiveKey(preferredKey);
   }, [orderedCategories, catKeys, activeKey, setActiveKey]);
 
-  // 4) map activeKey <-> tab index
+  /* active tab index (for TabsNeo) */
   const activeIndex = useMemo(() => {
     const idx = catKeys.indexOf(activeKey);
     return idx >= 0 ? idx : 0;
@@ -231,84 +248,28 @@ export default function BestSellers({ className = "" }) {
     ? `/category/${String(currentCategory.slug).toLowerCase()}`
     : "/category/all";
 
-  // 5) compute items (dedupe + cap)
+  /* products for active tab:
+     - rely on useProducts() + activeKey for filtering
+     - dedupe by canonical key
+     - only IN-STOCK
+     - cap to 24 for this block
+  */
   const displayProducts = useMemo(() => {
     const uniq = dedupeByCanonical(products || []);
-    return uniq.slice(0, 24);
+    const inStockOnly = uniq.filter((p) => hasAnyStock(p));
+    return inStockOnly.slice(0, 24);
   }, [products]);
 
-  // 6) tab change -> setActiveKey (triggers provider fetch)
+  const itemsCount = displayProducts.length;
+
   const handleTabChange = useCallback(
     (idx) => {
       const key = catKeys[idx];
-      if (key && key !== activeKey) setActiveKey(key);
+      if (key && key !== activeKey) {
+        setActiveKey(key);
+      }
     },
     [catKeys, activeKey, setActiveKey]
-  );
-
-  /* --------------------------- animations for load & switch --------------------------- */
-  const blockVariants = {
-    hidden: { opacity: 0, y: 8 },
-    show: {
-      opacity: 1,
-      y: 0,
-      transition: { duration: 0.35, ease: [0.22, 1, 0.36, 1] },
-    },
-    exit: { opacity: 0, y: -8, transition: { duration: 0.2 } },
-  };
-  const gridVariants = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: { when: "beforeChildren", staggerChildren: 0.06 },
-    },
-  };
-  const itemVariants = {
-    hidden: { opacity: 0, y: 14, scale: 0.985 },
-    show: {
-      opacity: 1,
-      y: 0,
-      scale: 1,
-      transition: { duration: 0.32, ease: [0.22, 1, 0.36, 1] },
-    },
-    exit: { opacity: 0, y: -8, scale: 0.985, transition: { duration: 0.18 } },
-  };
-
-  /* ------------------------ inline Embla (no old comp) ----------------------- */
-  const [emblaRef, emblaApi] = useEmblaCarousel({
-    align: "start",
-    loop: false,
-    slidesToScroll: 1,
-    containScroll: "trimSnaps",
-    skipSnaps: false,
-  });
-  const [progress, setProgress] = useState(0);
-  const itemsCount = displayProducts.length;
-
-  const onScroll = useCallback((api) => {
-    const p = api?.scrollProgress();
-    const clamped = Math.max(0, Math.min(1, Number.isFinite(p) ? p : 0));
-    setProgress(clamped);
-  }, []);
-
-  // re-init & snap to start whenever content or tab changes
-  useEffect(() => {
-    if (!emblaApi) return;
-    emblaApi.on("scroll", onScroll);
-    emblaApi.on("resize", onScroll);
-    emblaApi.reInit();
-    emblaApi.scrollTo(0, true);
-    onScroll(emblaApi);
-    return () => {
-      emblaApi.off("scroll", onScroll);
-      emblaApi.off("resize", onScroll);
-    };
-  }, [emblaApi, onScroll, itemsCount, activeIndex]);
-
-  const thumbPct = itemsCount > 0 ? Math.min(100, 100 / itemsCount) : 100;
-  const leftPct = Math.max(
-    0,
-    Math.min(100 - thumbPct, progress * (100 - thumbPct))
   );
 
   if (!categories?.length && !catLoading) return null;
@@ -317,13 +278,12 @@ export default function BestSellers({ className = "" }) {
     <section className={"py-8 " + className}>
       <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header row */}
-        <div className="flex items-center justify-between gap-3">
-          {/* Title */}
-          <h2 className="text-xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h2 className="text-xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
             Top Picks For You
           </h2>
 
-          {/* Right cluster (DESKTOP): Tabs beside View all */}
+          {/* Desktop: tabs + view all */}
           <div className="hidden sm:flex items-center gap-3 min-w-0">
             <TabsNeo
               tabs={labels}
@@ -354,7 +314,7 @@ export default function BestSellers({ className = "" }) {
             </Link>
           </div>
 
-          {/* Mobile arrow-only CTA */}
+          {/* Mobile: arrow CTA */}
           <Link
             href={currentHref}
             prefetch
@@ -372,7 +332,7 @@ export default function BestSellers({ className = "" }) {
           </Link>
         </div>
 
-        {/* Mobile tabs UNDER the title (desktop has them beside View all) */}
+        {/* Mobile tabs */}
         <div className="mt-3 sm:hidden">
           <TabsNeo
             tabs={labels}
@@ -381,8 +341,8 @@ export default function BestSellers({ className = "" }) {
           />
         </div>
 
-        {/* Loading skeleton for categories (kept) */}
-        {catLoading && !categories.length ? (
+        {/* Category loading hint */}
+        {catLoading && !categories.length && (
           <div className="mt-3 flex gap-2 overflow-hidden">
             {Array.from({ length: 4 }).map((_, i) => (
               <span
@@ -391,34 +351,31 @@ export default function BestSellers({ className = "" }) {
               />
             ))}
           </div>
-        ) : null}
+        )}
 
-        {/* Carousel (Embla inline) with category-change animation */}
+        {/* Products grid */}
         <div className="mt-5 sm:mt-6">
           <AnimatePresence mode="wait">
-            {/* EMPTY STATE — designed card */}
-            {!displayProducts.length && !prodLoading ? (
+            {!itemsCount && !prodLoading ? (
               <motion.div
                 key={`empty-${activeKey || "none"}`}
-                variants={fade}
-                initial="hidden"
-                animate="show"
-                exit="hidden"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
                 className="relative overflow-hidden rounded-2xl border border-foreground/10 bg-gradient-to-br from-amber-50 to-white dark:from-neutral-900 dark:to-neutral-950 px-5 py-8 sm:px-8 sm:py-12"
               >
                 <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-amber-200/30 blur-2xl dark:bg-yellow-500/10" />
                 <div className="pointer-events-none absolute -left-10 -bottom-10 h-36 w-36 rounded-full bg-amber-300/30 blur-2xl dark:bg-yellow-600/10" />
-
                 <div className="relative">
                   <h3 className="text-lg sm:text-2xl font-bold text-neutral-900 dark:text-neutral-100">
-                    Nothing here… yet.
+                    Nothing in stock here… yet.
                   </h3>
                   <p className="mt-1.5 text-sm sm:text-base text-neutral-600 dark:text-neutral-300">
-                    We’re lining up great picks for{" "}
+                    We&apos;re lining up great picks for{" "}
                     <span className="font-semibold">
                       {currentCategory?.name || "this category"}
                     </span>
-                    . In the meantime, explore everything in the collection.
+                    . Check back soon or explore the full collection.
                   </p>
                   <div className="mt-4">
                     <Link
@@ -446,109 +403,29 @@ export default function BestSellers({ className = "" }) {
               </motion.div>
             ) : (
               <motion.div
-                key={`list-${activeKey || "default"}`}
-                variants={{
-                  hidden: { opacity: 0, y: 8 },
-                  show: { opacity: 1, y: 0, transition: { duration: 0.35 } },
-                  exit: { opacity: 0, y: -8, transition: { duration: 0.2 } },
-                }}
-                initial="hidden"
-                animate="show"
-                exit="exit"
+                key={`grid-${activeKey || "default"}`}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.25 }}
               >
-                <motion.div
-                  variants={{
-                    hidden: { opacity: 0 },
-                    show: {
-                      opacity: 1,
-                      transition: {
-                        when: "beforeChildren",
-                        staggerChildren: 0.06,
-                      },
-                    },
-                  }}
-                  initial="hidden"
-                  animate="show"
+                <div
+                  className={`
+                    grid gap-3 sm:gap-4 lg:gap-5
+                    grid-cols-2 sm:grid-cols-3 lg:grid-cols-4
+                  `}
                 >
-                  {/* Edge-to-edge on mobile with proper gutters */}
-                  <div className="-mx-4 sm:-mx-6 lg:-mx-8">
-                    <div className="px-2 sm:px-4 lg:px-6 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-                      <div
-                        ref={emblaRef}
-                        className="overflow-hidden"
-                        aria-label="Products scroller"
-                      >
-                        <ul className="flex select-none snap-x snap-mandatory">
-                          {/* LEFT gutter for mobile */}
-                          <li
-                            className="shrink-0 basis-3 sm:hidden"
-                            aria-hidden
-                          />
-                          {(displayProducts.length
-                            ? displayProducts
-                            : Array.from({ length: 8 })
-                          ).map((p, i) => (
-                            <motion.li
-                              variants={{
-                                hidden: { opacity: 0, y: 14, scale: 0.985 },
-                                show: {
-                                  opacity: 1,
-                                  y: 0,
-                                  scale: 1,
-                                  transition: { duration: 0.32 },
-                                },
-                                exit: {
-                                  opacity: 0,
-                                  y: -8,
-                                  scale: 0.985,
-                                  transition: { duration: 0.18 },
-                                },
-                              }}
-                              key={p?._id || i}
-                              className={[
-                                "shrink-0 px-2 sm:px-3",
-                                "basis-[86%] xs:basis-[74%] sm:basis-1/2 md:basis-1/3 xl:basis-1/4",
-                                "snap-start",
-                              ].join(" ")}
-                              aria-roledescription="slide"
-                              aria-label={`Slide ${i + 1} of ${
-                                displayProducts.length || 8
-                              }`}
-                            >
-                              {p ? (
-                                <div className="h-full">
-                                  <ProductCard product={p} />
-                                </div>
-                              ) : (
-                                <div className="h-[260px] sm:h-[320px] md:h-[340px] rounded-xl bg-slate-100 dark:bg-neutral-800 animate-pulse" />
-                              )}
-                            </motion.li>
-                          ))}
-                          {/* RIGHT gutter for mobile */}
-                          <li
-                            className="shrink-0 basis-3 sm:hidden"
-                            aria-hidden
-                          />
-                        </ul>
-                      </div>
-                    </div>
-
-                    {/* progress thumb */}
-                    {itemsCount > 1 && (
-                      <div className="relative mt-3 h-[6px] select-none">
-                        <span
-                          className="absolute top-1/2 -translate-y-1/2 h-px rounded-full bg-black/15 dark:bg-white/20 w-full"
-                          aria-hidden="true"
-                        />
-                        <span
-                          className="absolute top-1/2 -translate-y-1/2 h-1 rounded-full bg-black/35 dark:bg-white/40"
-                          style={{ width: `${thumbPct}%`, left: `${leftPct}%` }}
-                          aria-hidden="true"
-                        />
-                      </div>
-                    )}
-                  </div>
-                </motion.div>
+                  {displayProducts.map((p, i) => (
+                    <motion.div
+                      key={p?._id || i}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.25, delay: i * 0.02 }}
+                    >
+                      <ProductCard product={p} />
+                    </motion.div>
+                  ))}
+                </div>
               </motion.div>
             )}
           </AnimatePresence>

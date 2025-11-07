@@ -3,13 +3,13 @@ import fs from "fs";
 import path from "path";
 import mongoose from "mongoose";
 import { fileURLToPath } from "url";
-import User from "../models/User.model.js"; // <-- adjust if your structure is different
+import User from "../models/User.model.js"; // ensure this model uses mongoose.model("User", ...)
 
 /* ---------- CONFIG ---------- */
-const MONGO_URI ="mongodb+srv://kickadmin:zOHn12MwDz11komq@main.ovmlvls.mongodb.net/KICK-LIFESTYLE?retryWrites=true&w=majority&appName=MAIN";
+const MONGO_URI =
+  "mongodb://admin:StrongPassword123!@192.168.110.102:27017/admin?replicaSet=rs0&authSource=admin&retryWrites=true&w=majority";
 
 // Path to your phpMyAdmin JSON export file
-// (the one that starts with type: "header", "database", "table", etc.)
 const INPUT_FILE = "./users.json";
 
 /* ---------- ESM __dirname ---------- */
@@ -39,8 +39,7 @@ function detectAlgo(hash) {
   if (hash.startsWith("$P$")) return "phpass";
   if (hash.startsWith("$2y$")) return "bcrypt";
   if (hash.startsWith("$argon2")) return "argon2";
-  // classic 32-char hex
-  if (/^[a-f0-9]{32}$/i.test(hash)) return "md5";
+  if (/^[a-f0-9]{32}$/i.test(hash)) return "md5"; // classic 32-char hex
   return "phpass";
 }
 
@@ -127,6 +126,7 @@ function loadAndTransform(filePath) {
 
       address: null,
       deletedAt: null,
+
       pathaoCityId: null,
       pathaoCityLabel: null,
       pathaoZoneId: null,
@@ -156,18 +156,25 @@ async function main() {
     return;
   }
 
-  console.log("Connecting to MongoDB:", MONGO_URI);
-  await mongoose.connect(MONGO_URI);
-  console.log("Connected.");
+  console.log("Connecting to MongoDB...");
+  // ⬇️ IMPORTANT: target KICK-LIFESTYLE database for the User collection
+  await mongoose.connect(MONGO_URI, {
+    dbName: "KICK-LIFESTYLE",
+  });
+  console.log(
+    `Connected. Using DB: ${mongoose.connection.name} (should be "KICK-LIFESTYLE")`
+  );
+  console.log(
+    `Target collection: ${User.collection.collectionName} (from User.model.js)`
+  );
 
   try {
     const res = await User.insertMany(docs, {
-      ordered: false,
+      ordered: false, // continue on duplicates
     });
 
     console.log(`✅ Import complete. Inserted ${res.length} users.`);
   } catch (err) {
-    // Handle duplicate key / partial success
     if (err?.writeErrors?.length) {
       const total = docs.length;
       const dupCount = err.writeErrors.filter((e) =>

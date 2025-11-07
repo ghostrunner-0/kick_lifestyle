@@ -57,19 +57,24 @@ import { useCategories } from "@/components/providers/CategoriesProvider";
 
 /* ---------- helpers ---------- */
 const ACCENT = "#fcba17";
+
 const toTitle = (s = "") =>
   s
     .replace(/[-_]/g, " ")
     .replace(/\s+/g, " ")
     .trim()
     .replace(/\b\w/g, (m) => m.toUpperCase());
+
 const priceOf = (p) =>
   Number.isFinite(p?.specialPrice)
     ? Number(p.specialPrice)
     : Number(p?.mrp ?? 0);
+
 const fmtRs = (n) =>
   Number.isFinite(n) ? `Rs. ${n.toLocaleString("en-IN")}` : "";
+
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
+
 const arraysEqual = (a, b) =>
   a.length === b.length && a.every((x, i) => x === b[i]);
 
@@ -109,6 +114,36 @@ function normalizeQS(qs) {
   return toSortedQS(Object.fromEntries(new URLSearchParams(qs)));
 }
 
+/* stock helper: true if product has ANY stock on base or variants */
+function hasAnyStock(p) {
+  if (!p) return false;
+
+  const baseRaw =
+    p?.stock ??
+    p?.quantity ??
+    p?.qty ??
+    p?.inventory ??
+    p?.availableQty ??
+    null;
+  const baseStock = Number(baseRaw);
+  const baseHas = Number.isFinite(baseStock) && baseStock > 0;
+
+  const variants = Array.isArray(p?.variants) ? p.variants : [];
+  const variantHas = variants.some((v) => {
+    const vRaw =
+      v?.stock ??
+      v?.quantity ??
+      v?.qty ??
+      v?.inventory ??
+      v?.availableQty ??
+      null;
+    const vs = Number(vRaw);
+    return Number.isFinite(vs) && vs > 0;
+  });
+
+  return baseHas || variantHas;
+}
+
 /* ---------------- Filter Panel (desktop + drawer) ---------------- */
 function FilterPanel({
   minPrice,
@@ -126,7 +161,7 @@ function FilterPanel({
   selColor,
   setSelColor,
   chips,
-  onReset, // parent will also clear URL
+  onReset,
 }) {
   return (
     <>
@@ -336,16 +371,7 @@ function FilterPanel({
               variant="ghost"
               size="sm"
               className="mt-3"
-              onClick={() => {
-                // Reset UI immediately
-                setPriceRange([minPrice, maxPrice]);
-                setWarranty(0);
-                setInStockOnly(false);
-                setSelVariant([]);
-                setSelColor([]);
-                // Then parent clears URL
-                onReset();
-              }}
+              onClick={onReset}
             >
               <RotateCcw className="h-4 w-4 mr-2" /> Reset
             </Button>
@@ -362,12 +388,11 @@ export default function CategoryPageClient({ params }) {
   const router = useRouter();
   const pathname = usePathname();
   const search = useSearchParams();
-  const searchStr = search.toString(); // snapshot of URL qs
+  const searchStr = search.toString();
 
-  // Guards to prevent URL<->UI ping-pong
-  const lastWrittenQS = useRef(null); // last qs we wrote
-  const firstSyncDone = useRef(false); // ensures single URL->UI sync per URL change
-  const prevURLQS = useRef(searchStr); // detect real URL changes
+  const lastWrittenQS = useRef(null);
+  const firstSyncDone = useRef(false);
+  const prevURLQS = useRef(searchStr);
 
   /* header */
   const { categories } = useCategories();
@@ -428,9 +453,9 @@ export default function CategoryPageClient({ params }) {
 
   /* read params */
   const sp = useMemo(() => new URLSearchParams(searchStr), [searchStr]);
-  const qPrice = sp.get("price"); // a-b
-  const qWarranty = Number(sp.get("warranty")); // 6|12
-  const qStock = sp.get("stock"); // "in"
+  const qPrice = sp.get("price");
+  const qWarranty = Number(sp.get("warranty"));
+  const qStock = sp.get("stock");
   const qSort = sp.get("sort") || "relevance";
   const qVariant = (sp.get("variant") || "").split(",").filter(Boolean);
   const qColor = (sp.get("color") || "").split(",").filter(Boolean);
@@ -447,7 +472,6 @@ export default function CategoryPageClient({ params }) {
 
   /* URL helpers */
   const clearAll = () => {
-    // Also reset UI immediately (works for empty-state reset button)
     setPriceRange([minPrice, maxPrice]);
     setWarranty(0);
     setInStockOnly(false);
@@ -480,15 +504,14 @@ export default function CategoryPageClient({ params }) {
     }
   }, [searchStr]);
 
-  /* URL -> UI (once per URL change; skip if it's our own write) */
+  /* URL -> UI sync */
   useEffect(() => {
     if (!boundsReady) return;
 
     const curr = normalizeQS(searchStr);
-    if (curr === lastWrittenQS.current) return; // our own write
-    if (firstSyncDone.current) return; // already synced for this URL
+    if (curr === lastWrittenQS.current) return;
+    if (firstSyncDone.current) return;
 
-    // Parse desired UI from URL
     let nextPrice = [minPrice, maxPrice];
     if (qPrice?.includes("-")) {
       const [a, b] = qPrice.split("-").map(Number);
@@ -503,7 +526,6 @@ export default function CategoryPageClient({ params }) {
     const nextStock = qStock === "in";
     const nextSort = qSort || "relevance";
 
-    // Apply only if different (prevents pointless renders)
     setPriceRange((prev) =>
       prev[0] !== nextPrice[0] || prev[1] !== nextPrice[1] ? nextPrice : prev
     );
@@ -527,7 +549,7 @@ export default function CategoryPageClient({ params }) {
     maxPrice,
   ]);
 
-  /* UI -> URL (only if desired qs differs from current, and after first URL->UI sync) */
+  /* UI -> URL sync */
   const priceDebounced = useDebounced(priceRange, 220);
   useEffect(() => {
     if (!boundsReady) return;
@@ -646,17 +668,28 @@ export default function CategoryPageClient({ params }) {
 
   const isFilterActive = chips.length > 0;
 
-  /* filter + sort */
+  /* filter + sort (+ push OOS to bottom) */
   const items = useMemo(() => {
     let list = baseProducts.slice();
     const [low, high] = priceRange;
+
+    // price
     list = list.filter((p) => {
       const pr = priceOf(p);
       return Number.isFinite(pr) && pr >= low && pr <= high;
     });
-    if (warranty === 6 || warranty === 12)
+
+    // warranty
+    if (warranty === 6 || warranty === 12) {
       list = list.filter((p) => Number(p?.warrantyMonths) >= warranty);
-    if (inStockOnly) list = list.filter((p) => Number(p?.stock) > 0);
+    }
+
+    // in stock only (product OR any variant has stock)
+    if (inStockOnly) {
+      list = list.filter((p) => hasAnyStock(p));
+    }
+
+    // variant filter
     if (selVariant.length) {
       list = list.filter((p) => {
         const names = new Set(
@@ -667,6 +700,8 @@ export default function CategoryPageClient({ params }) {
         return selVariant.every((v) => names.has(v));
       });
     }
+
+    // color filter
     if (selColor.length) {
       list = list.filter((p) => {
         const colors = new Set(
@@ -677,6 +712,8 @@ export default function CategoryPageClient({ params }) {
         return selColor.every((c) => colors.has(c));
       });
     }
+
+    // sort (keep logic same, then we'll move OOS down)
     switch (sortKey) {
       case "price_asc":
         list.sort((a, b) => priceOf(a) - priceOf(b));
@@ -690,9 +727,18 @@ export default function CategoryPageClient({ params }) {
         );
         break;
       default:
-      // relevance (API order)
+      // relevance: API order
     }
-    return list;
+
+    // finally: in-stock first, out-of-stock at bottom (stable partition)
+    const inStock = [];
+    const outOfStock = [];
+    for (const p of list) {
+      if (hasAnyStock(p)) inStock.push(p);
+      else outOfStock.push(p);
+    }
+
+    return [...inStock, ...outOfStock];
   }, [
     baseProducts,
     priceRange,
@@ -720,7 +766,6 @@ export default function CategoryPageClient({ params }) {
     <main
       className="min-h-screen w-full"
       style={{
-        /* subtle #fcba17 gradient */
         background:
           "linear-gradient(140deg, rgba(252,186,23,0.018) 0%, rgba(252,186,23,0.012) 20%, transparent 60%)",
       }}
@@ -867,7 +912,7 @@ export default function CategoryPageClient({ params }) {
                     className="grid gap-6 grid-cols-2 lg:grid-cols-3"
                   >
                     {items.map((item) => (
-                      <ProductCard key={item._id} product={item} p={item} />
+                      <ProductCard key={item._id} product={item} />
                     ))}
                   </motion.div>
                 ) : (

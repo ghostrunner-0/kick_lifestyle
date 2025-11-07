@@ -29,10 +29,12 @@ const container = (delay = 0, stagger = 0.06) => ({
     },
   },
 });
+
 const child = {
   hidden: { opacity: 0, y: 12 },
   show: { opacity: 1, y: 0, transition: { duration: 0.45, ease: "easeOut" } },
 };
+
 const fade = (d = 0) => ({
   hidden: { opacity: 0, y: 10 },
   show: {
@@ -41,6 +43,7 @@ const fade = (d = 0) => ({
     transition: { duration: 0.45, ease: "easeOut", delay: d },
   },
 });
+
 const rise = (d = 0) => ({
   hidden: { opacity: 0, y: 22, scale: 0.985 },
   show: {
@@ -51,7 +54,6 @@ const rise = (d = 0) => ({
   },
 });
 
-/* extra page-wide motion */
 const sectionReveal = (d = 0) => ({
   hidden: { opacity: 0, y: 24, filter: "blur(4px)" },
   show: {
@@ -61,11 +63,13 @@ const sectionReveal = (d = 0) => ({
     transition: { delay: d, duration: 0.6, ease: [0.22, 0.9, 0.3, 1] },
   },
 });
+
 const floatY = {
   initial: { y: 0 },
   animate: { y: [0, -6, 0] },
   transition: { duration: 5, repeat: Infinity, ease: "easeInOut" },
 };
+
 const tiltHover = {
   whileHover: {
     y: -6,
@@ -76,7 +80,6 @@ const tiltHover = {
   whileTap: { scale: 0.98 },
 };
 
-/* marquee logo motion */
 const logoContainer = (delay = 0) => ({
   hidden: { opacity: 0 },
   show: {
@@ -84,6 +87,7 @@ const logoContainer = (delay = 0) => ({
     transition: { delay, staggerChildren: 0.06, when: "beforeChildren" },
   },
 });
+
 const logoItem = {
   hidden: { opacity: 0, y: 8, scale: 0.98 },
   show: {
@@ -94,7 +98,7 @@ const logoItem = {
   },
 };
 
-/* -------------------- Safe <img> with visible fallback -------------------- */
+/* -------------------- Safe Image -------------------- */
 function SafeImg({ src, alt, className }) {
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [src]);
@@ -126,7 +130,7 @@ function SafeImg({ src, alt, className }) {
   );
 }
 
-/* -------------------- Press logos (site-wide) -------------------- */
+/* -------------------- Press logos -------------------- */
 export const PRESS_LOGOS = [
   {
     src: "/art/kathmandu-post.jpeg",
@@ -190,7 +194,7 @@ export const PRESS_LOGOS = [
   },
 ];
 
-/* -------------------- Kumod-only mentions -------------------- */
+/* -------------------- About Kumod mentions -------------------- */
 export const ABOUT_KUMOD = [
   { src: "/art/techlekh.png", alt: "TechLekh", href: "#", tag: "Interview" },
   {
@@ -220,53 +224,71 @@ export const ABOUT_KUMOD = [
   },
 ];
 
-/* -------------------- Founder profile data -------------------- */
+/* -------------------- Founder -------------------- */
 const FOUNDER = {
   name: "Kumod Begwani",
   role: "Founder & CEO, Kick Lifestyle",
-  photo: "/art/kumod.jpeg", // update with your real path
+  photo: "/art/kumod.jpeg",
   bio: [
-    "Kumod Begwani is a Nepali entrepreneur building premium-yet-accessible tech for the local market. Under his leadership, Kick Lifestyle blends honest engineering with refined design, focusing on the details that shape daily use: real battery life, clear calls, and durable builds.",
-    "From launching category-leading earbuds and wearables to standing up reliable after-sales support, Kumod’s approach is straightforward: ship products that feel premium, perform consistently, and respect the customer’s time.",
-    "He’s equally hands-on in product, brand, and community—driving launches, supporting creators, and growing a service network that actually answers. Kick Lifestyle exists to prove that a homegrown Nepali brand can meet global standards while understanding local needs better than anyone else.",
+    "Kumod Begwani is a Nepali entrepreneur building premium-yet-accessible tech for the local market. Under his leadership, Kick proves a homegrown brand can deliver world-class audio and wearables without fake specs or inflated attitude.",
+    "From launching segment-first ANC earbuds and AMOLED watches to building a support ecosystem that actually responds, the vision is simple: engineer truthfully, price honestly, and obsess over user experience.",
+    "Kick Lifestyle exists to show that Nepali tech doesn’t need a foreign passport to feel global — it just needs people bold enough to build for real lives, real roads, and real hustle.",
   ],
 };
 
-/* -------------------- Milestones (with url) -------------------- */
+/* -------------------- Milestones with image slots -------------------- */
 const MILESTONES = [
   {
-    d: "Jul 2023",
-    t: "Kick Lifestyle launches",
-    b: "A Nepali brand with global ambition.",
-    url: "#",
-  },
-  {
-    d: "Late 2023",
-    t: "ANC for everyone",
-    b: "Active Noise Cancellation hits value tiers.",
+    d: "2023",
+    t: "First ANC earbuds in our segment",
+    b: "Kick brings Active Noise Cancellation to a price band where it simply didn’t exist before.",
+    img: "/milestones/2023-anc-earbuds.jpg",
+    imgAlt: "Kick ANC earbuds",
     url: "#",
   },
   {
     d: "Feb 2024",
-    t: "AMOLED smartwatches",
-    b: "Premium displays, honest prices.",
+    t: "Fastest-latency gaming earbuds",
+    b: "Low-latency tuning for clutch gamers — real response, not brochure numbers.",
+    img: "/milestones/2024-gaming-earbuds.jpg",
+    imgAlt: "Gaming-focused earbuds",
+    url: "#",
+  },
+  {
+    d: "Feb 2024",
+    t: "Nepal’s most affordable AMOLED smartwatch",
+    b: "Premium AMOLED displays without the premium attitude.",
+    img: "/milestones/2024-amoled-watch.jpg",
+    imgAlt: "Affordable AMOLED smartwatch",
     url: "#",
   },
   {
     d: "Jul 2024",
-    t: "Display-case earbuds",
-    b: "New interactions on the case.",
+    t: "First 40mm touch-display earbuds",
+    b: "A bold 40mm touch-display case — flex plus function in your pocket.",
+    img: "/milestones/2024-touch-display-case.jpg",
+    imgAlt: "40mm touch display earbuds case",
     url: "#",
   },
   {
-    d: "2025",
-    t: "Nationwide growth",
-    b: "More partners. Bigger community.",
+    d: "Nov 2024",
+    t: "Best earbuds under 3000",
+    b: "Community-loved and reviewer-backed as the go-to under 3000.",
+    img: "/milestones/2024-best-under-3000.jpg",
+    imgAlt: "Kick earbuds under 3000",
+    url: "#",
+  },
+  {
+    d: "Dec 2024",
+    t: "Audio tuned for gamers & hustlers",
+    b: "Sound profiles built for lobbies, edits, rides, and rooftop resets.",
+    img: "/milestones/2024-gamers-hustlers.jpg",
+    imgAlt: "Audio tuned for gamers and hustlers",
     url: "#",
   },
 ];
 
-/* -------------------- Milestones Carousel (FM spring + drag) -------------------- */
+/* -------------------- Milestones Carousel -------------------- */
 function MilestonesCarousel({ items }) {
   const prefersReduced = useReducedMotion();
 
@@ -283,7 +305,6 @@ function MilestonesCarousel({ items }) {
   const viewportRef = useRef(null);
   const [vw, setVw] = useState(0);
 
-  // measure viewport width & update perView on resize
   useEffect(() => {
     const onResize = () => {
       setPerView(getIPV());
@@ -295,11 +316,11 @@ function MilestonesCarousel({ items }) {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  // chunk into pages
   const pages = useMemo(() => {
     const out = [];
-    for (let i = 0; i < items.length; i += perView)
+    for (let i = 0; i < items.length; i += perView) {
       out.push(items.slice(i, i + perView));
+    }
     setPage((p) => Math.min(p, Math.max(0, out.length - 1)));
     return out;
   }, [items, perView]);
@@ -310,12 +331,10 @@ function MilestonesCarousel({ items }) {
   const prev = () => setPage((p) => clamp(p - 1));
   const goTo = (i) => setPage(clamp(i));
 
-  // animated x using motionValue
   const x = useMotionValue(0);
 
-  // animate to current page
   useEffect(() => {
-    const target = -page * vw;
+    const target = -page * vw || 0;
     const controls = animate(x, target, {
       type: "spring",
       stiffness: 260,
@@ -324,7 +343,6 @@ function MilestonesCarousel({ items }) {
     return controls.stop;
   }, [page, vw, x]);
 
-  // autoplay
   const [hover, setHover] = useState(false);
   useEffect(() => {
     if (prefersReduced || hover || pageCount <= 1) return;
@@ -335,21 +353,19 @@ function MilestonesCarousel({ items }) {
     return () => clearInterval(id);
   }, [prefersReduced, hover, pageCount]);
 
-  // drag end: decide snap
   const onDragEnd = (_, info) => {
-    const offset = info.offset.x; // negative when dragging left
+    const offset = info.offset.x;
     const velocity = info.velocity.x;
     const threshold = vw * 0.15;
     if (offset < -threshold || velocity < -400) next();
     else if (offset > threshold || velocity > 400) prev();
     else {
-      // snap back to current
-      const controls = animate(x, -page * vw, {
+      const controls = animate(x, -page * vw || 0, {
         type: "spring",
         stiffness: 260,
         damping: 28,
       });
-      controls.stop; // noop
+      controls.stop;
     }
   };
 
@@ -387,22 +403,23 @@ function MilestonesCarousel({ items }) {
         </div>
       </div>
 
-      {/* viewport */}
       <div
         ref={viewportRef}
         className="mt-5 overflow-hidden rounded-xl border bg-white"
       >
-        {/* track (each page width = viewport width) */}
         <motion.div
           className="flex touch-pan-y select-none"
           style={{ x }}
           drag="x"
-          dragConstraints={{ left: -((pageCount - 1) * vw), right: 0 }}
+          dragConstraints={{
+            left: -((pageCount - 1) * vw),
+            right: 0,
+          }}
           dragElastic={0.08}
           onDragEnd={onDragEnd}
           role="region"
           aria-roledescription="carousel"
-          aria-label="Product milestones"
+          aria-label="Kick milestones"
         >
           {pages.map((group, gi) => (
             <div
@@ -424,6 +441,7 @@ function MilestonesCarousel({ items }) {
                 {group.map((m, i) => {
                   const href = m.url || "#";
                   const isExternal = /^https?:\/\//i.test(href);
+
                   const CardInner = (
                     <motion.div
                       {...tiltHover}
@@ -437,15 +455,30 @@ function MilestonesCarousel({ items }) {
                           {m.d}
                         </div>
                         <h3 className="mt-1 text-lg font-semibold">{m.t}</h3>
-                        <div className="mt-3 h-32 rounded-md bg-neutral-100 grid place-items-center text-xs text-neutral-500">
-                          Add image / video
-                        </div>
+
+                        {m.img ? (
+                          <div className="mt-3 overflow-hidden rounded-md border bg-neutral-100">
+                            <Image
+                              src={m.img}
+                              alt={m.imgAlt || m.t}
+                              width={640}
+                              height={360}
+                              className="h-32 w-full object-cover"
+                            />
+                          </div>
+                        ) : (
+                          <div className="mt-3 h-32 rounded-md bg-neutral-50 grid place-items-center text-[10px] text-neutral-500">
+                            Milestone visual coming soon
+                          </div>
+                        )}
+
                         <p className="mt-3 text-sm/6 text-muted-foreground">
                           {m.b}
                         </p>
                       </div>
                     </motion.div>
                   );
+
                   return isExternal ? (
                     <a
                       key={`${gi}-${i}`}
@@ -468,7 +501,6 @@ function MilestonesCarousel({ items }) {
         </motion.div>
       </div>
 
-      {/* dots (per page) */}
       <div className="mt-4 flex items-center justify-center gap-2">
         {Array.from({ length: pageCount }).map((_, i) => (
           <button
@@ -489,20 +521,20 @@ function MilestonesCarousel({ items }) {
 export default function AboutClient() {
   const prefersReduced = useReducedMotion();
 
-  /* sticky-header offset for anchor scroll */
   const [headerOffset, setHeaderOffset] = useState(96);
   useEffect(() => {
     const measure = () => {
       const h =
         document.querySelector("header[data-site-header]") ||
         document.querySelector("header");
-      if (h)
+      if (h) {
         setHeaderOffset(
           Math.max(
             64,
             Math.min(160, Math.round(h.getBoundingClientRect().height))
           )
         );
+      }
     };
     measure();
     window.addEventListener("resize", measure);
@@ -531,7 +563,7 @@ export default function AboutClient() {
             viewport={{ once: true, amount: 0.6 }}
             className="relative overflow-hidden rounded-[28px] border bg-neutral-950 text-white px-6 py-12 sm:px-10 sm:py-16"
           >
-            {/* Background visuals */}
+            {/* Nepal glow backdrop */}
             <motion.div
               aria-hidden
               className="pointer-events-none absolute inset-0 z-0 grid place-items-center"
@@ -601,37 +633,37 @@ export default function AboutClient() {
               }}
             />
 
-            {/* content */}
+            {/* Content */}
             <motion.div
               variants={container(0, prefersReduced ? 0 : 0.05)}
               className="relative z-30 flex flex-col items-center text-center"
             >
               <motion.span
                 variants={child}
-                className="inline-flex items-center rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs"
+                className="inline-flex items-center rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[10px] uppercase tracking-wide"
               >
-                Proudly Nepali • Since 2023
+                Designed in Nepal • Powered by youth • #HearYourEra
               </motion.span>
 
               <motion.h1
                 variants={child}
                 className="mt-4 font-semibold tracking-tight leading-[1.05] text-[clamp(28px,6.2vw,56px)]"
               >
-                Premium tech.{" "}
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-white to-white/35">
-                  Built for Nepal.
-                </span>
+                We&apos;re Kick&nbsp;, &nbsp;Nepal&apos;s audio movement.
                 <br />
-                Tune Into Zen
+                <span className="text-[0.9em] font-medium ">
+                  Tune into Zen.
+                </span>
               </motion.h1>
 
               <motion.p
                 variants={child}
-                className="mt-4 max-w-[62ch] text-white/85 text-sm sm:text-base"
+                className="mt-4 max-w-[64ch] text-white/85 text-sm sm:text-base"
               >
-                Earbuds and wearables with flagship features — long battery
-                life, clear calls, rich sound — backed by friendly local
-                support.
+                Built for your era of hustle, rooftops, commutes, futsal nights
+                and quiet scrolls. No circus MRP, no spec fairy tales just gear
+                that sounds better, feels better, and survives Nepal&apos;s
+                dust, traffic &amp; chaos.
               </motion.p>
 
               <motion.div
@@ -639,24 +671,24 @@ export default function AboutClient() {
                 className="mt-7 flex flex-wrap items-center justify-center gap-2"
               >
                 <Link
-                  href="/shop"
+                  href="/"
                   className="rounded-md px-4 py-2 text-sm font-medium text-black"
                   style={{ background: ACCENT }}
                 >
-                  Shop now
+                  Explore products
                 </Link>
                 <Link
-                  href="/contact"
+                  href="#why-kick"
                   className="rounded-md border border-white/20 px-4 py-2 text-sm"
                 >
-                  Talk to us
+                  Why Kick?
                 </Link>
               </motion.div>
             </motion.div>
           </motion.div>
         </section>
 
-        {/* ===== FACTS ===== */}
+        {/* ===== QUICK FACTS ===== */}
         <section
           className="mx-auto w-full max-w-[1100px]"
           aria-label="Key facts"
@@ -670,9 +702,9 @@ export default function AboutClient() {
           >
             {[
               { k: "Founded", v: "2023" },
-              { k: "Focus", v: "Smart Wearables" },
-              { k: "HQ", v: "Kathmandu" },
-              { k: "Warranty", v: "Hassle-free" },
+              { k: "Built For", v: "Nepal’s daily grind" },
+              { k: "Category", v: "Audio & Wearables" },
+              { k: "Community", v: "100,000+ listeners" },
             ].map((s) => (
               <motion.div
                 key={s.k}
@@ -687,7 +719,7 @@ export default function AboutClient() {
           </motion.div>
         </section>
 
-        {/* ===== AS SEEN IN (robust) ===== */}
+        {/* ===== AS SEEN IN ===== */}
         <motion.section
           variants={fade(0.05)}
           initial="hidden"
@@ -699,11 +731,8 @@ export default function AboutClient() {
           <div className="text-xs uppercase tracking-wide text-muted-foreground px-1">
             As seen in
           </div>
-
           <div className="mt-3 relative">
-            {/* optional shimmer like About Kumod */}
             <div className="shine" aria-hidden />
-
             <div className="marquee">
               <div className="marquee__track">
                 {[...PRESS_LOGOS, ...PRESS_LOGOS].map((logo, i) => (
@@ -716,7 +745,6 @@ export default function AboutClient() {
                     className="logo-item"
                     title={logo.alt}
                   >
-                    {/* your SafeImg is fine; keep its fallback */}
                     <SafeImg
                       src={logo.src}
                       alt={logo.alt}
@@ -729,31 +757,78 @@ export default function AboutClient() {
           </div>
         </motion.section>
 
-        {/* ===== PILLARS ===== */}
+        {/* ===== ABOUT / WHY KICK ===== */}
         <motion.section
+          id="why-kick"
           variants={sectionReveal(0.08)}
           initial="hidden"
           whileInView="show"
           viewport={{ once: true, amount: 0.35 }}
-          className="mx-auto w-full max-w-[1200px] grid grid-cols-1 md:grid-cols-3 gap-4"
+          className="mx-auto w-full max-w-[1200px] grid grid-cols-1 lg:grid-cols-12 gap-6 items-start"
         >
-          <GlassCard
-            icon={<Mic2 className="h-5 w-5" />}
-            title="Clear calls"
-            desc="ANC + tuned mics for street-smart clarity."
-          />
-          <GlassCard
-            icon={<Battery className="h-5 w-5" />}
-            title="Real battery"
-            desc="Optimized power, honest endurance."
-          />
-          <GlassCard
-            icon={<Waves className="h-5 w-5" />}
-            title="Rich sound"
-            desc="Balanced tuning for music, movies & games."
-          />
+          <div className="lg:col-span-7 space-y-3">
+            <h2 className="text-xl sm:text-2xl font-semibold">About Kick</h2>
+            <p className="text-sm/6 text-muted-foreground">
+              We’re Kick designed in Nepal, powered by youth, tuned for the era
+              you’re living in right now. Not a “budget tech brand.” Not a
+              “cheap alternative.” A Nepali audio movement proving you don’t
+              need an imported label to get imported-level sound.
+            </p>
+            <p className="text-sm/6 text-muted-foreground">
+              We don’t chase hype. We build gear that sounds better, feels
+              better, and lasts longer without price-pain and spec fairy tales.
+              Your music. Your grind. Your commute. Your rooftop peace. If sound
+              shapes your day, Kick amplifies it.
+            </p>
+
+            <h3 className="mt-5 text-sm font-semibold uppercase tracking-wide text-neutral-700">
+              Why Kick
+            </h3>
+            <ul className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+              <li className="rounded-xl border bg-white p-3">
+                • Premium tech without premium attitude.
+              </li>
+              <li className="rounded-xl border bg-white p-3">
+                • Real battery, real ANC, real mic clarity.
+              </li>
+              <li className="rounded-xl border bg-white p-3">
+                • Honest pricing — no circus MRP.
+              </li>
+              <li className="rounded-xl border bg-white p-3">
+                • Gear that lives in Nepal’s dust, traffic & chaos.
+              </li>
+            </ul>
+
+            <p className="mt-3 text-sm/6 text-muted-foreground">
+              Every product goes through one filter:
+              <br />
+              <span className="font-medium">
+                Does it sound good? Does it feel good? Does it earn trust?
+              </span>{" "}
+              If not, we don’t ship. Simple.
+            </p>
+          </div>
+
+          <div className="lg:col-span-5 grid gap-3">
+            <GlassCard
+              icon={<Waves className="h-5 w-5" />}
+              title="Tune Into Zen"
+              desc="Zen isn’t silence it’s clarity. Earbuds and watches tuned for deep focus, immersive sound, and calm inside chaos."
+            />
+            <GlassCard
+              icon={<Mic2 className="h-5 w-5" />}
+              title="For every mode"
+              desc="Study mode, gym mode, futsal mode, introvert-at-a-party mode Kick fits your sound rituals."
+            />
+            <GlassCard
+              icon={<Battery className="h-5 w-5" />}
+              title="Proudly Nepali. Ridiculously ambitious."
+              desc="We’re from here building confidence, credibility, and a category that doesn’t need a foreign passport."
+            />
+          </div>
         </motion.section>
 
+        {/* ===== DESIGN & DURABILITY ===== */}
         <motion.section
           variants={sectionReveal(0.1)}
           initial="hidden"
@@ -762,7 +837,6 @@ export default function AboutClient() {
           className="mx-auto w-full max-w-[1200px] rounded-[22px] border overflow-hidden"
         >
           <div className="grid grid-cols-1 lg:grid-cols-12">
-            {/* === LEFT TEXT CONTENT === */}
             <motion.div
               variants={fade(0.02)}
               initial="hidden"
@@ -774,21 +848,22 @@ export default function AboutClient() {
                 Design that serves life
               </h2>
               <p className="mt-2 text-sm/6 text-muted-foreground">
-                Lightweight fits, pocketable cases, and displays you can read in
-                sunlight — built for real days, not just spec sheets.
+                Lightweight fits, pocketable cases, bright displays and IP
+                ratings made for buses, alleys, co-working spaces, hostels,
+                futsal turfs and late-night rooftops across Nepal.
               </p>
               <ul className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                 <li className="rounded-lg border p-3">
-                  • Snappy pairing & stable connection
+                  • Snappy pairing & stable connection.
                 </li>
                 <li className="rounded-lg border p-3">
-                  • Tap controls that actually feel good
+                  • Controls that feel natural, not gimmicky.
                 </li>
                 <li className="rounded-lg border p-3">
-                  • IP ratings for everyday durability
+                  • Built to handle dust, sweat & backpacks.
                 </li>
                 <li className="rounded-lg border p-3">
-                  • Friendly local support
+                  • Local support that actually replies.
                 </li>
               </ul>
               <div className="mt-6">
@@ -796,13 +871,12 @@ export default function AboutClient() {
                   href="/support"
                   className="inline-flex items-center gap-2 underline underline-offset-4"
                 >
-                  Read our support articles
+                  Read our support promise
                   <ChevronRight className="h-4 w-4" />
                 </Link>
               </div>
             </motion.div>
 
-            {/* === RIGHT IMAGE === */}
             <motion.div
               variants={fade(0.12)}
               initial="hidden"
@@ -812,7 +886,7 @@ export default function AboutClient() {
             >
               <Image
                 src="/assets/images/kickmontage.png"
-                alt="Design montage"
+                alt="Kick products and community"
                 width={500}
                 height={500}
                 className="w-full h-auto object-cover"
@@ -831,7 +905,6 @@ export default function AboutClient() {
           className="mx-auto w-full max-w-[1200px] rounded-[22px] border p-6 sm:p-8"
         >
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
-            {/* Left: Long text */}
             <div className="lg:col-span-7">
               <h2 className="text-xl sm:text-2xl font-semibold">Founder</h2>
               <div className="mt-2 text-sm text-muted-foreground">
@@ -847,7 +920,6 @@ export default function AboutClient() {
                 ))}
               </div>
 
-              {/* About Kumod Begwani marquee */}
               <div className="mt-6 rounded-xl border p-3 overflow-hidden relative">
                 <motion.div
                   aria-hidden
@@ -903,7 +975,6 @@ export default function AboutClient() {
               </div>
             </div>
 
-            {/* Right: Image */}
             <motion.div className="lg:col-span-5" {...tiltHover}>
               <SafeImg
                 src={FOUNDER.photo}
@@ -914,7 +985,7 @@ export default function AboutClient() {
           </div>
         </motion.section>
 
-        {/* ===== MILESTONES (FM spring + drag + urls) ===== */}
+        {/* ===== MILESTONES ===== */}
         <section className="mx-auto w-full max-w-[1200px] rounded-[22px] border p-6 sm:p-8">
           <MilestonesCarousel items={MILESTONES} />
         </section>
@@ -928,10 +999,10 @@ export default function AboutClient() {
           className="mx-auto w-full max-w-[1200px] rounded-[22px] border bg-neutral-50 p-6 sm:p-8"
         >
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
-            <Metric k="Orders Served" v="500k+" />
-            <Metric k="Avg. Rating" v="4.7★" />
-            <Metric k="Service TAT" v="<48h" />
-            <Metric k="Retail Partners" v="50+" />
+            <Metric k="Kick Community" v="100,000+ users" />
+            <Metric k="Avg. Experience" v="4.7★" />
+            <Metric k="Support TAT" v="Under 48 hours" />
+            <Metric k="Retail & Online Touchpoints" v="50+ & growing" />
           </div>
         </motion.section>
 
@@ -947,28 +1018,39 @@ export default function AboutClient() {
           <div className="mt-4 space-y-4">
             <details className="rounded-lg border p-4">
               <summary className="cursor-pointer font-medium">
-                Where is Kick Lifestyle based?
+                Is Kick just another budget brand?
               </summary>
               <p className="mt-2 text-sm text-muted-foreground">
-                Kathmandu, Nepal. We serve customers nationwide via our online
-                store and partners.
+                No. Kick is a premium-feel, honest-pricing brand. We don’t play
+                the “cheap alternative” role; we build products that can stand
+                on their own.
               </p>
             </details>
             <details className="rounded-lg border p-4">
               <summary className="cursor-pointer font-medium">
-                What products do you build?
+                Where are you based?
               </summary>
               <p className="mt-2 text-sm text-muted-foreground">
-                True wireless earbuds, smartwatches, and accessories —
-                feature-packed at honest prices.
+                We&apos;re proudly based in Nepal, with operations, creators,
+                and users across the country.
               </p>
             </details>
             <details className="rounded-lg border p-4">
               <summary className="cursor-pointer font-medium">
-                How do I contact support?
+                What do you build?
               </summary>
               <p className="mt-2 text-sm text-muted-foreground">
-                Email support or call during business hours (Sun–Fri, 10am–6pm).
+                True wireless earbuds, smartwatches, and lifestyle tech tuned
+                for work, play, gaming, and everything in between.
+              </p>
+            </details>
+            <details className="rounded-lg border p-4">
+              <summary className="cursor-pointer font-medium">
+                How do I reach support?
+              </summary>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Contact us via our support page or social channels. We track
+                SLAs and keep responses human, not scripted.
               </p>
             </details>
           </div>
@@ -983,15 +1065,15 @@ export default function AboutClient() {
           className="mx-auto w-full max-w-[1200px] rounded-[28px] border bg-neutral-950 text-white p-8 sm:p-12 text-center"
         >
           <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight">
-            Ready to tune into Zen?
+            Ready to #HearYourEra?
           </h2>
           <p className="mt-2 text-white/80">
-            Explore earbuds and wearables built for Nepal — premium feel, honest
-            pricing.
+            Tune into earbuds and wearables that match your hustle, your chaos,
+            your calm — proudly Nepali, ridiculously ambitious.
           </p>
           <div className="mt-6 flex items-center justify-center gap-3">
             <Link
-              href="/shop"
+              href="/"
               className="rounded-md px-4 py-2 text-sm font-medium text-black"
               style={{ background: ACCENT }}
             >
@@ -1007,7 +1089,7 @@ export default function AboutClient() {
         </motion.section>
       </motion.main>
 
-      {/* global styles (marquee + radar + no-scrollbar) */}
+      {/* ===== Global styles ===== */}
       <style jsx global>{`
         .no-scrollbar::-webkit-scrollbar {
           display: none;
@@ -1047,12 +1129,12 @@ export default function AboutClient() {
             animation: none;
           }
         }
-        /* ======== Marquee (shared with About Kumod) ======== */
+
         .marquee {
           position: relative;
           overflow: hidden;
-          --gap: 2.5rem; /* space between logos */
-          --duration: 26s; /* speed, tweak as needed */
+          --gap: 2.5rem;
+          --duration: 26s;
           -webkit-mask-image: linear-gradient(
             to right,
             transparent 0,
@@ -1075,9 +1157,9 @@ export default function AboutClient() {
           white-space: nowrap;
           will-change: transform;
           animation: marqueeSlide var(--duration) linear infinite;
-          padding-inline: 0.25rem; /* slight breathing */
+          padding-inline: 0.25rem;
           align-items: center;
-          min-height: 3rem; /* keep row visible even if images fail */
+          min-height: 3rem;
         }
 
         @keyframes marqueeSlide {
@@ -1086,21 +1168,21 @@ export default function AboutClient() {
           }
           100% {
             transform: translateX(-50%);
-          } /* assumes content is duplicated */
+          }
         }
 
         .marquee .logo-item {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          min-width: 96px; /* 112 / 128 on larger screens via responsive utilities */
+          min-width: 96px;
           padding-inline: 0.5rem;
           transition: transform 0.2s ease, opacity 0.2s ease;
         }
 
         .marquee .logo-img {
           display: block;
-          height: 2rem; /* 8 (tailwind h-8) */
+          height: 2rem;
           width: auto;
           object-fit: contain;
           opacity: 0.9;
@@ -1112,7 +1194,7 @@ export default function AboutClient() {
           }
           .marquee .logo-img {
             height: 2.25rem;
-          } /* ~h-9 */
+          }
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -1121,8 +1203,7 @@ export default function AboutClient() {
           }
         }
 
-        /* Optional shimmering sweep like About Kumod */
-        .marquee .shine {
+        .shine {
           pointer-events: none;
           position: absolute;
           inset: 0 auto 0 0;
@@ -1171,6 +1252,7 @@ function GlassCard({ icon, title, desc }) {
     </motion.article>
   );
 }
+
 function Metric({ k, v }) {
   return (
     <motion.div

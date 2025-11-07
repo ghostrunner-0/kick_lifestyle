@@ -183,7 +183,7 @@ export default function HomeClient({ initialBanners = [] }) {
           </Suspense>
         </MotionSection>
 
-        {/* Big product grid only if meaningful count; slide in slightly from the right */}
+        {/* Big product grid only if meaningful count; slide in slightly from the right
         {uniqueCount >= 8 && (
           <MotionSection
             variant="slideLeft"
@@ -194,7 +194,7 @@ export default function HomeClient({ initialBanners = [] }) {
               <ProductGrid products={products} loading={prodLoading} />
             </Suspense>
           </MotionSection>
-        )}
+        )} */}
 
         {/* Light marquee – just a fadeIn to avoid motion fatigue */}
         <MotionSection

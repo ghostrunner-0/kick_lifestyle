@@ -69,7 +69,7 @@ const readStock = (obj) => {
   return Number.isFinite(n) ? n : null;
 };
 
-/* detect truncation (kept; useful if you add name tooltip later) */
+/* detect truncation */
 function useIsTruncated() {
   const ref = React.useRef(null);
   const [truncated, setTruncated] = React.useState(false);
@@ -91,7 +91,7 @@ function useIsTruncated() {
   return [ref, truncated, check];
 }
 
-/* ---- Minimal image dots under hero ---- */
+/* ---- Minimal dots under hero ---- */
 function EmblaDots({ api, slidesCount, selectedIndex }) {
   if (!api || slidesCount <= 1) return null;
   return (
@@ -159,7 +159,7 @@ export default function ProductCard({
     [selectedIdx, variants]
   );
 
-  // keep selection valid when product/variants change
+  // keep variant selection valid
   useEffect(() => {
     if (variants.length) {
       if (selectedIdx < 0 || selectedIdx >= variants.length) {
@@ -408,51 +408,49 @@ export default function ProductCard({
     <motion.div
       whileHover={{
         y: -3,
-        boxShadow: "0 16px 45px rgba(15,23,42,0.14)",
+        boxShadow: "0 18px 45px rgba(15,23,42,0.16)",
       }}
       transition={{ type: "spring", stiffness: 420, damping: 30 }}
       className={[
-        "group relative flex flex-col rounded-3xl bg-white",
-        "border border-slate-100 shadow-[0_10px_28px_rgba(15,23,42,0.06)]",
+        "group relative flex flex-col w-full",
+        "rounded-2xl sm:rounded-3xl bg-white",
+        "border border-slate-100 shadow-[0_10px_26px_rgba(15,23,42,0.06)]",
         "dark:bg-neutral-950 dark:border-neutral-800",
         "overflow-hidden transition-all duration-200",
         className,
       ].join(" ")}
     >
-      {/* ---------- MEDIA (shorter, grid-friendly) ---------- */}
+      {/* ---------- MEDIA ---------- */}
       <div
         className="relative w-full"
         style={{
           backgroundImage: `
-            radial-gradient(760px 420px at 50% -18%, rgba(252,186,23,0.22), rgba(252,186,23,0) 82%),
-            radial-gradient(520px 320px at -8% -10%, rgba(252,186,23,0.14), rgba(252,186,23,0) 72%),
-            radial-gradient(520px 320px at 108% -10%, rgba(252,186,23,0.14), rgba(252,186,23,0) 72%),
+            radial-gradient(720px 380px at 50% -18%, rgba(252,186,23,0.22), rgba(252,186,23,0) 82%),
+            radial-gradient(460px 280px at -8% -10%, rgba(252,186,23,0.14), rgba(252,186,23,0) 72%),
+            radial-gradient(460px 280px at 108% -10%, rgba(252,186,23,0.14), rgba(252,186,23,0) 72%),
             linear-gradient(180deg, #ffffff 0%, #fff8e6 40%, #ffffff 100%)
           `,
         }}
       >
-        {/* NOTE:
-            - Mobile: closer to square for tight 2-col grid
-            - Larger screens: slightly taller but still compact
-        */}
-        <div className="relative w-full aspect-[4/3.9] sm:aspect-[4/4.3]">
+        {/* Slightly shorter to avoid super tall cards in 2-col mobile */}
+        <div className="relative w-full aspect-[4/4.6] sm:aspect-[4/3.4]">
           <div className="absolute inset-0">
             {/* badges */}
             <div className="absolute top-2 left-2 z-20 flex flex-wrap gap-1.5">
               {off !== null && (
-                <span className="inline-flex items-center rounded-full bg-black/92 px-2.5 py-0.5 text-[9px] font-semibold text-white">
+                <Badge className="px-2.5 py-0.5 text-[9px] font-semibold rounded-full bg-black text-white">
                   {off}% OFF
-                </span>
+                </Badge>
               )}
               {isNew && (
-                <span className="inline-flex items-center rounded-full bg-white/98 px-2 py-0.5 text-[8px] font-semibold text-black shadow-sm">
+                <Badge className="px-2 py-0.5 text-[8px] font-semibold rounded-full bg-white text-black shadow-sm">
                   NEW
-                </span>
+                </Badge>
               )}
               {isFeatured && (
-                <span className="inline-flex items-center rounded-full bg-black/85 px-2 py-0.5 text-[8px] font-medium text-white shadow-sm">
+                <Badge className="px-2 py-0.5 text-[8px] font-medium rounded-full bg-black/85 text-white shadow-sm">
                   Featured
-                </span>
+                </Badge>
               )}
             </div>
 
@@ -468,7 +466,7 @@ export default function ProductCard({
                     initial={{ opacity: 0.5, scale: 0.99 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.99 }}
-                    transition={{ duration: 0.22, ease: "easeOut" }}
+                    transition={{ duration: 0.2, ease: "easeOut" }}
                   >
                     <div className="embla__container h-full">
                       {gallery.map((src, idx) => (
@@ -495,7 +493,7 @@ export default function ProductCard({
                                 }
                                 fill
                                 sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                                className="object-contain p-3.5 sm:p-4 transition-transform duration-300 group-hover:scale-[1.04]"
+                                className="object-contain p-4 sm:p-5 transition-transform duration-300 group-hover:scale-[1.04]"
                                 priority={idx === 0}
                                 draggable={false}
                               />
@@ -510,7 +508,7 @@ export default function ProductCard({
                               }
                               fill
                               sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                              className="object-contain p-3.5 sm:p-4"
+                              className="object-contain p-4 sm:p-5"
                               priority={idx === 0}
                               draggable={false}
                             />
@@ -533,7 +531,7 @@ export default function ProductCard({
       </div>
 
       {/* ---------- CONTENT ---------- */}
-      <div className="flex flex-col flex-1 px-3 py-3 sm:px-3.5 sm:py-3.5 gap-1.75">
+      <div className="flex flex-col flex-1 px-3.5 py-3 gap-2">
         {/* Title + swatches */}
         <div className="flex items-start gap-2">
           <div className="flex-1 min-w-0">
@@ -545,7 +543,7 @@ export default function ProductCard({
               >
                 <span
                   ref={nameRef2}
-                  className="block text-[12px] sm:text-[13px] font-semibold text-slate-900 dark:text-slate-50 leading-snug line-clamp-2 group-hover:text-slate-950"
+                  className="block font-semibold text-[14px] sm:text-[16px] text-slate-900 dark:text-slate-50 leading-snug truncate group-hover:text-slate-950"
                 >
                   {name}
                 </span>
@@ -553,7 +551,7 @@ export default function ProductCard({
             ) : (
               <span
                 ref={nameRef2}
-                className="block text-[12px] sm:text-[13px] font-semibold text-slate-900 dark:text-slate-50 leading-snug line-clamp-2"
+                className="block font-semibold text-[14px] sm:text-[16px] text-slate-900 dark:text-slate-50 leading-snug truncate"
               >
                 {name}
               </span>
@@ -562,7 +560,7 @@ export default function ProductCard({
 
           {variants.length > 0 && (
             <ScrollArea
-              className="shrink-0 max-w-[46%] overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none]"
+              className="shrink-0 max-w-[42%] overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none]"
               aria-label="Choose variant"
               style={{ WebkitOverflowScrolling: "touch" }}
             >
@@ -573,7 +571,7 @@ export default function ProductCard({
                 aria-activedescendant={
                   selectedIdx >= 0 ? `${groupId}-opt-${selectedIdx}` : undefined
                 }
-                className="flex items-center gap-1 py-0.5"
+                className="flex items-center gap-1.5 py-0.5"
                 onKeyDown={onVariantKeyDown}
                 ref={swatchGroupRef}
                 tabIndex={-1}
@@ -601,11 +599,11 @@ export default function ProductCard({
                             }
                             onClick={() => selectVariant(i)}
                             className={[
-                              "relative h-5 w-5 shrink-0 rounded-full overflow-hidden border bg-white",
+                              "relative h-6 w-6 shrink-0 rounded-full overflow-hidden border bg-white",
                               "dark:bg-neutral-900 dark:border-neutral-700",
                               "transition-all duration-150",
                               selected
-                                ? "border-[2px] border-[#fcba17] shadow-[0_0_0_1.5px_rgba(252,186,23,0.22)]"
+                                ? "border-[2px] border-[#fcba17] shadow-[0_0_0_2px_rgba(252,186,23,0.18)]"
                                 : "border-slate-300 hover:border-slate-400",
                             ].join(" ")}
                           >
@@ -614,7 +612,7 @@ export default function ProductCard({
                                 src={s.img}
                                 alt={title}
                                 fill
-                                sizes="20px"
+                                sizes="24px"
                                 className="object-cover"
                                 draggable={false}
                               />
@@ -623,7 +621,7 @@ export default function ProductCard({
                             )}
                           </button>
                         </TooltipTrigger>
-                        <TooltipContent className="px-2 py-1 text-[9px] leading-tight">
+                        <TooltipContent className="px-2 py-1 text-[10px] leading-tight">
                           {title}
                         </TooltipContent>
                       </Tooltip>
@@ -635,20 +633,31 @@ export default function ProductCard({
           )}
         </div>
 
-        {/* Price */}
+        {/* Price row */}
         <div className="mt-0.5 flex items-baseline justify-between gap-2">
-          <div className="flex items-baseline gap-1.25">
-            <span className="text-[15px] sm:text-[16px] font-semibold text-slate-900 dark:text-slate-50">
-              {formatPrice(priceNow)}
-            </span>
-            <span className="text-[9px] text-slate-500 line-through">
+          <div className="flex flex-col">
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-[17px] sm:text-[19px] font-semibold text-slate-900 dark:text-slate-50">
+                {formatPrice(priceNow)}
+              </span>
+              {/* Desktop: inline MRP */}
+              <span className="hidden sm:inline text-[11px] text-slate-500 line-through">
+                {priceWas
+                  ? `MRP ${formatPrice(priceWas)}`
+                  : `MRP ${formatPrice(effMrp)}`}
+              </span>
+            </div>
+            {/* Mobile: MRP on its own line */}
+            <span className="block sm:hidden text-[11px] text-slate-500 line-through mt-0.5">
               {priceWas
                 ? `MRP ${formatPrice(priceWas)}`
                 : `MRP ${formatPrice(effMrp)}`}
             </span>
           </div>
+
+          {/* Save % — desktop only */}
           {off && (
-            <span className="text-[9px] font-medium text-emerald-600 dark:text-emerald-400">
+            <span className="hidden sm:inline text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
               Save {off}%
             </span>
           )}
@@ -657,16 +666,16 @@ export default function ProductCard({
         {/* CTA / Quantity */}
         <div className="mt-1.5">
           {currentQty > 0 ? (
-            <div className="flex items-center justify-between gap-2.5">
+            <div className="flex items-center justify-between gap-3">
               {/* Stepper */}
-              <div className="inline-flex items-center gap-1.25">
+              <div className="inline-flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={handleDecrement}
                   disabled={currentQty <= 0}
                   aria-label="Decrease quantity"
                   className={[
-                    "h-7 w-7 flex items-center justify-center rounded-md border text-[14px]",
+                    "h-7 w-7 flex items-center justify-center rounded-md border text-[16px]",
                     "border-slate-200 bg-white text-slate-800",
                     "hover:bg-slate-50 active:scale-[0.97]",
                     "disabled:opacity-40 disabled:cursor-not-allowed",
@@ -678,7 +687,7 @@ export default function ProductCard({
                 </button>
                 <div
                   aria-live="polite"
-                  className="min-w-[1.5ch] text-center text-[13px] font-semibold text-slate-900 dark:text-slate-50"
+                  className="min-w-[1.5ch] text-center text-[14px] font-semibold text-slate-900 dark:text-slate-50"
                 >
                   {currentQty}
                 </div>
@@ -688,7 +697,7 @@ export default function ProductCard({
                   disabled={!canAdd || reachedLimit}
                   aria-label="Increase quantity"
                   className={[
-                    "h-7 w-7 flex items-center justify-center rounded-md border text-[14px]",
+                    "h-7 w-7 flex items-center justify-center rounded-md border text-[16px]",
                     "border-slate-200 bg-white text-slate-800",
                     "hover:bg-slate-50 active:scale-[0.97]",
                     "disabled:opacity-40 disabled:cursor-not-allowed",
@@ -707,10 +716,10 @@ export default function ProductCard({
                 </button>
               </div>
 
-              {/* Subtotal */}
-              <div className="inline-flex flex-col items-end leading-tight">
-                <span className="text-[8px] text-slate-500">Subtotal</span>
-                <span className="text-[13px] font-semibold text-slate-900 dark:text-slate-50">
+              {/* Subtotal on md+ */}
+              <div className="hidden sm:inline-flex flex-col items-end leading-tight">
+                <span className="text-[9px] text-slate-500">Subtotal</span>
+                <span className="text-[14px] font-semibold text-slate-900 dark:text-slate-50">
                   {formatPrice(subtotal)}
                 </span>
               </div>
@@ -722,7 +731,7 @@ export default function ProductCard({
               onClick={handleAddToCart}
               className={[
                 "w-full inline-flex items-center justify-center gap-1.5",
-                "rounded-full px-3 py-1.75 text-[10px] font-semibold tracking-wide",
+                "rounded-full px-3 py-2 text-[12px] sm:text-[13px] font-semibold tracking-wide",
                 "text-slate-950 shadow-sm hover:shadow-md",
                 "transition-all duration-180",
                 "focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#fcba17]",
@@ -739,7 +748,7 @@ export default function ProductCard({
               aria-label={`Add ${name || "product"} to cart`}
               title={canAdd ? "Add to cart" : "Out of stock"}
             >
-              <ShoppingCart className="h-3.5 w-3.5" />
+              <ShoppingCart className="h-4 w-4" />
               {buttonLabel}
             </Button>
           )}
