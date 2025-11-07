@@ -9,33 +9,47 @@ export async function PUT(req) {
 
     const payload = await req.json();
 
-    // Validate payload with Zod schema
+    // Validate input
     const validationSchema = zSchema.pick({
       email: true,
       password: true,
     });
 
-    const parsedData = validationSchema.safeParse(payload);
-
-    if (!parsedData.success) {
-      return response(false, 400, parsedData.error.flatten());
+    const parsed = validationSchema.safeParse(payload);
+    if (!parsed.success) {
+      return response(false, 400, parsed.error.flatten());
     }
 
-    const { email, password } = parsedData.data;
+    const { email, password } = parsed.data;
 
-    // Find the user
-    const user = await UserModel.findOne({ email }).select("+password");
+    // Find the user (include password + provider for transformation)
+    const user = await UserModel.findOne({ email }).select(
+      "+password +provider +legacy"
+    );
 
     if (!user) {
       return response(false, 404, "User not found");
     }
 
-    // Update password (make sure your schema hashes this on save)
-    user.password = password;
+    // --- Convert user from WordPress -> Credentials ---
+    user.provider = "credentials";
+    user.password = password; // pre('save') hook will hash it
+    user.legacy = undefined; // remove entire legacy object
+    user.markModified("legacy"); // mark as modified for Mongoose cleanup
+
     await user.save();
 
-    return response(true, 200, "Password updated successfully");
+    // hide sensitive fields in response
+    const safeUser = user.toObject();
+    delete safeUser.password;
+
+    return response(
+      true,
+      200,
+      "Password updated, provider set to credentials, and legacy removed",
+      safeUser
+    );
   } catch (error) {
-    return catchError(error, "Failed to update password");
+    return catchError(error, "Failed to update password and provider");
   }
 }

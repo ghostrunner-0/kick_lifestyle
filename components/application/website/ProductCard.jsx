@@ -31,7 +31,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 /* Brand + helpers */
 const BRAND = "#fcba17";
-const BRAND_HOVER = "#e9ae12";
+const BRAND_HOVER = "#e0a616";
 const PLACEHOLDER_SRC = "/placeholder.png";
 
 const toNum = (v) => (typeof v === "string" ? Number(v) : v);
@@ -56,7 +56,6 @@ const percentOff = (mrp, sp) => {
     : null;
 };
 
-// Normalize stock
 const readStock = (obj) => {
   if (!obj) return null;
   const raw =
@@ -70,7 +69,7 @@ const readStock = (obj) => {
   return Number.isFinite(n) ? n : null;
 };
 
-/* detect truncation */
+/* detect truncation (kept; useful if you add name tooltip later) */
 function useIsTruncated() {
   const ref = React.useRef(null);
   const [truncated, setTruncated] = React.useState(false);
@@ -92,71 +91,30 @@ function useIsTruncated() {
   return [ref, truncated, check];
 }
 
-/* ---- Trackless Embla Scrollbar (extra-thin thumb) ---- */
-function EmblaScrollbar({ api }) {
-  const trackRef = useRef(null);
-  const [progress, setProgress] = useState(0); // 0..1
-  const [count, setCount] = useState(1);
-
-  const update = useCallback(() => {
-    if (!api) return;
-    const p = api.scrollProgress();
-    setProgress(Number.isFinite(p) ? Math.max(0, Math.min(1, p)) : 0);
-  }, [api]);
-
-  useEffect(() => {
-    if (!api) return;
-    setCount(api.scrollSnapList().length || 1);
-    update();
-    api.on("scroll", update);
-    api.on("reInit", () => {
-      setCount(api.scrollSnapList().length || 1);
-      update();
-    });
-    return () => {
-      api.off("scroll", update);
-    };
-  }, [api, update]);
-
-  const onTrackClick = (e) => {
-    if (!api || !trackRef.current) return;
-    const rect = trackRef.current.getBoundingClientRect();
-    const ratio = (e.clientX - rect.left) / rect.width;
-    const snaps = api.scrollSnapList();
-    const idx = Math.round(ratio * (snaps.length - 1));
-    api.scrollTo(Math.max(0, Math.min(snaps.length - 1, idx)));
-  };
-
-  const thumbPct = 100 / (count || 1);
-  const leftPct = Math.max(
-    0,
-    Math.min(100 - thumbPct, progress * (100 - thumbPct))
-  );
-
-  if ((count || 1) <= 1) return null;
-
+/* ---- Minimal image dots under hero ---- */
+function EmblaDots({ api, slidesCount, selectedIndex }) {
+  if (!api || slidesCount <= 1) return null;
   return (
-    <div className="absolute z-20 left-2 right-2 bottom-2 pointer-events-auto select-none">
-      <div
-        ref={trackRef}
-        onClick={onTrackClick}
-        className="relative h-[6px] rounded-full cursor-pointer"
-      >
-        <motion.div
-          className="absolute top-1/2 -translate-y-1/2 h-[2px] rounded-full bg-black/22 dark:bg-white/30 shadow-[0_0_0_0.5px_rgba(0,0,0,0.04)]"
-          style={{
-            width: `${thumbPct}%`,
-            left: `${leftPct}%`,
-            touchAction: "none",
-          }}
-          transition={{
-            type: "spring",
-            stiffness: 420,
-            damping: 30,
-            mass: 0.6,
-          }}
-        />
-      </div>
+    <div className="absolute bottom-2 inset-x-0 flex justify-center gap-1.5 z-20">
+      {Array.from({ length: slidesCount }).map((_, i) => {
+        const active = i === selectedIndex;
+        return (
+          <button
+            key={i}
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              api.scrollTo(i);
+            }}
+            className={[
+              "h-[4px] rounded-full transition-all",
+              active
+                ? "w-4 bg-slate-900/90"
+                : "w-2 bg-slate-900/25 hover:bg-slate-900/40",
+            ].join(" ")}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -182,7 +140,6 @@ export default function ProductCard({
     heroImage,
     productMedia,
     variants = [],
-    // flexible flags support
     isFeatured: _isFeatured,
     featured: _featured,
     isNew: _isNew,
@@ -191,13 +148,10 @@ export default function ProductCard({
 
   const isFeatured = Boolean(_isFeatured ?? _featured ?? false);
   const isNew = Boolean(_isNew ?? _newFlag ?? false);
-
   const productHref = PRODUCT_VIEW_ROUTE(slug);
   const cartLines = useSelector(selectItems);
 
-  const [selectedIdx, setSelectedIdx] = useState(() =>
-    variants.length ? 0 : -1
-  );
+  const [selectedIdx, setSelectedIdx] = useState(variants.length ? 0 : -1);
   const groupId = useId();
 
   const activeVariant = useMemo(
@@ -205,6 +159,7 @@ export default function ProductCard({
     [selectedIdx, variants]
   );
 
+  // keep selection valid when product/variants change
   useEffect(() => {
     if (variants.length) {
       if (selectedIdx < 0 || selectedIdx >= variants.length) {
@@ -218,7 +173,7 @@ export default function ProductCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug, variants]);
 
-  // --- Build gallery ---
+  /* ---------- Build gallery ---------- */
   const variantHeroPath =
     activeVariant?.productGallery?.[0]?.path ||
     activeVariant?.swatchImage?.path ||
@@ -246,14 +201,14 @@ export default function ProductCard({
   });
   const gallery = galleryPaths.length ? galleryPaths : [PLACEHOLDER_SRC];
 
-  // Pricing
+  /* ---------- Pricing ---------- */
   const effMrp = toNum(activeVariant?.mrp ?? mrp);
   const effSp = toNum(activeVariant?.specialPrice ?? specialPrice);
   const off = percentOff(effMrp, effSp);
   const priceNow = off ? effSp : effMrp;
   const priceWas = off ? effMrp : null;
 
-  // Stock guards
+  /* ---------- Stock ---------- */
   const hasVariants = variants.length > 0;
   const needsVariantSelection = hasVariants && !activeVariant;
   const productStock = readStock(product);
@@ -264,11 +219,11 @@ export default function ProductCard({
   const productOutOfStock =
     !hasVariants && productStock !== null && productStock <= 0;
 
-  const availableStock = hasVariants ? variantStock : productStock; // Number | null
+  const availableStock = hasVariants ? variantStock : productStock;
   const canAdd =
     !needsVariantSelection && !variantOutOfStock && !productOutOfStock;
 
-  // Swatches
+  /* ---------- Swatches ---------- */
   const swatches = variants.map((v, i) => ({
     key: v?._id || v?.sku || `${v?.variantName || "variant"}-${i}`,
     img: v?.swatchImage?.path || v?.productGallery?.[0]?.path || null,
@@ -288,12 +243,10 @@ export default function ProductCard({
     if (!swatches.length) return;
     if (e.key === "ArrowRight" || e.key === "ArrowDown") {
       e.preventDefault();
-      const next = (selectedIdx + 1) % swatches.length;
-      selectVariant(next);
+      selectVariant((selectedIdx + 1) % swatches.length);
     } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
       e.preventDefault();
-      const prev = (selectedIdx - 1 + swatches.length) % swatches.length;
-      selectVariant(prev);
+      selectVariant((selectedIdx - 1 + swatches.length) % swatches.length);
     } else if (e.key === "Home") {
       e.preventDefault();
       selectVariant(0);
@@ -303,7 +256,7 @@ export default function ProductCard({
     }
   };
 
-  // Cart helpers
+  /* ---------- Cart helpers ---------- */
   const buildCartPayload = (qtyDelta = 1) => ({
     productId: _id,
     slug,
@@ -344,7 +297,6 @@ export default function ProductCard({
     availableStock !== null && currentQty >= Number(availableStock);
   const nextWouldExceed =
     availableStock !== null && currentQty + 1 > Number(availableStock);
-
   const subtotal = Number(priceNow || 0) * currentQty;
 
   const handleAddToCart = () => {
@@ -360,26 +312,24 @@ export default function ProductCard({
       return;
     }
     if (variantOutOfStock) {
-      showToast("warning", "Selected color is out of stock.");
+      showToast("warning", "Selected variant is out of stock.");
       return;
     }
     if (productOutOfStock) {
       showToast("warning", "This product is out of stock.");
       return;
     }
-    // Respect stock also for the very first add or subsequent add via main CTA
     if (nextWouldExceed) {
       showToast(
         "warning",
-        `Only ${availableStock} in stock${
-          Number(availableStock) === 1 ? "" : "s"
-        }. You can’t add more.`
+        `Only ${availableStock} in stock. You can’t add more.`
       );
       return;
     }
 
-    dispatch(addItem(buildCartPayload(1)));
-    onAddToCart?.(buildCartPayload(1));
+    const payload = buildCartPayload(1);
+    dispatch(addItem(payload));
+    onAddToCart?.(payload);
     showToast(
       "success",
       `${name}${
@@ -390,17 +340,13 @@ export default function ProductCard({
 
   const handleIncrement = () => {
     if (!canAdd) return;
-
     if (nextWouldExceed) {
       showToast(
         "warning",
-        `Only ${availableStock} in stock${
-          Number(availableStock) === 1 ? "" : "s"
-        }. You can’t add more.`
+        `Only ${availableStock} in stock. You can’t add more.`
       );
       return;
     }
-
     dispatch(addItem(buildCartPayload(1)));
   };
 
@@ -424,17 +370,27 @@ export default function ProductCard({
     ? "Out of Stock"
     : "Add To Cart";
 
-  /* ==================== EMBLA ==================== */
+  /* ---------- Embla setup ---------- */
   const galleryKey = activeVariant?._id || slug || "base";
-  const [emblaRef, emblaApi] = useEmblaCarousel({
+  const [emblaViewportRef, emblaApi] = useEmblaCarousel({
     loop: false,
-    align: "start",
+    align: "center",
     containScroll: "trimSnaps",
     dragFree: false,
     slidesToScroll: 1,
   });
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
-  // Click guard for links inside embla
+  useEffect(() => {
+    if (!emblaApi) return;
+    const onSelect = () => setSelectedImageIndex(emblaApi.selectedScrollSnap());
+    emblaApi.on("select", onSelect);
+    onSelect();
+    return () => {
+      emblaApi.off("select", onSelect);
+    };
+  }, [emblaApi]);
+
   const onSlideLinkClick = useCallback(
     (e) => {
       if (emblaApi && !emblaApi.clickAllowed()) {
@@ -447,140 +403,149 @@ export default function ProductCard({
 
   const [nameRef2] = useIsTruncated();
 
+  /* ---------- Card UI ---------- */
   return (
     <motion.div
-      whileHover={{ y: -2, boxShadow: "0 8px 24px rgba(0,0,0,0.08)" }}
-      transition={{ type: "spring", stiffness: 400, damping: 30 }}
+      whileHover={{
+        y: -3,
+        boxShadow: "0 16px 45px rgba(15,23,42,0.14)",
+      }}
+      transition={{ type: "spring", stiffness: 420, damping: 30 }}
       className={[
-        "group relative overflow-hidden rounded-2xl bg-white",
-        "border border-slate-200/70 shadow-sm transition-all",
-        "dark:bg-neutral-900 dark:border-neutral-800",
-        "hover:shadow-md",
+        "group relative flex flex-col rounded-3xl bg-white",
+        "border border-slate-100 shadow-[0_10px_28px_rgba(15,23,42,0.06)]",
+        "dark:bg-neutral-950 dark:border-neutral-800",
+        "overflow-hidden transition-all duration-200",
         className,
       ].join(" ")}
     >
-      {/* ---------- Media (softened gradient background) ---------- */}
+      {/* ---------- MEDIA (shorter, grid-friendly) ---------- */}
       <div
-        className="relative aspect-square md:aspect-[4/5]"
+        className="relative w-full"
         style={{
           backgroundImage: `
-            radial-gradient(820px 520px at 50% -18%, rgba(252,186,23,0.22), rgba(252,186,23,0) 82%),
-            radial-gradient(680px 420px at -12% -14%, rgba(252,186,23,0.14), rgba(252,186,23,0) 76%),
-            radial-gradient(680px 420px at 112% -14%, rgba(252,186,23,0.14), rgba(252,186,23,0) 76%),
-            radial-gradient(640px 400px at 50% 110%, rgba(252,186,23,0.10), rgba(252,186,23,0) 78%),
-            radial-gradient(420px 260px at 6% 102%, rgba(252,186,23,0.08), rgba(252,186,23,0) 64%),
-            radial-gradient(420px 260px at 94% 102%, rgba(252,186,23,0.08), rgba(252,186,23,0) 64%),
-            linear-gradient(180deg, rgba(252,186,23,0.08) 0%, rgba(252,186,23,0.04) 40%, #ffffff 86%)
+            radial-gradient(760px 420px at 50% -18%, rgba(252,186,23,0.22), rgba(252,186,23,0) 82%),
+            radial-gradient(520px 320px at -8% -10%, rgba(252,186,23,0.14), rgba(252,186,23,0) 72%),
+            radial-gradient(520px 320px at 108% -10%, rgba(252,186,23,0.14), rgba(252,186,23,0) 72%),
+            linear-gradient(180deg, #ffffff 0%, #fff8e6 40%, #ffffff 100%)
           `,
-          backgroundColor: "rgba(252,186,23,0.02)",
         }}
       >
-        {/* Top-left info badges */}
-        <div className="absolute top-3 left-3 z-20 flex items-center gap-2">
-          {off !== null && (
-            <Badge
-              variant="outline"
-              className="rounded-full bg-white text-black border border-black/10 shadow-sm px-2.5 py-1 text-[11px] font-extrabold leading-none"
-              aria-label={`${off}% OFF`}
-            >
-              {off}% OFF
-            </Badge>
-          )}
-          {isNew && (
-            <Badge className="rounded-full bg-black text-white px-2.5 py-1 text-[10px] font-semibold tracking-wide">
-              NEW
-            </Badge>
-          )}
-          {isFeatured && (
-            <Badge className="rounded-full bg-black/80 text-white px-2.5 py-1 text-[10px] font-semibold tracking-wide">
-              Featured
-            </Badge>
-          )}
-        </div>
+        {/* NOTE:
+            - Mobile: closer to square for tight 2-col grid
+            - Larger screens: slightly taller but still compact
+        */}
+        <div className="relative w-full aspect-[4/3.9] sm:aspect-[4/4.3]">
+          <div className="absolute inset-0">
+            {/* badges */}
+            <div className="absolute top-2 left-2 z-20 flex flex-wrap gap-1.5">
+              {off !== null && (
+                <span className="inline-flex items-center rounded-full bg-black/92 px-2.5 py-0.5 text-[9px] font-semibold text-white">
+                  {off}% OFF
+                </span>
+              )}
+              {isNew && (
+                <span className="inline-flex items-center rounded-full bg-white/98 px-2 py-0.5 text-[8px] font-semibold text-black shadow-sm">
+                  NEW
+                </span>
+              )}
+              {isFeatured && (
+                <span className="inline-flex items-center rounded-full bg-black/85 px-2 py-0.5 text-[8px] font-medium text-white shadow-sm">
+                  Featured
+                </span>
+              )}
+            </div>
 
-        {/* Slider */}
-        <div className="absolute inset-0">
-          <div className="embla h-full" aria-label="Product images">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={galleryKey}
-                className="embla__viewport h-full"
-                ref={emblaRef}
-                style={{ touchAction: "pan-y" }}
-                initial={{ opacity: 0.2, scale: 0.995 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.995 }}
-                transition={{ type: "spring", duration: 0.35, bounce: 0.2 }}
-              >
-                <div className="embla__container flex h-full">
-                  {gallery.map((src, idx) => (
-                    <div
-                      key={`${src}-${idx}`}
-                      className="embla__slide relative h-full min-w-0 flex-[0_0_100%] select-none"
-                    >
-                      {productHref ? (
-                        <Link
-                          href={productHref}
-                          aria-label={name ? `View ${name}` : "View product"}
-                          className="absolute inset-0 block"
-                          onClick={onSlideLinkClick}
-                          draggable={false}
+            {/* gallery */}
+            <div className="absolute inset-0">
+              <div className="embla h-full" aria-label="Product images">
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={galleryKey}
+                    ref={emblaViewportRef}
+                    className="embla__viewport h-full"
+                    style={{ touchAction: "pan-y" }}
+                    initial={{ opacity: 0.5, scale: 0.99 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.99 }}
+                    transition={{ duration: 0.22, ease: "easeOut" }}
+                  >
+                    <div className="embla__container h-full">
+                      {gallery.map((src, idx) => (
+                        <div
+                          key={`${src}-${idx}`}
+                          className="embla__slide relative h-full"
                         >
-                          <Image
-                            src={src}
-                            alt={
-                              name
-                                ? `${name} — image ${idx + 1}`
-                                : `Product image ${idx + 1}`
-                            }
-                            fill
-                            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                            className="object-contain md:scale-[1.06]"
-                            priority={idx === 0}
-                            draggable={false}
-                          />
-                        </Link>
-                      ) : (
-                        <Image
-                          src={src}
-                          alt={
-                            name
-                              ? `${name} — image ${idx + 1}`
-                              : `Product image ${idx + 1}`
-                          }
-                          fill
-                          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                          className="object-contain"
-                          priority={idx === 0}
-                          draggable={false}
-                        />
-                      )}
+                          {productHref ? (
+                            <Link
+                              href={productHref}
+                              aria-label={
+                                name ? `View ${name}` : "View product"
+                              }
+                              className="absolute inset-0 block"
+                              onClick={onSlideLinkClick}
+                              draggable={false}
+                            >
+                              <Image
+                                src={src}
+                                alt={
+                                  name
+                                    ? `${name} — image ${idx + 1}`
+                                    : `Product image ${idx + 1}`
+                                }
+                                fill
+                                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                                className="object-contain p-3.5 sm:p-4 transition-transform duration-300 group-hover:scale-[1.04]"
+                                priority={idx === 0}
+                                draggable={false}
+                              />
+                            </Link>
+                          ) : (
+                            <Image
+                              src={src}
+                              alt={
+                                name
+                                  ? `${name} — image ${idx + 1}`
+                                  : `Product image ${idx + 1}`
+                              }
+                              fill
+                              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                              className="object-contain p-3.5 sm:p-4"
+                              priority={idx === 0}
+                              draggable={false}
+                            />
+                          )}
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </motion.div>
-            </AnimatePresence>
+                  </motion.div>
+                </AnimatePresence>
 
-            {/* Trackless, subtle scrollbar */}
-            {gallery.length > 1 && <EmblaScrollbar api={emblaApi} />}
+                <EmblaDots
+                  api={emblaApi}
+                  slidesCount={gallery.length}
+                  selectedIndex={selectedImageIndex}
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* ------------------------ INFO ------------------------ */}
-      <div className="p-2.5 sm:p-4">
-        {/* Title & Variants row */}
-        <div className="mb-1 flex items-center gap-2 min-h-[28px]">
+      {/* ---------- CONTENT ---------- */}
+      <div className="flex flex-col flex-1 px-3 py-3 sm:px-3.5 sm:py-3.5 gap-1.75">
+        {/* Title + swatches */}
+        <div className="flex items-start gap-2">
           <div className="flex-1 min-w-0">
             {productHref ? (
               <Link
                 href={productHref}
-                className="hover:underline underline-offset-2 block"
                 aria-label={name ? `View ${name}` : "View product"}
+                className="block"
               >
                 <span
                   ref={nameRef2}
-                  className="block truncate font-medium text-[13px] sm:text-base"
+                  className="block text-[12px] sm:text-[13px] font-semibold text-slate-900 dark:text-slate-50 leading-snug line-clamp-2 group-hover:text-slate-950"
                 >
                   {name}
                 </span>
@@ -588,7 +553,7 @@ export default function ProductCard({
             ) : (
               <span
                 ref={nameRef2}
-                className="block truncate font-medium text-[13px] sm:text-base"
+                className="block text-[12px] sm:text-[13px] font-semibold text-slate-900 dark:text-slate-50 leading-snug line-clamp-2"
               >
                 {name}
               </span>
@@ -597,34 +562,30 @@ export default function ProductCard({
 
           {variants.length > 0 && (
             <ScrollArea
-              className="shrink-0 max-w-[52%] sm:max-w-[55%] overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] me-0.5"
-              aria-label="Choose color"
+              className="shrink-0 max-w-[46%] overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none]"
+              aria-label="Choose variant"
               style={{ WebkitOverflowScrolling: "touch" }}
             >
               <div
                 id={groupId}
                 role="radiogroup"
-                aria-label="Choose a color"
+                aria-label="Choose variant"
                 aria-activedescendant={
                   selectedIdx >= 0 ? `${groupId}-opt-${selectedIdx}` : undefined
                 }
-                className="flex items-center gap-2 py-0.5 px-1"
+                className="flex items-center gap-1 py-0.5"
                 onKeyDown={onVariantKeyDown}
                 ref={swatchGroupRef}
                 tabIndex={-1}
               >
-                <TooltipProvider delayDuration={200}>
-                  {variants.map((v, i) => {
-                    const key =
-                      v?._id || v?.sku || `${v?.variantName || "variant"}-${i}`;
-                    const img =
-                      v?.swatchImage?.path || v?.productGallery?.[0]?.path;
+                <TooltipProvider delayDuration={120}>
+                  {swatches.map((s, i) => {
                     const selected = i === selectedIdx;
-                    const title = v?.variantName || "Variant";
+                    const title = s.name || "Variant";
                     return (
-                      <Tooltip key={key}>
+                      <Tooltip key={s.key}>
                         <TooltipTrigger asChild>
-                          <motion.button
+                          <button
                             id={`${groupId}-opt-${i}`}
                             type="button"
                             role="radio"
@@ -639,37 +600,30 @@ export default function ProductCard({
                                 : -1
                             }
                             onClick={() => selectVariant(i)}
-                            title={title}
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.97 }}
                             className={[
-                              "relative h-7 w-7 shrink-0 overflow-hidden rounded-full outline-none",
-                              "transition-all focus-visible:ring-1 focus-visible:ring-offset-1 focus-visible:ring-[#fcba17] focus-visible:ring-offset-white",
-                              "dark:focus-visible:ring-offset-neutral-900",
-                              "bg-white dark:bg-neutral-900",
+                              "relative h-5 w-5 shrink-0 rounded-full overflow-hidden border bg-white",
+                              "dark:bg-neutral-900 dark:border-neutral-700",
+                              "transition-all duration-150",
                               selected
-                                ? "border-2 border-[#fcba17] shadow-[0_0_0_3px_rgba(252,186,23,0.20)]"
-                                : "border border-black/10",
+                                ? "border-[2px] border-[#fcba17] shadow-[0_0_0_1.5px_rgba(252,186,23,0.22)]"
+                                : "border-slate-300 hover:border-slate-400",
                             ].join(" ")}
                           >
-                            {img ? (
+                            {s.img ? (
                               <Image
-                                src={img}
-                                alt={title || "variant"}
+                                src={s.img}
+                                alt={title}
                                 fill
-                                sizes="28px"
+                                sizes="20px"
                                 className="object-cover"
                                 draggable={false}
                               />
                             ) : (
-                              <div className="h-full w-full bg-slate-200 dark:bg-neutral-700" />
+                              <div className="h-full w-full bg-slate-200" />
                             )}
-                          </motion.button>
+                          </button>
                         </TooltipTrigger>
-                        <TooltipContent
-                          side="top"
-                          className="px-2 py-1 text-xs"
-                        >
+                        <TooltipContent className="px-2 py-1 text-[9px] leading-tight">
                           {title}
                         </TooltipContent>
                       </Tooltip>
@@ -682,157 +636,138 @@ export default function ProductCard({
         </div>
 
         {/* Price */}
-        <motion.div
-          key={`${priceNow}-${priceWas ?? "na"}`}
-          initial={{ opacity: 0, y: 4 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ type: "spring", stiffness: 400, damping: 30 }}
-          className="mt-2 flex flex-col sm:flex-row sm:items-center sm:justify-between"
-        >
-          <div className="flex flex-col sm:flex-row sm:items-baseline sm:gap-2">
-            <span className="text-[17px] sm:text-[18px] font-semibold tracking-tight text-slate-900 dark:text-white">
+        <div className="mt-0.5 flex items-baseline justify-between gap-2">
+          <div className="flex items-baseline gap-1.25">
+            <span className="text-[15px] sm:text-[16px] font-semibold text-slate-900 dark:text-slate-50">
               {formatPrice(priceNow)}
             </span>
-
-            {priceWas ? (
-              <>
-                {/* Mobile: below the price */}
-                <span className="block sm:hidden text-[12px] text-slate-500 line-through mt-0.5">
-                  MRP {formatPrice(priceWas)}
-                </span>
-
-                {/* Desktop: beside the price */}
-                <span className="hidden sm:inline text-[12px] text-slate-500 line-through">
-                  MRP {formatPrice(priceWas)}
-                </span>
-              </>
-            ) : (
-              <>
-                <span className="block sm:hidden text-[12px] text-slate-500 mt-0.5">
-                  MRP {formatPrice(effMrp)}
-                </span>
-                <span className="hidden sm:inline text-[12px] text-slate-500">
-                  MRP {formatPrice(effMrp)}
-                </span>
-              </>
-            )}
+            <span className="text-[9px] text-slate-500 line-through">
+              {priceWas
+                ? `MRP ${formatPrice(priceWas)}`
+                : `MRP ${formatPrice(effMrp)}`}
+            </span>
           </div>
-        </motion.div>
+          {off && (
+            <span className="text-[9px] font-medium text-emerald-600 dark:text-emerald-400">
+              Save {off}%
+            </span>
+          )}
+        </div>
 
-        {/* CTA — stepper / add */}
-        <div className="mt-2">
+        {/* CTA / Quantity */}
+        <div className="mt-1.5">
           {currentQty > 0 ? (
-            <motion.div
-              key="qty-ui"
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ type: "spring", stiffness: 420, damping: 28 }}
-              className="flex items-center justify-between gap-3"
-            >
-              <div className="inline-flex items-center gap-1.5">
-                <motion.button
+            <div className="flex items-center justify-between gap-2.5">
+              {/* Stepper */}
+              <div className="inline-flex items-center gap-1.25">
+                <button
                   type="button"
                   onClick={handleDecrement}
                   disabled={currentQty <= 0}
                   aria-label="Decrease quantity"
-                  whileTap={{ scale: 0.95 }}
                   className={[
-                    "h-7 w-7 rounded-md border text-[16px] leading-none",
-                    "border-slate-200 bg-white text-slate-700 shadow-sm",
-                    "hover:bg-slate-50 active:scale-[0.98]",
-                    "disabled:cursor-not-allowed disabled:opacity-50",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-0",
-                    "focus-visible:ring-[#fcba17] dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100",
+                    "h-7 w-7 flex items-center justify-center rounded-md border text-[14px]",
+                    "border-slate-200 bg-white text-slate-800",
+                    "hover:bg-slate-50 active:scale-[0.97]",
+                    "disabled:opacity-40 disabled:cursor-not-allowed",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fcba17]",
+                    "dark:bg-neutral-900 dark:border-neutral-700 dark:text-neutral-100",
                   ].join(" ")}
                 >
                   –
-                </motion.button>
-
+                </button>
                 <div
                   aria-live="polite"
-                  className="min-w-[1.5ch] text-center text-sm font-semibold text-slate-900 dark:text-white"
+                  className="min-w-[1.5ch] text-center text-[13px] font-semibold text-slate-900 dark:text-slate-50"
                 >
                   {currentQty}
                 </div>
-
-                <motion.button
+                <button
                   type="button"
                   onClick={handleIncrement}
                   disabled={!canAdd || reachedLimit}
                   aria-label="Increase quantity"
-                  whileTap={{ scale: 0.95 }}
                   className={[
-                    "h-7 w-7 rounded-md border text:[16px] leading-none",
-                    "border-slate-200 bg-white text-slate-700 shadow-sm",
-                    "hover:bg-slate-50 active:scale-[0.98]",
-                    "disabled:cursor-not-allowed disabled:opacity-50",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-0",
-                    "focus-visible:ring-[#fcba17] dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100",
+                    "h-7 w-7 flex items-center justify-center rounded-md border text-[14px]",
+                    "border-slate-200 bg-white text-slate-800",
+                    "hover:bg-slate-50 active:scale-[0.97]",
+                    "disabled:opacity-40 disabled:cursor-not-allowed",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fcba17]",
+                    "dark:bg-neutral-900 dark:border-neutral-700 dark:text-neutral-100",
                   ].join(" ")}
                   title={
                     !canAdd
                       ? "Out of stock"
                       : reachedLimit && availableStock !== null
-                      ? `Max ${availableStock} allowed (stock limit)`
+                      ? `Max ${availableStock} in stock`
                       : "Increase quantity"
                   }
                 >
                   +
-                </motion.button>
+                </button>
               </div>
 
-              <div className="inline-flex items-baseline gap-2 leading-tight">
-                <span className="text-[10px] font-medium text-slate-500 dark:text-neutral-400">
-                  Subtotal
-                </span>
-                <motion.span
-                  key={subtotal}
-                  initial={{ opacity: 0.6, y: 2 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                  className="text-[15px] font-semibold tracking-tight text-slate-900 dark:text-white"
-                  aria-live="polite"
-                >
+              {/* Subtotal */}
+              <div className="inline-flex flex-col items-end leading-tight">
+                <span className="text-[8px] text-slate-500">Subtotal</span>
+                <span className="text-[13px] font-semibold text-slate-900 dark:text-slate-50">
                   {formatPrice(subtotal)}
-                </motion.span>
+                </span>
               </div>
-            </motion.div>
+            </div>
           ) : (
-            <motion.div
-              key="add-btn"
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ type: "spring", stiffness: 420, damping: 28 }}
+            <Button
+              type="button"
+              disabled={!canAdd}
+              onClick={handleAddToCart}
+              className={[
+                "w-full inline-flex items-center justify-center gap-1.5",
+                "rounded-full px-3 py-1.75 text-[10px] font-semibold tracking-wide",
+                "text-slate-950 shadow-sm hover:shadow-md",
+                "transition-all duration-180",
+                "focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#fcba17]",
+                "disabled:opacity-55 disabled:cursor-not-allowed",
+              ].join(" ")}
+              style={{ backgroundColor: canAdd ? BRAND : "#e5e7eb" }}
+              onMouseEnter={(e) => {
+                if (canAdd) e.currentTarget.style.backgroundColor = BRAND_HOVER;
+              }}
+              onMouseLeave={(e) => {
+                if (canAdd) e.currentTarget.style.backgroundColor = BRAND;
+              }}
+              aria-disabled={!canAdd}
+              aria-label={`Add ${name || "product"} to cart`}
+              title={canAdd ? "Add to cart" : "Out of stock"}
             >
-              <Button
-                type="button"
-                disabled={!canAdd}
-                className={[
-                  "w-full rounded-full px-3 py-1.5 text-[11px] font-bold text-white transition-colors",
-                  "min-h[34px] min-h-[34px]",
-                  "focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#fcba17]",
-                  !canAdd ? "opacity-70 cursor-not-allowed" : "",
-                ].join(" ")}
-                style={{ backgroundColor: BRAND }}
-                onMouseEnter={(e) => {
-                  if (canAdd)
-                    e.currentTarget.style.backgroundColor = BRAND_HOVER;
-                }}
-                onMouseLeave={(e) => {
-                  if (canAdd) e.currentTarget.style.backgroundColor = BRAND;
-                }}
-                onClick={handleAddToCart}
-                aria-disabled={!canAdd}
-                aria-label={`Add ${name || "product"} to cart`}
-                title={canAdd ? "Add to cart" : "Out of stock"}
-              >
-                <ShoppingCart className="mr-2 h-3.5 w-3.5" />
-                {buttonLabel}
-              </Button>
-            </motion.div>
+              <ShoppingCart className="h-3.5 w-3.5" />
+              {buttonLabel}
+            </Button>
           )}
         </div>
       </div>
+
+      {/* Embla base styles */}
+      <style jsx global>{`
+        .embla {
+          position: relative;
+          overflow: hidden;
+          width: 100%;
+          height: 100%;
+        }
+        .embla__viewport {
+          width: 100%;
+          height: 100%;
+        }
+        .embla__container {
+          display: flex;
+          height: 100%;
+        }
+        .embla__slide {
+          flex: 0 0 100%;
+          min-width: 0;
+          height: 100%;
+        }
+      `}</style>
     </motion.div>
   );
 }

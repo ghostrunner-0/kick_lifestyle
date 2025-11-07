@@ -41,30 +41,33 @@ export default function Banner({
   autoplayMs = 4200,
 }) {
   const initialBg = banners?.[0]?.bgColor || "#ffffff";
+
   const [active, setActive] = useState(0);
   const [baseBg, setBaseBg] = useState(initialBg);
   const [overlayBg, setOverlayBg] = useState(initialBg);
   const [overlayVisible, setOverlayVisible] = useState(false);
 
-  // Embla + Fade
   const [emblaRef, emblaApi] = useEmblaCarousel(
-    { loop: true, containScroll: false, align: "center", duration: 25 },
+    {
+      loop: true,
+      containScroll: false,
+      align: "center",
+      duration: 25,
+    },
     [Fade()]
   );
 
-  // We also want a DOM ref to force the viewport height (kill first-render gap)
+  // We need direct access to the embla viewport DOM node to set its height
   const viewportRef = useRef(null);
   const setBothRefs = useCallback(
     (node) => {
-      // attach to Embla
       emblaRef(node);
-      // keep a handle for height control
       viewportRef.current = node;
     },
     [emblaRef]
   );
 
-  // Autoplay
+  // autoplay
   const timerRef = useRef(null);
   const isPausedRef = useRef(false);
 
@@ -77,30 +80,41 @@ export default function Banner({
     }, autoplayMs);
   }, [emblaApi, autoplayMs]);
 
-  const pause = useCallback(() => clearTimeout(timerRef.current), []);
-
-  // Viewport height sync
-  const syncViewportHeight = useCallback(() => {
-    try {
-      const root = viewportRef.current;
-      if (!root) return;
-      const activeCard = root.querySelector(
-        ".embla__slide[data-active='true'] .js-slide-card"
-      );
-      const fallbackCard = root.querySelector(".js-slide-card");
-      const el = activeCard || fallbackCard;
-      if (!el) return;
-      const h = Math.ceil(el.getBoundingClientRect().height);
-      if (h > 0) root.style.height = `${h}px`;
-    } catch {}
+  const pause = useCallback(() => {
+    clearTimeout(timerRef.current);
   }, []);
 
-  // Embla events
+  /**
+   * Sync viewport height to the CURRENT slide card.
+   * This is the key to killing the gap.
+   */
+  const syncViewportHeight = useCallback(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+
+    // Try active slide first
+    const activeCard = viewport.querySelector(
+      ".embla__slide[data-active='true'] .js-slide-card"
+    );
+    // Fallback: any card
+    const fallbackCard = viewport.querySelector(".js-slide-card");
+    const el = activeCard || fallbackCard;
+    if (!el) return;
+
+    const rect = el.getBoundingClientRect();
+    const h = rect.height;
+    if (h > 0) {
+      viewport.style.height = `${h}px`;
+    }
+  }, []);
+
+  // Embla: on select / reInit / resize
   useEffect(() => {
     if (!emblaApi) return;
 
     const onSelect = () => {
       setActive(emblaApi.selectedScrollSnap());
+      // wait for fade/layout then measure
       requestAnimationFrame(() =>
         requestAnimationFrame(() => syncViewportHeight())
       );
@@ -120,19 +134,21 @@ export default function Banner({
     emblaApi.on("reInit", onReInit);
     emblaApi.on("resize", onResize);
 
-    // first paint
+    // initial
     requestAnimationFrame(() =>
       requestAnimationFrame(() => syncViewportHeight())
     );
+    play();
 
     return () => {
       emblaApi.off("select", onSelect);
       emblaApi.off("reInit", onReInit);
       emblaApi.off("resize", onResize);
+      clearTimeout(timerRef.current);
     };
-  }, [emblaApi, syncViewportHeight]);
+  }, [emblaApi, play, syncViewportHeight]);
 
-  // pause/resume on interaction
+  // pause/resume on user interaction
   useEffect(() => {
     if (!emblaApi) return;
     const root = emblaApi.rootNode();
@@ -164,24 +180,34 @@ export default function Banner({
     };
   }, [emblaApi, play, pause]);
 
-  // fade gradient sync
+  // gradient sync
   useEffect(() => {
     const nextColor = banners?.[active]?.bgColor || initialBg;
     if (!nextColor) return;
+
     setOverlayBg(nextColor);
     setOverlayVisible(true);
+
     const t = setTimeout(() => {
       setBaseBg(nextColor);
       setOverlayVisible(false);
     }, 450);
+
     return () => clearTimeout(t);
   }, [active, banners, initialBg]);
 
   const slideCount = banners.length;
 
+  // called when images load to ensure height is correct asap
+  const handleImageLoaded = () => {
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => syncViewportHeight())
+    );
+  };
+
   return (
     <div className="relative w-full bg-white isolate">
-      {/* gradient wash */}
+      {/* gradient wash bg */}
       <div className="absolute left-0 right-0 top-0 -z-10 overflow-hidden h-[45vh] min-h-[260px] max-h-[520px]">
         <div
           className="absolute inset-0"
@@ -196,7 +222,7 @@ export default function Banner({
         />
       </div>
 
-      {/* keep your section paddings; no bottom band */}
+      {/* main wrapper */}
       <div className="relative z-10 max-w-[1980px] mx-auto px-2 sm:px-4 pt-20 pb-0">
         {loading || banners.length === 0 ? (
           <div className="px-2 sm:px-5">
@@ -204,12 +230,10 @@ export default function Banner({
           </div>
         ) : (
           <div className="px-2 sm:px-5">
-            {/* OUTER rounded wrapper restores visible corners */}
+            {/* outer rounded wrapper so edges are clean */}
             <div className="relative rounded-2xl overflow-hidden">
-              {/* embla viewport gets both refs: embla + viewport for height control */}
               <div className="embla" ref={setBothRefs}>
-                {/* gutter trick: keep px on slides, negate on track */}
-                <div className="embla__container -mx-2 sm:-mx-5">
+                <div className="embla__container">
                   {banners.map(
                     ({ _id, desktopImage, mobileImage, href }, i) => {
                       const desktopSrc =
@@ -231,9 +255,9 @@ export default function Banner({
                             target={href && href !== "#" ? "_blank" : undefined}
                             rel="noreferrer"
                             className="relative block overflow-hidden rounded-2xl shadow-lg js-slide-card"
-                            style={{ lineHeight: 0 }} // kills inline baseline gap
+                            style={{ lineHeight: 0 }}
                           >
-                            {/* Desktop: intrinsic sizing (your original look) */}
+                            {/* Desktop */}
                             <div className="hidden md:block">
                               <Image
                                 src={desktopSrc}
@@ -245,15 +269,11 @@ export default function Banner({
                                 priority={isLCP}
                                 loading={isLCP ? "eager" : "lazy"}
                                 quality={75}
-                                onLoad={() =>
-                                  requestAnimationFrame(() =>
-                                    requestAnimationFrame(syncViewportHeight)
-                                  )
-                                }
+                                onLoad={handleImageLoaded}
                               />
                             </div>
 
-                            {/* Mobile: tall hero */}
+                            {/* Mobile */}
                             <div className="block md:hidden relative w-full h-[500px] rounded-2xl overflow-hidden">
                               <Image
                                 src={mobileSrc}
@@ -264,28 +284,26 @@ export default function Banner({
                                 priority={isLCP}
                                 loading={isLCP ? "eager" : "lazy"}
                                 quality={75}
-                                onLoad={() =>
-                                  requestAnimationFrame(() =>
-                                    requestAnimationFrame(syncViewportHeight)
-                                  )
-                                }
+                                onLoad={handleImageLoaded}
                               />
                             </div>
 
-                            {/* OVER-IMAGE DOTS */}
+                            {/* pagination dots over image */}
                             {slideCount > 1 && (
                               <div className="pointer-events-none absolute inset-x-0 bottom-3 z-20 flex justify-center">
                                 <div className="pointer-events-auto flex items-center gap-2 bg-black/40 backdrop-blur-sm rounded-full px-3 py-1 border border-white/20 shadow-sm">
                                   {Array.from({ length: slideCount }).map(
-                                    (_, i) => {
-                                      const isActive = i === active;
+                                    (_, index) => {
+                                      const isActive = index === active;
                                       return (
                                         <button
-                                          key={i}
-                                          aria-label={`Go to slide ${i + 1}`}
+                                          key={index}
+                                          aria-label={`Go to slide ${
+                                            index + 1
+                                          }`}
                                           onClick={(e) => {
                                             e.preventDefault();
-                                            emblaApi?.scrollTo(i);
+                                            emblaApi?.scrollTo(index);
                                           }}
                                           className={`h-1.5 rounded-full transition-all duration-300 ${
                                             isActive
@@ -307,7 +325,6 @@ export default function Banner({
                 </div>
               </div>
             </div>
-            {/* /rounded wrapper */}
           </div>
         )}
       </div>
@@ -315,7 +332,7 @@ export default function Banner({
       <style jsx global>{`
         .embla {
           position: relative;
-          overflow: visible; /* allow slide rounded corners to show */
+          overflow: hidden; /* viewport height is controlled via JS */
           width: 100%;
         }
         .embla__container {
@@ -325,11 +342,7 @@ export default function Banner({
         .embla__slide {
           flex: 0 0 100%;
           min-width: 0;
-          /* keep only horizontal gutters; zero vertical padding so it never pushes height */
-          padding-top: 0;
-          padding-bottom: 0;
         }
-        /* baseline safety across browsers */
         img,
         picture,
         video,

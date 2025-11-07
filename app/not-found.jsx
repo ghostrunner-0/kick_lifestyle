@@ -42,7 +42,7 @@ function Website404() {
             <Link href="/support">Help Center</Link>
           </Button>
           <Button asChild variant="ghost">
-            <Link href="/products">Browse Products</Link>
+            <Link href="/">Browse Products</Link>
           </Button>
         </div>
 
