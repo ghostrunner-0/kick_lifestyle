@@ -1,15 +1,10 @@
 // app/layout.jsx
 import "./globals.css";
-import { Poppins } from "next/font/google";
 import ClientProviders from "./providers/ClientProviders"; // <-- new client wrapper
 
 import { Suspense } from "react";
 
-const PoppinsFont = Poppins({
-  weight: ["400", "500", "600", "700", "800"],
-  subsets: ["latin"],
-  display: "swap",
-});
+const baseFontClass = "font-sans";
 
 export const metadata = {
   title: "Kick Lifestyle",
@@ -26,10 +21,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       {/* Extensions sometimes inject attributes before hydration; this avoids noisy warnings */}
-      <body
-        className={`${PoppinsFont.className} antialiased`}
-        suppressHydrationWarning
-      >
+      <body className={`${baseFontClass} antialiased`} suppressHydrationWarning>
         <ClientProviders>
           <Suspense fallback={null}></Suspense>
           {children}

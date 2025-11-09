@@ -5,6 +5,72 @@ import { connectDB } from "@/lib/DB";
 import { ensureFreshDarazToken } from "@/lib/darazToken";
 import { getProducts } from "@/lib/darazMini";
 
+function extractVariant(rawSku = {}) {
+  const variationCandidates = [
+    rawSku.Variation,
+    rawSku.variation,
+    rawSku.variation_label,
+    rawSku.variation_name,
+    rawSku.sku_name,
+    rawSku.SkuName,
+  ];
+
+  for (const candidate of variationCandidates) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      const value = candidate.includes(":")
+        ? candidate.split(":").slice(1).join(":").trim()
+        : candidate.trim();
+      if (value) return value;
+    }
+  }
+
+  const arrays = [
+    rawSku.sku_properties,
+    rawSku.SkuProperties,
+    rawSku.sku_property,
+    rawSku.SkuProperty,
+    rawSku.properties,
+    rawSku.Properties,
+    rawSku.attribute,
+    rawSku.attributes,
+  ];
+
+  for (const arr of arrays) {
+    if (!Array.isArray(arr)) continue;
+    const parts = arr
+      .map((prop) => {
+        if (!prop || typeof prop !== "object") return "";
+        const name =
+          prop.name ||
+          prop.Name ||
+          prop.attribute_name ||
+          prop.AttributeName ||
+          prop.property_name ||
+          prop.PropertyName ||
+          "";
+        const value =
+          prop.value ||
+          prop.Value ||
+          prop.attribute_value ||
+          prop.AttributeValue ||
+          prop.property_value ||
+          prop.PropertyValue ||
+          "";
+        if (value && name) return `${name}: ${value}`;
+        return value || name || "";
+      })
+      .filter(Boolean);
+    if (parts.length) return parts.join(" · ");
+  }
+
+  if (rawSku && typeof rawSku === "object") {
+    const value = rawSku.sku_variant || rawSku.variant || rawSku.Variant;
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+
+  return "";
+}
+
 export const runtime = "nodejs";
 
 export async function GET(req) {
@@ -52,6 +118,7 @@ export async function GET(req) {
           daraz_sku_id: s.SkuId ?? null,
           seller_sku: sellerSku,
           daraz_name: (p.attributes?.name || s.name || "").trim(),
+          daraz_variant: extractVariant(s),
           daraz_status: s.Status || p.status || "",
           images: p.images || s.Images || [],
           updated_time: Number(p.updated_time || 0), // ms epoch
@@ -61,11 +128,12 @@ export async function GET(req) {
 
     // Filter client query
     if (q) {
-      rows = rows.filter(
-        (r) =>
-          (r.seller_sku || "").toLowerCase().includes(q) ||
-          (r.daraz_name || "").toLowerCase().includes(q)
-      );
+      rows = rows.filter((r) => {
+        const sku = (r.seller_sku || "").toLowerCase();
+        const name = (r.daraz_name || "").toLowerCase();
+        const variant = (r.daraz_variant || "").toLowerCase();
+        return sku.includes(q) || name.includes(q) || variant.includes(q);
+      });
     }
 
     // Cursor for next page (Daraz preferred: time-based)
