@@ -1,14 +1,13 @@
 // app/(root)/(website)/product/[slug]/page.jsx
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-// If you want edge after this works locally, you can uncomment:
-// export const runtime = "edge";
 
 import ProductPageClient from "./ProductPageClient";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 
 const BRAND = "KICK LIFESTYLE";
+
 const toTitle = (s = "") =>
   (s || "")
     .replace(/[-_]+/g, " ")
@@ -17,13 +16,11 @@ const toTitle = (s = "") =>
     .replace(/\b\w/g, (m) => m.toUpperCase());
 
 function getBaseUrl() {
-  // 1) Prefer explicit base
   if (process.env.NEXT_PUBLIC_BASE_URL) return process.env.NEXT_PUBLIC_BASE_URL;
 
-  // 2) Infer from request headers (works in dev & prod)
   const h = headers();
   const host = h.get("x-forwarded-host") || h.get("host") || "localhost:3000";
-  let proto =
+  const proto =
     h.get("x-forwarded-proto") ||
     (/^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(host) ? "http" : "https");
 
@@ -31,17 +28,43 @@ function getBaseUrl() {
 }
 
 async function getProduct(slug) {
-  const base = getBaseUrl();
-  const url = `${base}/api/website/products/get-by-slug/${encodeURIComponent(
-    slug
-  )}`;
+  try {
+    const base = getBaseUrl();
+    const url = `${base}/api/website/products/get-by-slug/${encodeURIComponent(
+      slug
+    )}`;
 
-  const res = await fetch(url, { cache: "no-store" });
-  if (res.status === 404) return { _notFound: true };
-  if (!res.ok) return null;
+    const res = await fetch(url, { cache: "no-store" });
 
-  const json = await res.json();
-  return json?.success ? json.data : json;
+    // HTTP-level 404 → hard not found
+    if (res.status === 404) return { _notFound: true };
+
+    // Any other bad HTTP status → treat as "no product"
+    if (!res.ok) return null;
+
+    const json = await res.json();
+
+    // Handle your API contract:
+    // { success:false, statusCode:404, message:"Product not found", data:{} }
+    if (!json?.success) {
+      if (json?.statusCode === 404) {
+        return { _notFound: true };
+      }
+      return null; // some other failure
+    }
+
+    // Normal success path
+    const data = json.data ?? json;
+    if (!data || Object.keys(data).length === 0) {
+      // empty data → also not found
+      return { _notFound: true };
+    }
+
+    return data;
+  } catch (err) {
+    console.error("Error fetching product:", err);
+    return null;
+  }
 }
 
 export async function generateMetadata({ params }) {
@@ -49,6 +72,16 @@ export async function generateMetadata({ params }) {
   const base = getBaseUrl();
 
   const product = await getProduct(slug);
+
+  // If product missing or flagged not found → 404-style meta
+  if (!product || product._notFound) {
+    return {
+      title: `Product Not Found | ${BRAND}`,
+      description: `The requested product could not be found on ${BRAND}.`,
+      robots: { index: false, follow: false },
+    };
+  }
+
   const name = toTitle(product?.name || slug || "Product");
 
   const title = `${name} | ${BRAND}`;
@@ -56,11 +89,8 @@ export async function generateMetadata({ params }) {
     product?.shortDesc ||
     `Shop ${name} at ${BRAND}. Explore premium quality at an honest price.`;
 
-  // Pick hero image → fallback to first media image → fallback null
   const imagePath =
     product?.heroImage?.path || product?.productMedia?.[0]?.path || null;
-
-  // Form full URL for image (important for OG/Twitter)
   const imageUrl = imagePath ? `${base}${imagePath}` : `${base}/default-og.png`;
 
   return {
@@ -90,11 +120,13 @@ export async function generateMetadata({ params }) {
 
 export default async function Page({ params }) {
   const { slug } = await params;
-
   const product = await getProduct(slug);
-  if (!product || product?._notFound) notFound();
 
-  // Client will fetch reviews (faster TTFB)
+  // Final guard: if nothing useful → 404 page
+  if (!product || product._notFound || !product?._id) {
+    notFound();
+  }
+
   return (
     <ProductPageClient
       slug={slug}

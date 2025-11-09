@@ -10,7 +10,6 @@ import {
   useState,
   startTransition,
 } from "react";
-import useFetch from "@/hooks/useFetch";
 import { useCategories } from "@/components/providers/CategoriesProvider";
 import { useSearchParams } from "next/navigation";
 
@@ -27,6 +26,28 @@ const ProductContext = createContext({
   refetchActive: () => {},
 });
 
+function buildFilterKey({ price, warranty, stock }) {
+  return [
+    price ? `p=${price}` : "",
+    warranty ? `w=${warranty}` : "",
+    stock ? `s=${stock}` : "",
+  ]
+    .filter(Boolean)
+    .join("&");
+}
+
+function buildUrl(activeKey, { price, warranty, stock }) {
+  if (!activeKey) return null;
+
+  const params = new URLSearchParams();
+  params.set("category", activeKey);
+  if (price) params.set("price", price);
+  if (warranty) params.set("warranty", warranty);
+  if (stock) params.set("stock", stock);
+
+  return `/api/website/products?${params.toString()}`;
+}
+
 export function ProductProvider({
   children,
   initialActiveKey = null,
@@ -35,119 +56,243 @@ export function ProductProvider({
   const { categories, isLoading: catLoading } = useCategories();
   const search = useSearchParams();
 
-  const [activeKey, setActiveKeyState] = useState(initialActiveKey);
-  const [seed, setSeed] = useState(initialProducts); // seed for current active
-  const seededKeyRef = useRef(initialActiveKey);
+  const [activeKey, setActiveKeyState] = useState(initialActiveKey || null);
 
-  // Smooth UI update when switching categories
-  const setActiveKey = useCallback((next) => {
-    startTransition(() => {
-      setActiveKeyState(next);
-    });
-  }, []);
-
-  // If no activeKey yet (e.g., no initial provided), default to first category
-  useEffect(() => {
-    if (!catLoading && !activeKey && Array.isArray(categories) && categories.length) {
-      const first = deriveKey(categories[0]);
-      setActiveKeyState(first);
-      setSeed([]); // no seed for this path; a fetch will occur
-      seededKeyRef.current = null;
+  // Cache: { [compositeKey]: { items } }
+  const [cache, setCache] = useState(() => {
+    if (
+      initialActiveKey &&
+      Array.isArray(initialProducts) &&
+      initialProducts.length
+    ) {
+      const fk = buildFilterKey({ price: null, warranty: null, stock: null });
+      const compositeKey = `${initialActiveKey}::${fk}`;
+      return {
+        [compositeKey]: { items: initialProducts },
+      };
     }
+    return {};
+  });
+
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const seededKeyRef = useRef(
+    initialActiveKey && Array.isArray(initialProducts) && initialProducts.length
+      ? initialActiveKey
+      : null
+  );
+
+  // Track in-flight requests to avoid duplicates (including Strict Mode)
+  const inFlight = useRef(new Set());
+  // Track prefetched keys so we don't spam
+  const prefetched = useRef(new Set());
+
+  const setActiveKey = useCallback(
+    (next) => {
+      if (!next || next === activeKey) return;
+      startTransition(() => {
+        setActiveKeyState(next);
+      });
+    },
+    [activeKey]
+  );
+
+  // If no activeKey from SSR, pick first visible category
+  useEffect(() => {
+    if (catLoading) return;
+    if (activeKey) return;
+    if (!Array.isArray(categories) || !categories.length) return;
+
+    const first = deriveKey(categories[0]);
+    setActiveKeyState(first);
+    seededKeyRef.current = null; // this path has no SSR seed
   }, [catLoading, categories, activeKey]);
 
-  // Filters
+  // Current filters from URL
   const price = search.get("price");
   const warranty = search.get("warranty");
   const stock = search.get("stock");
 
-  // Build URL only when we truly need to fetch
-  const url = useMemo(() => {
+  const filterKey = useMemo(
+    () => buildFilterKey({ price, warranty, stock }),
+    [price, warranty, stock]
+  );
+
+  const compositeKey = useMemo(() => {
     if (!activeKey) return null;
-    // If we have a server seed for this exact category and there are no filters, skip fetching
-    const usingSeed = seededKeyRef.current === activeKey && !price && !warranty && !stock && seed?.length;
-    if (usingSeed) return null;
+    return `${activeKey}::${filterKey}`;
+  }, [activeKey, filterKey]);
 
-    let u = `/api/website/products?category=${encodeURIComponent(activeKey)}`;
-    if (price) u += `&price=${encodeURIComponent(price)}`;
-    if (warranty) u += `&warranty=${encodeURIComponent(warranty)}`;
-    if (stock) u += `&stock=${encodeURIComponent(stock)}`;
-    return u;
-  }, [activeKey, price, warranty, stock, seed]);
+  const noFilters = !price && !warranty && !stock;
 
-  const {
-    data: fetched,
-    isLoading,
-    error,
-    refetch,
-  } = useFetch(["website-products", activeKey, price, warranty, stock], url, {
-    select: (res) => (Array.isArray(res?.data) ? res.data : []),
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    // Cache for 2 minutes; tune per traffic/update cadence
-    staleTime: 2 * 60 * 1000,
-    // Only run when URL exists (i.e., seed is not being used)
-    enabled: !!url,
-    keepPreviousData: true,
-  });
+  // Decide products for current view from cache or seed
+  const products = useMemo(() => {
+    if (!activeKey) return [];
 
-  // When we fetched fresh data for the current activeKey, drop the seed
-  useEffect(() => {
-    if (url && Array.isArray(fetched)) {
-      setSeed([]);
-      seededKeyRef.current = null;
+    // 1) If we have cached data for this compositeKey, use it
+    if (compositeKey && cache[compositeKey]?.items) {
+      return cache[compositeKey].items;
     }
-  }, [url, fetched]);
 
-  // Exposed products = seed (SSR) OR fetched
-  const products = seed?.length ? seed : (fetched || []);
+    // 2) If no filters and SSR seed matches this activeKey, use seed (baked into cache init)
+    if (noFilters && seededKeyRef.current === activeKey) {
+      const fk = buildFilterKey({ price: null, warranty: null, stock: null });
+      const seedKey = `${activeKey}::${fk}`;
+      return cache[seedKey]?.items || [];
+    }
 
-  const refetchActive = useCallback(() => {
-    if (url) refetch();
-  }, [url, refetch]);
+    return [];
+  }, [activeKey, compositeKey, cache, noFilters]);
 
-  // Prefetch next couple categories in idle time (tiny UX win)
+  // Core fetcher (single source of truth)
+  const fetchProducts = useCallback(
+    async ({ key, url, isRefetch = false }) => {
+      if (!key || !url) return;
+
+      // Avoid duplicate in-flight requests
+      if (inFlight.current.has(key)) return;
+      inFlight.current.add(key);
+
+      if (!isRefetch) {
+        setIsLoading(true);
+        setError(null);
+      }
+
+      const controller =
+        typeof AbortController !== "undefined" ? new AbortController() : null;
+
+      try {
+        const res = await fetch(url, {
+          signal: controller?.signal,
+          cache: "no-store",
+        });
+
+        const json = await res.json();
+
+        if (!res.ok || !Array.isArray(json?.data)) {
+          throw new Error(json?.message || "Failed to load products");
+        }
+
+        setCache((prev) => ({
+          ...prev,
+          [key]: { items: json.data },
+        }));
+
+        // Once we’ve fetched for this key, this page is no longer “seed-only”
+        if (noFilters && activeKey && key.startsWith(`${activeKey}::`)) {
+          seededKeyRef.current = null;
+        }
+      } catch (err) {
+        console.error("Product fetch failed:", err);
+        if (!isRefetch) {
+          setError(err.message || "Failed to load products");
+        }
+      } finally {
+        inFlight.current.delete(key);
+        if (!isRefetch) setIsLoading(false);
+      }
+
+      return () => controller?.abort();
+    },
+    [activeKey, noFilters]
+  );
+
+  // Fetch for current activeKey + filters if:
+  // - we don't have cache
+  // - and (no SSR seed case OR filters present)
   useEffect(() => {
-    if (!categories?.length || !activeKey) return;
+    if (!activeKey || !compositeKey) return;
 
-    const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    // Already cached? don't fetch.
+    if (cache[compositeKey]?.items) return;
+
+    // If we *still* have SSR seed and no filters for this activeKey, don't fetch.
+    if (noFilters && seededKeyRef.current === activeKey) return;
+
+    const url = buildUrl(activeKey, { price, warranty, stock });
+    if (!url) return;
+
+    fetchProducts({ key: compositeKey, url });
+  }, [
+    activeKey,
+    compositeKey,
+    cache,
+    noFilters,
+    price,
+    warranty,
+    stock,
+    fetchProducts,
+  ]);
+
+  // Public refetch for current activeKey/filters (manual only)
+  const refetchActive = useCallback(() => {
+    if (!activeKey || !compositeKey) return;
+    const url = buildUrl(activeKey, { price, warranty, stock });
+    if (!url) return;
+    fetchProducts({ key: compositeKey, url, isRefetch: true });
+  }, [activeKey, compositeKey, price, warranty, stock, fetchProducts]);
+
+  // Idle prefetch: next 1–2 categories (no filters). One-time per key.
+  useEffect(() => {
+    if (!Array.isArray(categories) || !activeKey) return;
+
+    const idx = categories.findIndex((c) => deriveKey(c) === activeKey);
+    if (idx === -1) return;
+
+    const nextCats = categories.slice(idx + 1, idx + 3);
+
     const run = () => {
-      const idx = categories.findIndex((c) => deriveKey(c) === activeKey);
-      if (idx === -1) return;
-      const nextCats = categories.slice(idx + 1, idx + 3); // prefetch 2
       nextCats.forEach((c) => {
         const k = deriveKey(c);
-        fetch(`/api/website/products?category=${encodeURIComponent(k)}`, {
-          signal: controller?.signal,
-          cache: "force-cache",
-        }).catch(() => {});
+        if (!k) return;
+
+        const fk = buildFilterKey({ price: null, warranty: null, stock: null });
+        const key = `${k}::${fk}`;
+
+        // Already cached, in-flight, or prefetched? skip.
+        if (cache[key]?.items) return;
+        if (inFlight.current.has(key)) return;
+        if (prefetched.current.has(key)) return;
+
+        const url = buildUrl(k, { price: null, warranty: null, stock: null });
+        if (!url) return;
+
+        prefetched.current.add(key);
+        fetch(url, { cache: "force-cache" }).catch(() => {
+          // ignore prefetch errors
+        });
       });
     };
 
-    if ("requestIdleCallback" in window) {
+    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
       const id = window.requestIdleCallback(run, { timeout: 1500 });
       return () => window.cancelIdleCallback && window.cancelIdleCallback(id);
     } else {
       const t = setTimeout(run, 800);
       return () => clearTimeout(t);
     }
-  }, [categories, activeKey]);
+  }, [categories, activeKey, cache]);
 
   const value = useMemo(
     () => ({
       activeKey,
       setActiveKey,
       products,
-      isLoading: !!url ? isLoading : false, // if using seed, not loading
+      isLoading,
       error,
       refetchActive,
     }),
-    [activeKey, setActiveKey, products, isLoading, error, refetchActive, url]
+    [activeKey, setActiveKey, products, isLoading, error, refetchActive]
   );
 
-  return <ProductContext.Provider value={value}>{children}</ProductContext.Provider>;
+  return (
+    <ProductContext.Provider value={value}>{children}</ProductContext.Provider>
+  );
 }
 
 export function useProducts() {
-  return useContext(ProductContext);
+  const ctx = useContext(ProductContext);
+  if (!ctx) throw new Error("useProducts must be used within ProductProvider");
+  return ctx;
 }

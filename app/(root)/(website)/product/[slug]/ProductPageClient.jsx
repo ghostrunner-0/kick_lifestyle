@@ -13,6 +13,7 @@ import Image from "next/image";
 import axios from "axios";
 import { Pagination } from "swiper/modules";
 import "swiper/css/pagination";
+import { trackAddToCart, trackProductView } from "@/lib/analytics";
 
 /* store */
 import { addItem, setQty, removeItem, selectItemsMap } from "@/store/cartSlice";
@@ -727,6 +728,30 @@ export default function ProductPageClient({
   const off = percentOff(effMrp, effSp);
   const priceNow = off ? effSp : effMrp;
   const priceWas = off ? effMrp : null;
+  // Track product view (GA4 + PostHog + FB Pixel)
+  useEffect(() => {
+    if (!dataReady || !product) return;
+
+    const viewedPrice =
+      Number(
+        activeVariant?.specialPrice ??
+          activeVariant?.mrp ??
+          product?.specialPrice ??
+          product?.mrp ??
+          0
+      ) || 0;
+
+    trackProductView({
+      productId: activeVariant?._id || product._id,
+      name: activeVariant?.variantName
+        ? `${product.name} - ${activeVariant.variantName}`
+        : product.name,
+      category: product.categoryName || product.catName || "Products",
+      price: viewedPrice,
+      currency: "NPR",
+      variant: activeVariant?.variantName || activeVariant?.sku || undefined,
+    });
+  }, [dataReady, product, activeVariant]);
 
   /* stock flags */
   const inStock =
@@ -793,6 +818,15 @@ export default function ProductPageClient({
           : null,
       })
     );
+    trackAddToCart({
+      productId: product?._id,
+      name: product?.name,
+      category: product?.categoryName || product?.catName || "Products",
+      price: priceNow,
+      quantity: STEP,
+      variant: activeVariant?.variantName,
+      currency: "NPR",
+    });
   };
 
   /* sticky bars (header + bottom-nav safe) */
@@ -937,8 +971,8 @@ export default function ProductPageClient({
       return;
     }
 
-    if (!inCartLine)
-      return dispatch(
+    if (!inCartLine) {
+      dispatch(
         addItem({
           productId: product?._id,
           slug,
@@ -951,6 +985,20 @@ export default function ProductPageClient({
         })
       );
 
+      trackAddToCart({
+        productId: product?._id,
+        name: product?.name,
+        category: product?.categoryName || product?.catName || "Products",
+        price: priceNow,
+        quantity: STEP,
+        variant: activeVariant?.variantName,
+        currency: "NPR",
+      });
+
+      return;
+    }
+
+    // Case 2: already in cart → just update qty
     dispatch(
       setQty({
         productId: product?._id,

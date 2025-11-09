@@ -8,261 +8,193 @@ const Terms = () => {
       <p>
         Welcome to <strong>Kick Lifestyle</strong>. By accessing or using our
         website, purchasing products, or engaging with our services, you agree
-        to the following Terms & Conditions. Please read them carefully.
+        to the following Terms & Conditions. Please read them carefully before
+        proceeding.
       </p>
 
-      {/* 1) Warranty Coverage (your provided content) */}
+      {/* 1) Warranty Coverage */}
       <div className="space-y-4">
-        <h2 className="text-xl font-semibold text-gray-900">
-          1) Warranty Coverage
-        </h2>
+        <h2 className="text-xl font-semibold text-gray-900">1) Warranty Coverage</h2>
         <p>
-          Kick products are covered by a limited warranty for a period of{" "}
-          <strong>one (1) year</strong> (<strong>6 months for battery</strong>)
-          from the date of purchase. This warranty covers defects in materials
-          and workmanship under normal use. If your product is damaged or
-          defective due to manufacturing defects within this warranty period, we
-          are here to assist you.
+          All <strong>Kick Lifestyle</strong> products are covered under a limited
+          warranty for <strong>one (1) year</strong> from the date of purchase
+          (<strong>6 months for batteries</strong>). This warranty protects against
+          defects in materials and workmanship under normal usage conditions.
         </p>
 
         <h3 className="font-medium text-gray-900">Warranty Exclusions</h3>
         <ul className="list-disc ml-6 space-y-2">
+          <li>Products tampered with or repaired by unauthorized personnel.</li>
+          <li>Any form of physical damage, cracks, dents, or scratches.</li>
+          <li>Damage caused by liquid exposure, moisture, or corrosion.</li>
           <li>
-            Products that have been tampered with or modified by unauthorized
-            personnel.
+            Battery-related defects after <strong>6 months</strong> from purchase
+            are not covered under warranty.
           </li>
           <li>
-            Products that show signs of physical damage, including cracks,
-            dents, or scratches.
-          </li>
-          <li>
-            Products that have been exposed to liquid damage (immersion in water
-            or excessive moisture).
-          </li>
-          <li>
-            After the initial <strong>6 months</strong> from the Date of
-            Purchase, any defects in battery life or other battery-related
-            issues will no longer be covered under warranty.
-          </li>
-          <li>
-            Please use a <strong>5W charger</strong> for all Kick products.
-            Charging with a higher wattage may damage the earbuds or smartwatch
-            and <strong>void the warranty</strong>.
+            Use of chargers exceeding <strong>5W output</strong> may damage the
+            product and <strong>void the warranty</strong>.
           </li>
         </ul>
 
         <h3 className="font-medium text-gray-900">Warranty Claim Process</h3>
         <ol className="list-decimal ml-6 space-y-2">
           <li>
-            Contact our customer care at{" "}
+            Contact our support team via{" "}
             <a
               href="mailto:customer.care@kick-lifestyle.shop"
               className="text-blue-600 underline"
             >
               customer.care@kick-lifestyle.shop
             </a>{" "}
-            or leave a message on{" "}
+            or call{" "}
             <a href="tel:+9779820810020" className="text-blue-600 underline">
               +977-9820810020
-            </a>
-            . Provide the product model, purchase date, and a brief description
-            of the issue.
+            </a>{" "}
+            with your order details and issue description.
           </li>
           <li>
-            Our team may request additional information or evidence to validate
-            the issue and will guide you through the process.
+            Our team may request additional details, such as proof of purchase or
+            photographs, to validate the claim.
           </li>
           <li>
-            If approved, we’ll share return instructions. Ensure secure
-            packaging to prevent transit damage.
+            If approved, you’ll receive return instructions. Please ensure the
+            product is securely packed to prevent transit damage.
           </li>
           <li>
-            Upon receiving the item, we’ll assess eligibility. If eligible, we
-            will <strong>repair or replace</strong> the product at our
-            discretion.
+            After inspection, we will <strong>repair or replace</strong> the product
+            at our discretion.
           </li>
         </ol>
         <p className="text-sm">
-          Note: You are responsible for any shipping costs associated with
-          returning the item for warranty service.
+          *Customers are responsible for shipping costs related to warranty service.
         </p>
 
         <h3 className="font-medium text-gray-900">Limitations of Liability</h3>
         <p>
-          Kick’s liability under this warranty is limited to the repair or
-          replacement of the product as determined by our technical team. We are
-          not liable for any incidental or consequential damages arising from
-          the use or misuse of our products. This warranty is valid only for the
-          original purchaser and is not transferable.
+          Kick Lifestyle’s liability under this warranty is limited to repair or
+          replacement. We are not responsible for indirect, incidental, or
+          consequential losses resulting from product use or malfunction. Warranty
+          coverage applies only to the original purchaser and is non-transferable.
         </p>
       </div>
 
-      {/* 2) Failed Delivery (your provided content) */}
+      {/* 2) Return & Replacement Policy */}
       <div className="space-y-4">
         <h2 className="text-xl font-semibold text-gray-900">
-          2) Failed Delivery
+          2) Return & Replacement Policy
         </h2>
         <p>
-          A delivery attempt that cannot be completed due to reasons
-          attributable to the customer, including but not limited to incorrect
-          address, absence of recipient, refusal to accept the package, failure
-          to comply with delivery instructions, or not picking up calls from
-          delivery personnel, will be considered a{" "}
-          <strong>failed delivery</strong>.
+          Kick Lifestyle does <strong>not offer a general return policy</strong>.
+          Once an order is successfully delivered, it is considered final.
+          Replacements or repairs are only processed under our official{" "}
+          <strong>warranty terms</strong> in the case of manufacturing defects.
         </p>
-
-        <h3 className="font-medium text-gray-900">Eligibility</h3>
-        <p>
-          If the customer does not pick up the call from the delivery personnel,
-          it will be considered a failed delivery attempt, and the customer will
-          be charged accordingly.
-        </p>
-
-        <h3 className="font-medium text-gray-900">Delivery Charges</h3>
-        <p>
-          In the event of a failed delivery attempt, the customer will be liable
-          for any additional delivery charges incurred, including the cost of
-          the initial attempt. Charges will be calculated based on standard
-          rates shown at the time of order, plus any additional costs arising
-          from the failed attempt.
-        </p>
-
-        <h3 className="font-medium text-gray-900">
-          Notification & Rescheduling
-        </h3>
-        <p>
-          We will notify the customer using the provided contact details. The
-          customer may reschedule delivery at an additional cost. Rescheduled
-          attempts are subject to the same delivery charge terms.
-        </p>
-
-        <h3 className="font-medium text-gray-900">Payment of Extra Charges</h3>
-        <p>
-          The customer agrees to pay any extra charges resulting from a failed
-          delivery attempt. These charges will be added to the customer’s
-          account and must be settled before further deliveries. Failure to pay
-          may result in order cancellation.
-        </p>
-
+        <ul className="list-disc ml-6 space-y-2">
+          <li>
+            Returns for reasons such as “change of mind,” “wrong selection,” or
+            “dislike of product” are not accepted.
+          </li>
+          <li>
+            If you receive a damaged or defective product, you must report it
+            within <strong>48 hours</strong> of delivery for verification.
+          </li>
+          <li>
+            Once verified, a replacement or repair will be arranged as per our
+            warranty process.
+          </li>
+        </ul>
         <p className="italic">
-          By placing an order, you acknowledge that you have read, understood,
-          and agreed to these terms and conditions regarding extra charges on
-          failed delivery attempts.
+          We ensure all products are quality-checked before shipment to minimize
+          any inconvenience.
         </p>
       </div>
 
-      {/* Extra sensible terms (added) */}
+      {/* 3) Failed Delivery */}
+      <div className="space-y-4">
+        <h2 className="text-xl font-semibold text-gray-900">3) Failed Delivery</h2>
+        <p>
+          Delivery attempts that fail due to customer-related reasons—such as an
+          incorrect address, refusal to accept the package, or unavailability at
+          the time of delivery—will be marked as a{" "}
+          <strong>failed delivery</strong>.
+        </p>
+        <ul className="list-disc ml-6 space-y-2">
+          <li>
+            The customer will be responsible for the delivery charges incurred,
+            including the cost of reattempting delivery.
+          </li>
+          <li>
+            Rescheduled deliveries are subject to additional fees and standard
+            delivery terms.
+          </li>
+          <li>
+            Orders may be cancelled if outstanding charges are not cleared before
+            reshipment.
+          </li>
+        </ul>
+      </div>
+
+      {/* 4) Orders, Pricing, and Liability */}
       <div className="space-y-4">
         <h2 className="text-xl font-semibold text-gray-900">
-          3) Orders, Pricing & Payments
+          4) Orders, Pricing & Payments
         </h2>
         <ul className="list-disc ml-6 space-y-2">
           <li>
-            Prices may change without prior notice. Obvious pricing errors may
-            be corrected, and affected orders may be cancelled with a full
-            refund.
+            Product prices are subject to change without prior notice. Obvious
+            errors may result in cancellation and a full refund.
           </li>
           <li>
-            We reserve the right to refuse or cancel any order due to inventory
-            limits, suspected fraud, or inaccurate information.
+            We reserve the right to cancel or refuse any order due to inventory
+            constraints, fraud concerns, or pricing inaccuracies.
           </li>
           <li>
-            Payments must be completed using the methods offered at checkout. By
-            submitting an order, you authorize us to charge the selected payment
-            method for the total amount shown.
+            Payment must be completed using the available checkout options. By
+            placing an order, you consent to the authorized charge on your selected
+            payment method.
           </li>
         </ul>
 
         <h2 className="text-xl font-semibold text-gray-900">
-          4) Shipping & Risk of Loss
+          5) Limitation of Liability
         </h2>
         <p>
-          Estimated delivery times are indicative. Title and risk of loss pass
-          to you upon handover to the carrier or upon successful delivery to the
-          address provided, as applicable in your locality.
+          To the fullest extent permitted by law, Kick Lifestyle shall not be held
+          liable for any indirect, incidental, or consequential damages arising
+          from the use or inability to use our products or services.
         </p>
 
         <h2 className="text-xl font-semibold text-gray-900">
-          5) Returns & Replacements
+          6) Governing Law & Dispute Resolution
         </h2>
         <p>
-          For non-warranty returns, items must be unused and in original
-          packaging within the return window stated on the product page or
-          invoice. Certain categories (e.g., hygiene-sensitive ear tips) may not
-          be eligible once opened. Approved returns may be refunded or replaced
-          per our returns policy.
-        </p>
-
-        <h2 className="text-xl font-semibold text-gray-900">
-          6) Use of Products
-        </h2>
-        <p>
-          Products should be used as intended and per the included safety
-          instructions. Using incompatible chargers, accessories, or exposing
-          devices to extreme conditions may cause damage and void the warranty.
-        </p>
-
-        <h2 className="text-xl font-semibold text-gray-900">
-          7) Limitation of Liability
-        </h2>
-        <p>
-          To the maximum extent permitted by law, Kick Lifestyle will not be
-          liable for any indirect, incidental, special, punitive, or
-          consequential damages, or any loss of data, revenue, or profits,
-          arising out of or related to your purchase or use of the products.
-        </p>
-
-        <h2 className="text-xl font-semibold text-gray-900">
-          8) Governing Law & Dispute Resolution
-        </h2>
-        <p>
-          These Terms are governed by the laws of Nepal. Any disputes shall be
-          subject to the exclusive jurisdiction of the competent courts in
-          Kathmandu, Nepal. We encourage customers to first contact{" "}
-          <a
-            href="mailto:support@kick.com.np"
-            className="text-blue-600 underline"
-          >
+          These Terms are governed by the laws of Nepal. Any disputes will be
+          subject to the exclusive jurisdiction of the courts in Kathmandu, Nepal.
+          For resolution or assistance, please contact{" "}
+          <a href="mailto:support@kick.com.np" className="text-blue-600 underline">
             support@kick.com.np
-          </a>{" "}
-          for an amicable resolution.
+          </a>
+          .
         </p>
 
-        <h2 className="text-xl font-semibold text-gray-900">
-          9) Changes to These Terms
-        </h2>
+        <h2 className="text-xl font-semibold text-gray-900">7) Contact</h2>
         <p>
-          We may update these Terms from time to time. Updates will be posted on
-          this page with a new “Last updated” date. Continued use of our
-          services after changes take effect constitutes acceptance of the
-          revised Terms.
-        </p>
-
-        <h2 className="text-xl font-semibold text-gray-900">10) Contact</h2>
-        <p>
-          For questions about these Terms & Conditions, contact{" "}
-          <a
-            href="mailto:support@kick.com.np"
-            className="text-blue-600 underline"
-          >
-            support@kick.com.np
-          </a>{" "}
-          or{" "}
+          For any questions or support, reach out to us at{" "}
           <a
             href="mailto:customer.care@kick-lifestyle.shop"
             className="text-blue-600 underline"
           >
             customer.care@kick-lifestyle.shop
           </a>{" "}
-          |{" "}
+          or{" "}
           <a href="tel:+9779820810020" className="text-blue-600 underline">
             +977-9820810020
           </a>
+          .
         </p>
 
-        <p className="text-sm text-gray-500 pt-2">
-          Last updated: {lastUpdated}
-        </p>
+        <p className="text-sm text-gray-500 pt-2">Last updated: {lastUpdated}</p>
       </div>
     </section>
   );

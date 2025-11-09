@@ -3,7 +3,7 @@ import AboutClient from "./AboutClient";
 
 const BRAND = "KICK";
 const BRAND_LONG = "Kick Lifestyle";
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://kick.com.np";
+const SITE_URL = "https://kick.com.np";
 const ABOUT_PATH = "/about";
 const ABOUT_URL = `${SITE_URL}${ABOUT_PATH}`;
 

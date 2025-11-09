@@ -28,6 +28,7 @@ import { ShoppingCart } from "lucide-react";
 import { PRODUCT_VIEW_ROUTE } from "@/routes/WebsiteRoutes";
 import useEmblaCarousel from "embla-carousel-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { trackAddToCart } from "@/lib/analytics"; // <-- ADD
 
 /* Brand + helpers */
 const BRAND = "#fcba17";
@@ -336,6 +337,16 @@ export default function ProductCard({
         activeVariant ? ` — ${activeVariant.variantName}` : ""
       } added to cart.`
     );
+
+    trackAddToCart({
+      productId: _id,
+      name,
+      category: product?.categoryName || product?.catName || "Products",
+      price: priceNow,
+      quantity: 1,
+      variant: activeVariant?.variantName,
+      currency: "NPR",
+    });
   };
 
   const handleIncrement = () => {
@@ -348,6 +359,15 @@ export default function ProductCard({
       return;
     }
     dispatch(addItem(buildCartPayload(1)));
+    trackAddToCart({
+      productId: _id,
+      name,
+      category: product?.categoryName || product?.catName || "Products",
+      price: priceNow,
+      quantity: 1,
+      variant: activeVariant?.variantName,
+      currency: "NPR",
+    });
   };
 
   const handleDecrement = () => {

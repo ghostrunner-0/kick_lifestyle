@@ -10,8 +10,8 @@ import React, {
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { AnimatePresence } from "framer-motion";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
+
 /* Sidebars */
 import CartSidebar from "./CartSidebar";
 import SearchSidebar from "@/components/application/SearchSidebar";
@@ -48,22 +48,18 @@ import {
 /* Categories */
 import { useCategories } from "@/components/providers/CategoriesProvider";
 
+/* ---- STATIC NAV (as before) ---- */
 const STATIC_NAV = [
-  {
-    label: "Support & warranty",
-    items: [
-      { label: "Support", href: "/support" },
-      { label: "Warranty", href: "/warranty" },
-    ],
-  },
-  { label: "Corporate orders", href: "/corporate-orders" },
+  { label: "Kick Yatayat Daraz", href: "/KickYatayatDaraz" },
   {
     label: "More",
     items: [
+      { label: "Support", href: "/support" },
+      { label: "Warranty", href: "/warranty" },
       { label: "Blogs", href: "/blogs" },
       { label: "About Us", href: "/about" },
       { label: "Contact Us", href: "/contact" },
-      { label: "Kick Yatayat Daraz", href: "/KickYatayatDaraz" },
+      { label: "Corporate orders", href: "/corporate-orders" },
     ],
   },
   { label: "Student Discount", href: "/student-discount" },
@@ -85,6 +81,10 @@ const pickRole = (json) =>
   json?.data?.user?.role ||
   null;
 
+const isKickYatayat = (item) =>
+  item?.href === "/KickYatayatDaraz" ||
+  (item?.label || "").toLowerCase().includes("kick yatayat");
+
 export default function Header() {
   const router = useRouter();
   const pathname = usePathname();
@@ -103,6 +103,7 @@ export default function Header() {
   const [accountHref, setAccountHref] = useState("/auth/login");
   const [accountLabel, setAccountLabel] = useState("Login / Register");
 
+  /* ---------- Account / role ---------- */
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
@@ -197,6 +198,7 @@ export default function Header() {
     };
   }, []);
 
+  /* ---------- Sticky background ---------- */
   useEffect(() => {
     if (!isHome) return;
     const onScroll = () => setIsStickyShade(window.scrollY > 8);
@@ -205,6 +207,7 @@ export default function Header() {
     return () => window.removeEventListener("scroll", onScroll);
   }, [isHome]);
 
+  /* ---------- Categories ---------- */
   const catLinks = useMemo(() => {
     const list = Array.isArray(categories) ? categories : [];
     return list
@@ -215,6 +218,7 @@ export default function Header() {
       }));
   }, [categories]);
 
+  /* ---------- Search data ---------- */
   useEffect(() => {
     let cancel = false;
     (async () => {
@@ -238,6 +242,7 @@ export default function Header() {
     router.push(href);
   };
 
+  /* ---------- Classes ---------- */
   const headerCls = isHome
     ? [
         "fixed inset-x-0 top-0 z-[40] transition-colors",
@@ -252,8 +257,10 @@ export default function Header() {
       ? "text-gray-900"
       : "text-white"
     : "text-gray-900";
+
   const currentLogo = isHome && !isStickyShade ? LOGO_WHITE : LOGO_BLACK;
 
+  /* ---------- Events ---------- */
   useEffect(() => {
     const openSearch = () => setSearchOpen(true);
     const openCart = () => setCartOpen(true);
@@ -265,6 +272,7 @@ export default function Header() {
     };
   }, []);
 
+  /* ---------- Header height var ---------- */
   const headerRef = useRef(null);
   useLayoutEffect(() => {
     const setVar = () => {
@@ -290,9 +298,7 @@ export default function Header() {
   return (
     <>
       <header ref={headerRef} className={headerCls}>
-        <div
-          className={`w-full flex items-center relative justify-between py-4 px-6 md:px-10 lg:px-16 text-black`}
-        >
+        <div className="w-full flex items-center relative justify-between py-4 px-6 md:px-10 lg:px-16 text-black">
           {/* Left: Mobile menu + Desktop logo */}
           <div className="flex items-center gap-2">
             <Sheet>
@@ -382,7 +388,11 @@ export default function Header() {
                                       <SheetClose asChild>
                                         <Link
                                           href={child.href}
-                                          className="flex items-center justify-between rounded-lg px-3 py-2 text-sm hover:bg-muted"
+                                          className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm hover:bg-muted ${
+                                            isKickYatayat(child)
+                                              ? "kick-yatayat-text"
+                                              : ""
+                                          }`}
                                         >
                                           <span>{child.label}</span>
                                         </Link>
@@ -399,7 +409,9 @@ export default function Header() {
                           <SheetClose asChild>
                             <Link
                               href={item.href}
-                              className="block rounded-lg px-4 h-12 leading-[48px] text-[15px] font-medium hover:bg-muted"
+                              className={`block rounded-lg px-4 h-12 leading-[48px] text-[15px] font-medium hover:bg-muted ${
+                                isKickYatayat(item) ? "kick-yatayat-text" : ""
+                              }`}
                             >
                               {item.label}
                             </Link>
@@ -426,6 +438,7 @@ export default function Header() {
               </SheetContent>
             </Sheet>
 
+            {/* Desktop logo */}
             <div className="hidden lg:block">
               <Link href="/" aria-label="Go to home">
                 <Image
@@ -484,7 +497,11 @@ export default function Header() {
                           <li key={child.label}>
                             <Link
                               href={child.href}
-                              className="block px-4 py-2.5 text-sm hover:bg-gray-50 whitespace-nowrap text-gray-900"
+                              className={`block px-4 py-2.5 text-sm hover:bg-gray-50 whitespace-nowrap ${
+                                isKickYatayat(child)
+                                  ? "kick-yatayat-text"
+                                  : "text-gray-900"
+                              }`}
                             >
                               {child.label}
                             </Link>
@@ -497,7 +514,9 @@ export default function Header() {
                   <Link
                     key={item.label}
                     href={item.href}
-                    className={`nav-link-underline text-sm font-medium tracking-wide h-10 flex items-center px-1 whitespace-nowrap ${textCls}`}
+                    className={`nav-link-underline text-sm font-medium tracking-wide h-10 flex items-center px-1 whitespace-nowrap ${
+                      isKickYatayat(item) ? "kick-yatayat-text" : textCls
+                    }`}
                   >
                     {item.label}
                   </Link>
@@ -528,7 +547,6 @@ export default function Header() {
               </Link>
             </Button>
 
-            {/* Cart button with animated badge (unique product count) */}
             <button
               type="button"
               onClick={() => setCartOpen(true)}
@@ -544,12 +562,16 @@ export default function Header() {
                     initial={{ scale: 0.6, opacity: 0, y: -6 }}
                     animate={{ scale: 1, opacity: 1, y: 0 }}
                     exit={{ scale: 0.6, opacity: 0, y: -6 }}
-                    transition={{ type: "spring", stiffness: 420, damping: 22 }}
+                    transition={{
+                      type: "spring",
+                      stiffness: 420,
+                      damping: 22,
+                    }}
                     className="absolute -top-1 -right-1 grid place-items-center rounded-full bg-black text-white text-[10px] h-4 min-w-4 px-1 leading-[16px]"
                   >
                     <AnimatePresence mode="popLayout" initial={false}>
                       <motion.span
-                        key={uniqueCount} // re-mount on change -> animates number
+                        key={uniqueCount}
                         initial={{ y: 6, opacity: 0, scale: 0.9 }}
                         animate={{ y: 0, opacity: 1, scale: 1 }}
                         exit={{ y: -6, opacity: 0, scale: 0.95 }}
@@ -581,6 +603,7 @@ export default function Header() {
         :root {
           --primary: oklch(0.795 0.184 86.047);
         }
+
         .nav-link-underline {
           position: relative;
         }
@@ -597,6 +620,12 @@ export default function Header() {
         .nav-link-underline:hover::after,
         .group:hover .nav-link-underline::after {
           width: 100%;
+        }
+
+        /* Only highlight Kick Yatayat Daraz */
+        .kick-yatayat-text {
+          color: #fcba17 !important;
+          font-weight: 600;
         }
       `}</style>
     </>

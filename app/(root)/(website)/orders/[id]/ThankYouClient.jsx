@@ -1,18 +1,42 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useEffect, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { CheckCircle2, Copy, ShoppingBag } from "lucide-react";
 import { showToast } from "@/lib/ShowToast";
+import { trackPurchase } from "@/lib/analytics";
 
 export default function ThankYouClient({ params }) {
-  // slug param e.g. /thank-you/ORDER-123 -> { id: "ORDER-123" }
   const displayId = useMemo(
     () => decodeURIComponent(params?.id || "").trim(),
     [params?.id]
   );
+
+  const [order, setOrder] = useState(null);
+
+  useEffect(() => {
+    if (!displayId) return;
+
+    const loadOrder = async () => {
+      try {
+        const res = await fetch(`/api/orders/${displayId}`, {
+          cache: "no-store",
+        });
+        const json = await res.json();
+
+        if (json.success && json.data) {
+          setOrder(json.data);
+          trackPurchase(json.data); // ✅ fire purchase event
+        }
+      } catch (err) {
+        console.error("Failed to fetch order:", err);
+      }
+    };
+
+    loadOrder();
+  }, [displayId]);
 
   const copyId = async () => {
     if (!displayId) return;
@@ -39,7 +63,9 @@ export default function ThankYouClient({ params }) {
           {displayId ? (
             <div className="rounded-xl bg-slate-50 border p-4 flex items-center justify-between">
               <div>
-                <div className="text-xs uppercase text-slate-500">Your Order ID</div>
+                <div className="text-xs uppercase text-slate-500">
+                  Your Order ID
+                </div>
                 <div className="text-lg font-mono font-semibold tracking-wide">
                   {displayId}
                 </div>
@@ -51,7 +77,26 @@ export default function ThankYouClient({ params }) {
             </div>
           ) : (
             <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 text-amber-800">
-              We couldn’t read your order ID. If you just placed an order, please check your email.
+              We couldn’t read your order ID. If you just placed an order,
+              please check your email.
+            </div>
+          )}
+
+          {/* Optional: show small summary if order loaded */}
+          {order && (
+            <div className="rounded-xl bg-white border p-4 text-sm text-slate-700 space-y-1">
+              <div>
+                <span className="font-medium">Total:</span>{" "}
+                {order.amounts?.total} {order.amounts?.currency || "NPR"}
+              </div>
+              <div>
+                <span className="font-medium">Items:</span>{" "}
+                {order.items?.length}
+              </div>
+              <div>
+                <span className="font-medium">Payment:</span>{" "}
+                {order.paymentMethod?.toUpperCase()}
+              </div>
             </div>
           )}
 

@@ -383,7 +383,7 @@ export default function CheckoutClient({ initialUser = null }) {
         data?.data?.result?.final_price,
         data?.data?.result?.price,
       ];
-      const shipping = priceCandidates.map(toNum).find((n) => n > 0) ?? 0;
+      const shipping = toNum(data?.data?.price) + 15;
 
       if (shipping <= 0) {
         setShip({

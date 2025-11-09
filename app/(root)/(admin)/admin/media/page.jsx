@@ -118,7 +118,7 @@ const MediaPage = () => {
         setPage((prev) => prev + 1);
       }
 
-      setHasMore(((reset ? 1 : page + 1) * LIMIT) < data.total);
+      setHasMore((reset ? 1 : page + 1) * LIMIT < data.total);
     } catch {
       showToast("error", "Failed to fetch media.");
     } finally {
@@ -159,7 +159,7 @@ const MediaPage = () => {
 
     setUploading(true);
     try {
-      const res = await axios.post("/api/upload", formData, {
+      await axios.post("/api/admin/media", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
@@ -271,7 +271,10 @@ const MediaPage = () => {
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-3 mt-4">
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+            >
               Cancel
             </Button>
             <Button variant="destructive" onClick={handleDelete}>
@@ -322,8 +325,8 @@ const MediaPage = () => {
             <AlertDialogTitle>Delete Tag</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete{" "}
-              <span className="font-semibold">{pendingDeleteTag?.name}</span>? This
-              action cannot be undone.
+              <span className="font-semibold">{pendingDeleteTag?.name}</span>?
+              This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -342,9 +345,18 @@ const MediaPage = () => {
         {/* Upload section */}
         <div>
           <h2 className="text-xl font-semibold mb-3">Upload Files</h2>
-          <Input type="file" multiple onChange={handleFileChange} disabled={uploading} />
+          <Input
+            type="file"
+            multiple
+            onChange={handleFileChange}
+            disabled={uploading}
+          />
           <div className="flex items-center gap-4 mt-4 flex-wrap">
-            <Select onValueChange={setSelectedTag} value={selectedTag} disabled={uploading}>
+            <Select
+              onValueChange={setSelectedTag}
+              value={selectedTag}
+              disabled={uploading}
+            >
               <SelectTrigger className="w-[200px]">
                 <SelectValue placeholder="Select a tag" />
               </SelectTrigger>
@@ -367,7 +379,9 @@ const MediaPage = () => {
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Create New Tag</DialogTitle>
-                  <DialogDescription>Give a name for the new tag.</DialogDescription>
+                  <DialogDescription>
+                    Give a name for the new tag.
+                  </DialogDescription>
                 </DialogHeader>
                 <Input
                   value={newTagName}
@@ -443,7 +457,8 @@ const MediaPage = () => {
               <DialogHeader>
                 <DialogTitle>Manage Tags</DialogTitle>
                 <DialogDescription>
-                  Rename or delete existing tags. Deleting a tag cannot be undone.
+                  Rename or delete existing tags. Deleting a tag cannot be
+                  undone.
                 </DialogDescription>
               </DialogHeader>
 
@@ -463,7 +478,9 @@ const MediaPage = () => {
                             <Input
                               autoFocus
                               value={editingTagName}
-                              onChange={(e) => setEditingTagName(e.target.value)}
+                              onChange={(e) =>
+                                setEditingTagName(e.target.value)
+                              }
                               placeholder="Tag name"
                             />
                           ) : (
@@ -474,10 +491,17 @@ const MediaPage = () => {
                         <div className="flex items-center gap-2">
                           {isEditing ? (
                             <>
-                              <Button size="sm" onClick={() => saveEditTag(tag._id)}>
+                              <Button
+                                size="sm"
+                                onClick={() => saveEditTag(tag._id)}
+                              >
                                 Save
                               </Button>
-                              <Button size="sm" variant="outline" onClick={cancelEditTag}>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={cancelEditTag}
+                              >
                                 Cancel
                               </Button>
                             </>
@@ -507,7 +531,10 @@ const MediaPage = () => {
               )}
 
               <div className="flex justify-end pt-2">
-                <Button variant="outline" onClick={() => setManageTagsOpen(false)}>
+                <Button
+                  variant="outline"
+                  onClick={() => setManageTagsOpen(false)}
+                >
                   Close
                 </Button>
               </div>
