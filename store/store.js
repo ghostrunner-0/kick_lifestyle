@@ -1,6 +1,6 @@
 // store/store.js
 import { combineReducers, configureStore } from "@reduxjs/toolkit";
-import storage from "redux-persist/lib/storage";
+import storageModule from "redux-persist/lib/storage";
 import { persistReducer, persistStore } from "redux-persist";
 
 // existing
@@ -20,6 +20,19 @@ const rootReducer = (state, action) => {
   }
   return appReducer(state, action);
 };
+
+const resolvedStorage =
+  storageModule?.default && typeof storageModule.default === "object"
+    ? storageModule.default
+    : storageModule;
+
+const createNoopStorage = () => ({
+  getItem: async () => null,
+  setItem: async () => {},
+  removeItem: async () => {},
+});
+
+const storage = typeof window === "undefined" ? createNoopStorage() : resolvedStorage;
 
 const persistConfig = {
   key: "root",

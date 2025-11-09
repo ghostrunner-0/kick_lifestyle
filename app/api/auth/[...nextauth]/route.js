@@ -23,14 +23,30 @@ const {
   NODE_ENV,
 } = process.env;
 
-if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET)
-  throw new Error("Missing Google OAuth env vars.");
-if (!NEXTAUTH_SECRET && !_SECRET_KEY)
-  throw new Error("Missing NEXTAUTH_SECRET or SECRET_KEY.");
-if (!_NEXTAUTH_URL) throw new Error("Missing NEXTAUTH_URL.");
+const isProd = NODE_ENV === "production";
+const hasGoogleOAuth = Boolean(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET);
 
-const NEXTAUTH_URL = _NEXTAUTH_URL;
-const SECRET_KEY = _SECRET_KEY || NEXTAUTH_SECRET;
+if (!hasGoogleOAuth) {
+  console.warn(
+    "[auth] Google OAuth env vars missing; Google login disabled" +
+      (isProd ? " (set GOOGLE_CLIENT_ID/SECRET in production)." : ".")
+  );
+}
+
+if (isProd && !_NEXTAUTH_URL) {
+  console.warn(
+    "[auth] NEXTAUTH_URL not set; defaulting to http://localhost:3000 for build."
+  );
+}
+
+if (isProd && !(_SECRET_KEY || NEXTAUTH_SECRET)) {
+  console.warn(
+    "[auth] NEXTAUTH_SECRET/SECRET_KEY missing; using a fallback development secret."
+  );
+}
+
+const NEXTAUTH_URL = _NEXTAUTH_URL || "http://localhost:3000";
+const SECRET_KEY = _SECRET_KEY || NEXTAUTH_SECRET || "development-secret";
 
 /* ===================== COOKIE DOMAIN ===================== */
 let COOKIE_DOMAIN;
@@ -73,13 +89,26 @@ async function setNextAuthCookie(userDoc) {
   return token;
 }
 
-export const authOptions = {
-  secret: NEXTAUTH_SECRET || SECRET_KEY,
-  session: { strategy: "jwt", maxAge: 60 * 60 * 24 * 365 },
-  jwt: { maxAge: 60 * 60 * 24 * 365 },
+const nextAuthFactory =
+  typeof NextAuth === "function" ? NextAuth : NextAuth?.default;
+const googleProviderFactory =
+  typeof GoogleProvider === "function"
+    ? GoogleProvider
+    : GoogleProvider?.default;
+const credentialsProviderFactory =
+  typeof CredentialsProvider === "function"
+    ? CredentialsProvider
+    : CredentialsProvider?.default;
 
-  providers: [
-    GoogleProvider({
+if (typeof nextAuthFactory !== "function") {
+  throw new Error("next-auth default export is not a function");
+}
+
+const providers = [];
+
+if (hasGoogleOAuth && typeof googleProviderFactory === "function") {
+  providers.push(
+    googleProviderFactory({
       clientId: GOOGLE_CLIENT_ID,
       clientSecret: GOOGLE_CLIENT_SECRET,
       allowDangerousEmailAccountLinking: false,
@@ -90,66 +119,82 @@ export const authOptions = {
           response_type: "code",
         },
       },
-    }),
+    })
+  );
+} else if (hasGoogleOAuth) {
+  console.warn(
+    "[auth] Google provider import missing default factory; Google login disabled."
+  );
+}
 
-    // OTP finalize step (only AFTER password is validated in /api/auth/login)
-    CredentialsProvider({
-      name: "OTP",
-      credentials: {
-        email: { label: "Email", type: "text" },
-        otp: { label: "OTP", type: "text" },
-      },
-      async authorize(credentials) {
-        await connectDB();
+if (typeof credentialsProviderFactory !== "function") {
+  throw new Error("next-auth credentials provider factory missing");
+}
 
-        const parsed = authValidationSchema.safeParse(credentials);
-        if (!parsed.success) {
-          throw new Error(parsed.error.errors[0]?.message || "Invalid input");
-        }
+providers.push(
+  credentialsProviderFactory({
+    name: "OTP",
+    credentials: {
+      email: { label: "Email", type: "text" },
+      otp: { label: "OTP", type: "text" },
+    },
+    async authorize(credentials) {
+      await connectDB();
 
-        const { email, otp } = parsed.data;
+      const parsed = authValidationSchema.safeParse(credentials);
+      if (!parsed.success) {
+        throw new Error(parsed.error.errors[0]?.message || "Invalid input");
+      }
 
-        if (!/^\d{4,8}$/.test(String(otp))) {
-          throw new Error("Invalid OTP");
-        }
+      const { email, otp } = parsed.data;
 
-        // fetch user
-        const user = await User.findOne({ email, deletedAt: null }).lean();
-        if (!user) throw new Error("User not found");
+      if (!/^\d{4,8}$/.test(String(otp))) {
+        throw new Error("Invalid OTP");
+      }
 
-        // 🚫 block legacy/WP users from OTP signin -> force password reset
-        if (user.provider === "wordpress" || user?.legacy?.hash) {
-          throw new Error("Password reset required");
-        }
+      // fetch user
+      const user = await User.findOne({ email, deletedAt: null }).lean();
+      if (!user) throw new Error("User not found");
 
-        // Validate OTP: not expired & not used
-        const now = new Date();
-        const otpRecord = await OTP.findOne({
-          email,
-          otp,
-          expiresAt: { $gt: now },
-          used: { $ne: true },
-        }).lean();
+      // 🚫 block legacy/WP users from OTP signin -> force password reset
+      if (user.provider === "wordpress" || user?.legacy?.hash) {
+        throw new Error("Password reset required");
+      }
 
-        if (!otpRecord) {
-          throw new Error("Invalid or expired OTP");
-        }
+      // Validate OTP: not expired & not used
+      const now = new Date();
+      const otpRecord = await OTP.findOne({
+        email,
+        otp,
+        expiresAt: { $gt: now },
+        used: { $ne: true },
+      }).lean();
 
-        // mark used
-        await OTP.updateOne({ _id: otpRecord._id }, { $set: { used: true } });
+      if (!otpRecord) {
+        throw new Error("Invalid or expired OTP");
+      }
 
-        // convenience cookie
-        await setNextAuthCookie(user);
+      // mark used
+      await OTP.updateOne({ _id: otpRecord._id }, { $set: { used: true } });
 
-        return {
-          id: user._id.toString(),
-          email: user.email,
-          name: user.name,
-          role: user.role || "user",
-        };
-      },
-    }),
-  ],
+      // convenience cookie
+      await setNextAuthCookie(user);
+
+      return {
+        id: user._id.toString(),
+        email: user.email,
+        name: user.name,
+        role: user.role || "user",
+      };
+    },
+  })
+);
+
+export const authOptions = {
+  secret: SECRET_KEY,
+  session: { strategy: "jwt", maxAge: 60 * 60 * 24 * 365 },
+  jwt: { maxAge: 60 * 60 * 24 * 365 },
+  providers,
 
   callbacks: {
     async signIn({ account, profile }) {
@@ -232,5 +277,5 @@ export const authOptions = {
   },
 };
 
-const handler = NextAuth(authOptions);
+const handler = nextAuthFactory(authOptions);
 export { handler as GET, handler as POST };
