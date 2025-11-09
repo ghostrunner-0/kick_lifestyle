@@ -7,7 +7,11 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
 import {
   Command,
   CommandEmpty,
@@ -16,9 +20,29 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Link as LinkIcon, ChevronsUpDown, Check, Trash2, Search } from "lucide-react";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Loader2,
+  Link as LinkIcon,
+  ChevronsUpDown,
+  Check,
+  Trash2,
+  Search,
+} from "lucide-react";
 
 const cn = (...xs) => xs.filter(Boolean).join(" ");
 
@@ -31,7 +55,8 @@ function useDebounced(value, delay = 350) {
   return v;
 }
 
-/* ------------------------ Daraz SKU Picker (excludes mapped) ------------------------ */
+/* ------------------------ Daraz SKU Picker ------------------------ */
+
 function DarazSkuPicker({ value, onChange, excludeSellerSkus }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -51,6 +76,7 @@ function DarazSkuPicker({ value, onChange, excludeSellerSkus }) {
         setCursor(null);
         setHasMore(false);
       }
+
       const params = new URLSearchParams();
       params.set("filter", filter || "all");
       params.set("limit", "20");
@@ -63,9 +89,10 @@ function DarazSkuPicker({ value, onChange, excludeSellerSkus }) {
       const json = await res.json();
       let newItems = json.items || [];
 
-      // Exclude already-mapped seller_skus
       if (excludeSellerSkus && excludeSellerSkus.size) {
-        newItems = newItems.filter((it) => !excludeSellerSkus.has(it.seller_sku));
+        newItems = newItems.filter(
+          (it) => !excludeSellerSkus.has(it.seller_sku)
+        );
       }
 
       const next = json?.paging?.next_update_after || null;
@@ -96,20 +123,34 @@ function DarazSkuPicker({ value, onChange, excludeSellerSkus }) {
   }
 
   const buttonLabel = value
-    ? `${value.seller_sku} — ${value.daraz_name ?? ""}`.slice(0, 64)
-    : "Select Daraz SKU";
+    ? (value.daraz_name || value.seller_sku || "Selected Daraz Product").slice(
+        0,
+        64
+      )
+    : "Select Daraz Product";
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <Label>Daraz SKU</Label>
+      <div className="flex items-center justify-between gap-2">
+        <Label>Daraz Product</Label>
         <Select value={filter} onValueChange={setFilter}>
           <SelectTrigger className="w-[140px] h-8 text-xs">
             <SelectValue placeholder="Filter" />
           </SelectTrigger>
           <SelectContent>
-            {["all","live","inactive","deleted","image-missing","pending","rejected","sold-out"].map(f => (
-              <SelectItem key={f} value={f}>{f}</SelectItem>
+            {[
+              "all",
+              "live",
+              "inactive",
+              "deleted",
+              "image-missing",
+              "pending",
+              "rejected",
+              "sold-out",
+            ].map((f) => (
+              <SelectItem key={f} value={f}>
+                {f}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -117,7 +158,11 @@ function DarazSkuPicker({ value, onChange, excludeSellerSkus }) {
 
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button variant="outline" role="combobox" className="w-full justify-between">
+          <Button
+            variant="outline"
+            role="combobox"
+            className="w-full justify-between"
+          >
             <span className="truncate">{buttonLabel}</span>
             <ChevronsUpDown className="ml-2 h-4 w-4 opacity-60" />
           </Button>
@@ -126,7 +171,7 @@ function DarazSkuPicker({ value, onChange, excludeSellerSkus }) {
           <Command>
             <div className="p-2">
               <CommandInput
-                placeholder="Search by Seller SKU or Name"
+                placeholder="Search Daraz product / seller SKU"
                 value={q}
                 onValueChange={setQ}
               />
@@ -141,20 +186,49 @@ function DarazSkuPicker({ value, onChange, excludeSellerSkus }) {
                   <CommandEmpty>No results.</CommandEmpty>
                   <CommandGroup heading="Results">
                     {items.map((it) => {
-                      const isSel = value?.seller_sku === it.seller_sku;
+                      const isSel =
+                        value?.seller_sku === it.seller_sku &&
+                        value?.daraz_item_id === it.daraz_item_id;
                       return (
                         <CommandItem
-                          key={`${it.seller_sku}-${it.daraz_sku_id ?? ""}`}
-                          onSelect={() => { onChange(isSel ? null : it); setOpen(false); }}
+                          key={`${it.seller_sku}-${it.daraz_sku_id || ""}-${
+                            it.daraz_item_id || ""
+                          }`}
+                          onSelect={() => {
+                            onChange(isSel ? null : it);
+                            setOpen(false);
+                          }}
                           className="flex items-center gap-2"
                         >
-                          <Check className={cn("h-4 w-4", isSel ? "opacity-100" : "opacity-0")} />
+                          <Check
+                            className={cn(
+                              "h-4 w-4",
+                              isSel ? "opacity-100" : "opacity-0"
+                            )}
+                          />
                           <div className="min-w-0">
-                            <div className="text-sm font-medium truncate">{it.seller_sku}</div>
-                            <div className="text-xs text-muted-foreground truncate">{it.daraz_name || "—"}</div>
-                            <div className="flex gap-2 mt-1">
-                              {it.daraz_status && <Badge variant="secondary">{it.daraz_status}</Badge>}
-                              {it.daraz_sku_id != null && <Badge variant="outline">SkuId: {it.daraz_sku_id}</Badge>}
+                            <div className="text-sm font-medium truncate">
+                              {it.daraz_name || "Untitled Daraz Product"}
+                            </div>
+                            <div className="text-[11px] text-muted-foreground truncate">
+                              {it.seller_sku || "—"}
+                            </div>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {it.daraz_status && (
+                                <Badge variant="secondary">
+                                  {it.daraz_status}
+                                </Badge>
+                              )}
+                              {it.daraz_item_id && (
+                                <Badge variant="outline">
+                                  ItemId: {it.daraz_item_id}
+                                </Badge>
+                              )}
+                              {it.daraz_sku_id && (
+                                <Badge variant="outline">
+                                  SkuId: {it.daraz_sku_id}
+                                </Badge>
+                              )}
                             </div>
                           </div>
                         </CommandItem>
@@ -167,9 +241,19 @@ function DarazSkuPicker({ value, onChange, excludeSellerSkus }) {
 
             <Separator />
             <div className="p-2 flex items-center justify-between">
-              <div className="text-[11px] text-muted-foreground truncate">Cursor: {cursor ? cursor : "—"}</div>
-              <Button size="sm" onClick={handleLoadMore} disabled={!hasMore || loadingMore}>
-                {loadingMore ? <Loader2 className="h-4 w-4 animate-spin" /> : "Load more"}
+              <div className="text-[10px] text-muted-foreground truncate">
+                Cursor: {cursor || "—"}
+              </div>
+              <Button
+                size="sm"
+                onClick={handleLoadMore}
+                disabled={!hasMore || loadingMore}
+              >
+                {loadingMore ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  "Load more"
+                )}
               </Button>
             </div>
           </Command>
@@ -177,16 +261,23 @@ function DarazSkuPicker({ value, onChange, excludeSellerSkus }) {
       </Popover>
 
       {value && (
-        <div className="text-xs text-muted-foreground">
-          Selected: <span className="font-medium">{value.seller_sku}</span>
+        <div className="text-[11px] text-muted-foreground space-y-0.5">
+          <div>
+            Daraz:{" "}
+            <span className="font-medium">
+              {value.daraz_name || "Untitled Daraz Product"}
+            </span>
+          </div>
+          {value.seller_sku && <div>Seller SKU: {value.seller_sku}</div>}
         </div>
       )}
     </div>
   );
 }
 
-/* ----------------------------- Website Variant Picker (excludes mapped) ----------------------------- */
-function VariantPicker({ value, onChange, excludeVariantIds }) {
+/* ----------------------------- Website Target Picker (product or variant) ----------------------------- */
+
+function WebsiteTargetPicker({ value, onChange, excludeVariantIds }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const dq = useDebounced(q);
@@ -208,12 +299,15 @@ function VariantPicker({ value, onChange, excludeVariantIds }) {
       const res = await fetch(`/api/catalog/variants?${params.toString()}`);
       if (!res.ok) throw new Error(await res.text());
       const json = await res.json();
+
       setTotal(json?.paging?.total || 0);
 
       let newItems = json.items || [];
-      // Exclude already mapped variant_ids
+
       if (excludeVariantIds && excludeVariantIds.size) {
-        newItems = newItems.filter((it) => !excludeVariantIds.has(it.variant_id));
+        newItems = newItems.filter(
+          (it) => !excludeVariantIds.has(it.variant_id)
+        );
       }
 
       setItems((prev) => (reset ? newItems : [...prev, ...newItems]));
@@ -243,17 +337,56 @@ function VariantPicker({ value, onChange, excludeVariantIds }) {
     }
   }
 
-  const hasMore = items.length < total; // rough
+  const hasMore = items.length < total;
+
+  // Build combined options:
+  // - Product-level: one entry per product_id
+  // - Variant-level: one entry per variant
+  const options = useMemo(() => {
+    const productMap = new Map();
+
+    items.forEach((it) => {
+      if (!productMap.has(it.product_id)) {
+        productMap.set(it.product_id, {
+          type: "product",
+          product_id: it.product_id,
+          product_name: it.product_name,
+        });
+      }
+    });
+
+    const productOptions = Array.from(productMap.values());
+
+    const variantOptions = items.map((it) => ({
+      type: "variant",
+      product_id: it.product_id,
+      product_name: it.product_name,
+      variant_id: it.variant_id,
+      variant_name: it.variant_name,
+      sku: it.sku,
+      model_number: it.model_number,
+      stock: it.stock,
+    }));
+
+    return [...productOptions, ...variantOptions];
+  }, [items]);
+
   const buttonLabel = value
-    ? `${value.product_name} · ${value.variant_name} · ${value.sku}`.slice(0, 64)
-    : "Select website variant";
+    ? value.type === "product"
+      ? `${value.product_name}`.slice(0, 64)
+      : `${value.product_name} · ${value.variant_name}`.slice(0, 64)
+    : "Select website product / variant";
 
   return (
     <div className="space-y-2">
-      <Label>Website Variant</Label>
+      <Label>Website Target</Label>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button variant="outline" role="combobox" className="w-full justify-between">
+          <Button
+            variant="outline"
+            role="combobox"
+            className="w-full justify-between"
+          >
             <span className="truncate">{buttonLabel}</span>
             <ChevronsUpDown className="ml-2 h-4 w-4 opacity-60" />
           </Button>
@@ -275,26 +408,76 @@ function VariantPicker({ value, onChange, excludeVariantIds }) {
               ) : (
                 <>
                   <CommandEmpty>No results.</CommandEmpty>
-                  <CommandGroup heading="Results">
-                    {items.map((it) => {
-                      const isSel = value?.variant_id === it.variant_id;
-                      return (
-                        <CommandItem
-                          key={it.variant_id}
-                          onSelect={() => { onChange(isSel ? null : it); setOpen(false); }}
-                          className="flex items-center gap-2"
-                        >
-                          <Check className={cn("h-4 w-4", isSel ? "opacity-100" : "opacity-0")} />
-                          <div className="min-w-0">
-                            <div className="text-sm font-medium truncate">{it.product_name}</div>
-                            <div className="text-xs text-muted-foreground truncate">
-                              {it.variant_name} · {it.sku} {it.model_number ? `· ${it.model_number}` : ""}
+                  <CommandGroup heading="Products (no variant)">
+                    {options
+                      .filter((o) => o.type === "product")
+                      .map((o) => {
+                        const isSel =
+                          value?.type === "product" &&
+                          value?.product_id === o.product_id;
+                        return (
+                          <CommandItem
+                            key={`p-${o.product_id}`}
+                            onSelect={() => {
+                              onChange(isSel ? null : o);
+                              setOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "h-4 w-4 mr-1",
+                                isSel ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            <div className="flex flex-col">
+                              <span className="text-sm font-medium">
+                                {o.product_name}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground">
+                                Map to product (all / generic)
+                              </span>
                             </div>
-                          </div>
-                          <div className="ml-auto"><Badge variant="outline">Stock: {it.stock}</Badge></div>
-                        </CommandItem>
-                      );
-                    })}
+                          </CommandItem>
+                        );
+                      })}
+                  </CommandGroup>
+                  <CommandGroup heading="Variants">
+                    {options
+                      .filter((o) => o.type === "variant")
+                      .map((o) => {
+                        const isSel =
+                          value?.type === "variant" &&
+                          value?.variant_id === o.variant_id;
+                        return (
+                          <CommandItem
+                            key={`v-${o.variant_id}`}
+                            onSelect={() => {
+                              onChange(isSel ? null : o);
+                              setOpen(false);
+                            }}
+                            className="flex items-center gap-2"
+                          >
+                            <Check
+                              className={cn(
+                                "h-4 w-4",
+                                isSel ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            <div className="min-w-0">
+                              <div className="text-sm font-medium truncate">
+                                {o.product_name}
+                              </div>
+                              <div className="text-xs text-muted-foreground truncate">
+                                {o.variant_name} · {o.sku}{" "}
+                                {o.model_number ? `· ${o.model_number}` : ""}
+                              </div>
+                            </div>
+                            <div className="ml-auto">
+                              <Badge variant="outline">Stock: {o.stock}</Badge>
+                            </div>
+                          </CommandItem>
+                        );
+                      })}
                   </CommandGroup>
                 </>
               )}
@@ -302,9 +485,19 @@ function VariantPicker({ value, onChange, excludeVariantIds }) {
 
             <Separator />
             <div className="p-2 flex items-center justify-between">
-              <div className="text-[11px] text-muted-foreground">Loaded {items.length} / {total}</div>
-              <Button size="sm" onClick={handleLoadMore} disabled={!hasMore || loadingMore}>
-                {loadingMore ? <Loader2 className="h-4 w-4 animate-spin" /> : "Load more"}
+              <div className="text-[11px] text-muted-foreground">
+                Loaded {items.length} / {total}
+              </div>
+              <Button
+                size="sm"
+                onClick={handleLoadMore}
+                disabled={!hasMore || loadingMore}
+              >
+                {loadingMore ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  "Load more"
+                )}
               </Button>
             </div>
           </Command>
@@ -313,15 +506,24 @@ function VariantPicker({ value, onChange, excludeVariantIds }) {
 
       {value && (
         <div className="text-xs text-muted-foreground">
-          Selected: <span className="font-medium">{value.product_name}</span> · {value.variant_name}
+          Selected:&nbsp;
+          {value.type === "product" ? (
+            <span className="font-medium">{value.product_name}</span>
+          ) : (
+            <>
+              <span className="font-medium">{value.product_name}</span> ·{" "}
+              {value.variant_name}
+            </>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-/* ----------------------------- Mapping Summary (wrapped text) ----------------------------- */
-function MappingSummary({ daraz, variant, saving, onSave, onClear, msg }) {
+/* ----------------------------- Mapping Summary ----------------------------- */
+
+function MappingSummary({ daraz, target, saving, onSave, onClear, msg }) {
   return (
     <Card>
       <CardHeader className="py-3">
@@ -333,17 +535,29 @@ function MappingSummary({ daraz, variant, saving, onSave, onClear, msg }) {
       <CardContent className="space-y-4 pt-4">
         <div className="grid gap-3">
           <div className="text-sm">
-            <div className="text-xs uppercase text-muted-foreground mb-1">Daraz</div>
+            <div className="text-xs uppercase text-muted-foreground mb-1">
+              Daraz
+            </div>
             {daraz ? (
               <>
-                <div className="font-medium break-words whitespace-normal">{daraz.seller_sku}</div>
-                <div className="text-xs text-muted-foreground break-words whitespace-normal max-w-full">
-                  {daraz.daraz_name || "—"}
+                <div className="font-medium break-words whitespace-normal">
+                  {daraz.daraz_name || "Untitled Daraz Product"}
+                </div>
+                <div className="text-[11px] text-muted-foreground break-words whitespace-normal">
+                  {daraz.seller_sku || "—"}
                 </div>
                 <div className="flex flex-wrap gap-2 mt-1">
-                  {daraz.daraz_status && <Badge variant="secondary">{daraz.daraz_status}</Badge>}
-                  {daraz.daraz_sku_id != null && <Badge variant="outline">SkuId: {daraz.daraz_sku_id}</Badge>}
-                  {daraz.daraz_item_id && <Badge variant="outline">ItemId: {daraz.daraz_item_id}</Badge>}
+                  {daraz.daraz_status && (
+                    <Badge variant="secondary">{daraz.daraz_status}</Badge>
+                  )}
+                  {daraz.daraz_item_id && (
+                    <Badge variant="outline">
+                      ItemId: {daraz.daraz_item_id}
+                    </Badge>
+                  )}
+                  {daraz.daraz_sku_id && (
+                    <Badge variant="outline">SkuId: {daraz.daraz_sku_id}</Badge>
+                  )}
                 </div>
               </>
             ) : (
@@ -352,13 +566,24 @@ function MappingSummary({ daraz, variant, saving, onSave, onClear, msg }) {
           </div>
 
           <div className="text-sm">
-            <div className="text-xs uppercase text-muted-foreground mb-1">Website</div>
-            {variant ? (
+            <div className="text-xs uppercase text-muted-foreground mb-1">
+              Website
+            </div>
+            {target ? (
               <>
-                <div className="font-medium break-words whitespace-normal">{variant.product_name}</div>
-                <div className="text-xs text-muted-foreground break-words whitespace-normal max-w-full">
-                  {variant.variant_name} · {variant.sku}
+                <div className="font-medium break-words whitespace-normal">
+                  {target.product_name}
                 </div>
+                {target.type === "variant" && (
+                  <div className="text-xs text-muted-foreground break-words whitespace-normal">
+                    {target.variant_name} {target.sku ? `· ${target.sku}` : ""}
+                  </div>
+                )}
+                {target.type === "product" && (
+                  <div className="text-[10px] text-muted-foreground">
+                    Product-level mapping
+                  </div>
+                )}
               </>
             ) : (
               <div className="text-muted-foreground">Not selected</div>
@@ -367,19 +592,38 @@ function MappingSummary({ daraz, variant, saving, onSave, onClear, msg }) {
         </div>
 
         <div className="flex items-center gap-2 pt-1">
-          <Button onClick={onSave} disabled={!daraz || !variant || saving} className="min-w-[120px]">
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Mapping"}
+          <Button
+            onClick={onSave}
+            disabled={!daraz || !target || saving}
+            className="min-w-[120px]"
+          >
+            {saving ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              "Save Mapping"
+            )}
           </Button>
-          <Button variant="outline" onClick={onClear} disabled={saving}>Clear</Button>
-          <div className={cn("text-sm", msg.type === "success" && "text-green-600", msg.type === "error" && "text-red-600")}>{msg.text}</div>
+          <Button variant="outline" onClick={onClear} disabled={saving}>
+            Clear
+          </Button>
+          <div
+            className={cn(
+              "text-sm",
+              msg.type === "success" && "text-green-600",
+              msg.type === "error" && "text-red-600"
+            )}
+          >
+            {msg.text}
+          </div>
         </div>
       </CardContent>
     </Card>
   );
 }
 
-/* -------------------------------- Current Mappings List (with delete) -------------------------------- */
-function MappingsList({ onChanged, excludeSellerSkus, excludeVariantIds }) {
+/* ----------------------------- Mappings List ----------------------------- */
+
+function MappingsList({ onChanged }) {
   const [items, setItems] = useState([]);
   const [q, setQ] = useState("");
   const dq = useDebounced(q);
@@ -388,13 +632,14 @@ function MappingsList({ onChanged, excludeSellerSkus, excludeVariantIds }) {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
 
-  async function load() {
+  async function load(p = page, query = dq) {
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      if (dq) params.set("q", dq);
-      params.set("page", String(page));
+      if (query) params.set("q", query);
+      params.set("page", String(p));
       params.set("pageSize", String(pageSize));
+
       const res = await fetch(`/api/daraz/map?${params.toString()}`);
       if (!res.ok) throw new Error(await res.text());
       const json = await res.json();
@@ -407,18 +652,32 @@ function MappingsList({ onChanged, excludeSellerSkus, excludeVariantIds }) {
     }
   }
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [dq, page]);
+  useEffect(() => {
+    load(1, dq);
+    setPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dq]);
+
+  useEffect(() => {
+    load(page, dq);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
 
   async function handleDelete(seller_sku) {
     if (!seller_sku) return;
     const ok = confirm(`Delete mapping for ${seller_sku}?`);
     if (!ok) return;
-    const res = await fetch(`/api/daraz/map/${encodeURIComponent(seller_sku)}`, { method: "DELETE" });
+
+    const res = await fetch(
+      `/api/daraz/map/${encodeURIComponent(seller_sku)}`,
+      { method: "DELETE" }
+    );
     if (!res.ok) {
       alert("Failed to delete");
       return;
     }
-    await load();
+    await load(1, dq);
+    setPage(1);
     onChanged?.();
   }
 
@@ -426,12 +685,17 @@ function MappingsList({ onChanged, excludeSellerSkus, excludeVariantIds }) {
 
   return (
     <Card>
-      <CardHeader className="py-3">
+      <CardHeader className="py-3 space-y-2">
         <CardTitle className="text-base">Current Mappings</CardTitle>
         <div className="flex gap-2">
           <div className="relative w-full">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 opacity-60" />
-            <Input className="pl-8" placeholder="Search mapped SKU / product / variant" value={q} onChange={(e) => { setPage(1); setQ(e.target.value); }} />
+            <Input
+              className="pl-8"
+              placeholder="Search Daraz name / SKU / product / variant"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
           </div>
         </div>
       </CardHeader>
@@ -441,25 +705,51 @@ function MappingsList({ onChanged, excludeSellerSkus, excludeVariantIds }) {
           <Table className="text-sm">
             <TableHeader>
               <TableRow>
-                <TableHead>Seller SKU</TableHead>
-                <TableHead>Daraz IDs</TableHead>
+                <TableHead>Daraz Product</TableHead>
                 <TableHead>Website</TableHead>
-                <TableHead className="w-[90px]"></TableHead>
+                <TableHead className="w-[70px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {items.map((m) => (
-                <TableRow key={m._id || m.seller_sku}>
-                  <TableCell className="font-medium">{m.seller_sku}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {m.daraz_item_id ? `ItemId: ${m.daraz_item_id}` : ""}{m.daraz_item_id && m.daraz_sku_id ? " · " : ""}{m.daraz_sku_id ? `SkuId: ${m.daraz_sku_id}` : ""}
+                <TableRow key={m._id || `${m.seller_sku}-${m.daraz_item_id}`}>
+                  <TableCell>
+                    <div className="font-medium truncate max-w-[260px]">
+                      {m.daraz_name || "Untitled Daraz Product"}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground truncate max-w-[260px]">
+                      {m.seller_sku || "—"}
+                    </div>
+                    <div className="flex flex-wrap gap-1 mt-1 text-[9px] text-muted-foreground">
+                      {m.daraz_status && (
+                        <Badge variant="secondary">{m.daraz_status}</Badge>
+                      )}
+                      {m.daraz_item_id && (
+                        <Badge variant="outline">
+                          ItemId: {m.daraz_item_id}
+                        </Badge>
+                      )}
+                      {m.daraz_sku_id && (
+                        <Badge variant="outline">SkuId: {m.daraz_sku_id}</Badge>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
-                    <div className="font-medium truncate max-w-[360px]">{m.product_name || m.product_id}</div>
-                    <div className="text-xs text-muted-foreground truncate max-w-[360px]">{m.variant_name || m.variant_id || "—"}</div>
+                    <div className="font-medium truncate max-w-[260px]">
+                      {m.product_name || m.product_id || "—"}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground truncate max-w-[260px]">
+                      {m.variant_id && (m.variant_name || m.variant_id)
+                        ? m.variant_name || m.variant_id
+                        : "Product-level mapping"}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="destructive" size="sm" onClick={() => handleDelete(m.seller_sku)}>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => handleDelete(m.seller_sku)}
+                    >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </TableCell>
@@ -467,17 +757,37 @@ function MappingsList({ onChanged, excludeSellerSkus, excludeVariantIds }) {
               ))}
               {!items.length && !loading && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-10 text-sm text-muted-foreground">No mappings</TableCell>
+                  <TableCell
+                    colSpan={3}
+                    className="text-center py-10 text-sm text-muted-foreground"
+                  >
+                    No mappings
+                  </TableCell>
                 </TableRow>
               )}
             </TableBody>
           </Table>
         </div>
         <div className="flex items-center justify-between gap-2 p-3 border-t">
-          <div className="text-xs text-muted-foreground">Page {page} / {maxPage}</div>
+          <div className="text-xs text-muted-foreground">
+            Page {page} / {maxPage}
+          </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>Prev</Button>
-            <Button size="sm" onClick={() => setPage((p) => Math.min(maxPage, p + 1))} disabled={page >= maxPage}>Next</Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+            >
+              Prev
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => setPage((p) => Math.min(maxPage, p + 1))}
+              disabled={page >= maxPage}
+            >
+              Next
+            </Button>
           </div>
         </div>
       </CardContent>
@@ -485,59 +795,78 @@ function MappingsList({ onChanged, excludeSellerSkus, excludeVariantIds }) {
   );
 }
 
-/* --------------------------------- Page --------------------------------- */
+/* ----------------------------- Page ----------------------------- */
+
 export default function ProductMappingCompactWithList() {
   const [daraz, setDaraz] = useState(null);
-  const [variant, setVariant] = useState(null);
+  const [target, setTarget] = useState(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState({ type: "idle", text: "" });
 
-  // Exclusion sets built from current mappings
   const [excludeSellerSkus, setExcludeSellerSkus] = useState(new Set());
   const [excludeVariantIds, setExcludeVariantIds] = useState(new Set());
 
   async function refreshExclusions() {
-    // Pull first N mappings and cache sets (you can paginate if you have many)
-    const res = await fetch("/api/daraz/map?page=1&pageSize=1000");
-    if (!res.ok) return;
-    const json = await res.json();
-    const items = json.items || [];
-    setExcludeSellerSkus(new Set(items.map((m) => m.seller_sku).filter(Boolean)));
-    setExcludeVariantIds(new Set(items.map((m) => m.variant_id).filter(Boolean)));
+    try {
+      const res = await fetch("/api/daraz/map?page=1&pageSize=1000");
+      if (!res.ok) return;
+      const json = await res.json();
+      const items = json.items || [];
+
+      setExcludeSellerSkus(
+        new Set(items.map((m) => m.seller_sku).filter(Boolean))
+      );
+      setExcludeVariantIds(
+        new Set(items.map((m) => m.variant_id).filter(Boolean))
+      );
+    } catch (e) {
+      console.error(e);
+    }
   }
 
-  useEffect(() => { refreshExclusions(); }, []);
+  useEffect(() => {
+    refreshExclusions();
+  }, []);
 
   async function handleSave() {
-    if (!daraz || !variant) return;
+    if (!daraz || !target) return;
     try {
       setSaving(true);
       setMsg({ type: "idle", text: "" });
+
       const payload = {
         seller_sku: daraz.seller_sku,
         daraz_sku_id: daraz.daraz_sku_id,
         daraz_item_id: daraz.daraz_item_id,
         daraz_status: daraz.daraz_status,
-        product_id: variant.product_id,
-        variant_id: variant.variant_id,
-        product_name: variant.product_name,
-        variant_name: variant.variant_name,
+        daraz_name: daraz.daraz_name,
+
+        product_id: target.product_id,
+        product_name: target.product_name,
+        variant_id: target.type === "variant" ? target.variant_id : null,
+        variant_name: target.type === "variant" ? target.variant_name : "",
+
+        notes: "",
       };
+
       const res = await fetch("/api/daraz/map", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error(await res.text());
-      setMsg({ type: "success", text: "Mapping saved." });
 
-      // refresh exclusion sets and clear current selection (since it's now mapped)
+      if (!res.ok) throw new Error(await res.text());
+
+      setMsg({ type: "success", text: "Mapping saved." });
       await refreshExclusions();
       setDaraz(null);
-      setVariant(null);
+      setTarget(null);
     } catch (e) {
       console.error(e);
-      setMsg({ type: "error", text: e?.message || "Error" });
+      setMsg({
+        type: "error",
+        text: e?.message || "Error saving mapping",
+      });
     } finally {
       setSaving(false);
     }
@@ -545,7 +874,7 @@ export default function ProductMappingCompactWithList() {
 
   function handleClear() {
     setDaraz(null);
-    setVariant(null);
+    setTarget(null);
     setMsg({ type: "idle", text: "" });
   }
 
@@ -553,17 +882,27 @@ export default function ProductMappingCompactWithList() {
     <div className="max-w-screen-xl mx-auto p-3 sm:p-4 space-y-4">
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Map Daraz SKU to Website Variant</CardTitle>
+          <CardTitle className="text-base">
+            Map Daraz Product to Website
+          </CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
-          <DarazSkuPicker value={daraz} onChange={setDaraz} excludeSellerSkus={excludeSellerSkus} />
-          <VariantPicker value={variant} onChange={setVariant} excludeVariantIds={excludeVariantIds} />
+          <DarazSkuPicker
+            value={daraz}
+            onChange={setDaraz}
+            excludeSellerSkus={excludeSellerSkus}
+          />
+          <WebsiteTargetPicker
+            value={target}
+            onChange={setTarget}
+            excludeVariantIds={excludeVariantIds}
+          />
         </CardContent>
       </Card>
 
       <MappingSummary
         daraz={daraz}
-        variant={variant}
+        target={target}
         saving={saving}
         onSave={handleSave}
         onClear={handleClear}
@@ -573,7 +912,6 @@ export default function ProductMappingCompactWithList() {
       <MappingsList
         onChanged={async () => {
           await refreshExclusions();
-          // if a selection just got deleted from mappings, it becomes eligible again automatically
         }}
       />
     </div>
