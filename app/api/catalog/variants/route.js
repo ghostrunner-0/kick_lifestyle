@@ -26,7 +26,7 @@ export async function GET(req) {
 
     // Fetch in two steps: products → variants
     const products = await Product.find(productMatch)
-      .select("_id name slug warrantyMonths modelNumber")
+      .select("_id name slug warrantyMonths modelNumber stock mrp specialPrice hasVariants")
       .lean();
 
     const productIds = products.map(p => p._id);
@@ -38,7 +38,7 @@ export async function GET(req) {
     // Build index by productId for quick lookup
     const pIndex = new Map(products.map(p => [String(p._id), p]));
 
-    let rows = variants.map(v => {
+    const variantRows = variants.map(v => {
       const p = pIndex.get(String(v.product));
       return {
         product_id: p?._id,
@@ -52,8 +52,30 @@ export async function GET(req) {
         stock: v.stock,
         mrp: v.mrp,
         specialPrice: v.specialPrice ?? null,
+        is_variant: true,
       };
     });
+
+    const variantProductIds = new Set(variants.map(v => String(v.product)));
+
+    const productRows = products
+      .filter(p => !variantProductIds.has(String(p._id)))
+      .map(p => ({
+        product_id: p._id,
+        product_name: p.name,
+        product_slug: p.slug,
+        model_number: p.modelNumber,
+        warranty_months: p.warrantyMonths,
+        variant_id: null,
+        variant_name: null,
+        sku: null,
+        stock: p.stock,
+        mrp: p.mrp,
+        specialPrice: p.specialPrice ?? null,
+        is_variant: false,
+      }));
+
+    let rows = [...variantRows, ...productRows];
 
     // Search filter
     if (q) {

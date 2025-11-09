@@ -16,6 +16,9 @@ const DarazProductMapSchema = new Schema(
     // ⚠️ removed field-level index flags here to avoid duplicates
     daraz_sku_id: { type: String, default: "" }, // was: index: true
     sku_id: { type: String, default: "" }, // was: index: true
+    daraz_status: { type: String, default: "" },
+    daraz_name: { type: String, default: "" },
+    daraz_variant: { type: String, default: "" },
 
     // Website-side targets
     product_id: {
@@ -30,6 +33,9 @@ const DarazProductMapSchema = new Schema(
       default: null,
       index: true,
     },
+    product_name: { type: String, default: "" },
+    variant_name: { type: String, default: "" },
+    variant_sku: { type: String, default: "" },
 
     // Optional override
     warranty_months: { type: Number, default: null },
