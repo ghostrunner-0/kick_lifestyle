@@ -10,72 +10,107 @@ export const runtime = "nodejs";
 export async function GET(req) {
   try {
     const staff = await isAuthenticated(["admin", "sales"]);
-    if (!staff) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    if (!staff) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
 
     await connectDB();
 
     const { searchParams } = new URL(req.url);
-    const q = (searchParams.get("q") || "").toLowerCase();
-    const includeArchived = searchParams.get("includeArchived") === "1";
-    const page = Math.max(1, Number(searchParams.get("page") || 1));
-    const pageSize = Math.min(100, Math.max(10, Number(searchParams.get("pageSize") || 50)));
+    const rawQ = searchParams.get("q") || "";
+    const q = rawQ.toLowerCase().trim();
 
-    // Base queries
-    const productMatch = includeArchived ? {} : { deletedAt: null, showInWebsite: true };
-    const variantMatch = includeArchived ? {} : { deletedAt: null };
+    // ✅ We explicitly ignore showOnWebsite / visibility flags
+    // ✅ We also do NOT filter by deletedAt here, so you truly get "every single one"
+    //    If you want to exclude hard-deleted, do it at DB level or add a very explicit condition.
 
-    // Fetch in two steps: products → variants
-    const products = await Product.find(productMatch)
+    // 1) Fetch ALL products
+    const products = await Product.find({})
       .select("_id name slug warrantyMonths modelNumber")
       .lean();
 
-    const productIds = products.map(p => p._id);
+    const productIds = products.map((p) => p._id);
 
-    const variants = await ProductVariant.find({ product: { $in: productIds }, ...variantMatch })
-      .select("_id product variantName sku stock mrp specialPrice")
+    // 2) Fetch ALL variants for those products
+    const variants = await ProductVariant.find({
+      product: { $in: productIds },
+    })
+      .select("_id product variantName sku stock mrp specialPrice modelNumber")
       .lean();
 
-    // Build index by productId for quick lookup
-    const pIndex = new Map(products.map(p => [String(p._id), p]));
+    const pIndex = new Map(products.map((p) => [String(p._id), p]));
 
-    let rows = variants.map(v => {
-      const p = pIndex.get(String(v.product));
-      return {
-        product_id: p?._id,
-        product_name: p?.name,
-        product_slug: p?.slug,
-        model_number: p?.modelNumber,
-        warranty_months: p?.warrantyMonths,
-        variant_id: v._id,
-        variant_name: v.variantName,
-        sku: v.sku,
-        stock: v.stock,
-        mrp: v.mrp,
-        specialPrice: v.specialPrice ?? null,
-      };
-    });
+    const rows = [];
 
-    // Search filter
-    if (q) {
-      rows = rows.filter(r =>
-        (r.product_name || "").toLowerCase().includes(q) ||
-        (r.variant_name || "").toLowerCase().includes(q) ||
-        (r.sku || "").toLowerCase().includes(q) ||
-        (r.model_number || "").toLowerCase().includes(q)
-      );
+    // 3) Product-level rows (base option when there is no variant, or generic match)
+    for (const p of products) {
+      rows.push({
+        type: "product",
+        product_id: p._id,
+        product_name: p.name || "Unnamed Product",
+        product_slug: p.slug || "",
+        model_number: p.modelNumber || "",
+        warranty_months: p.warrantyMonths ?? null,
+        variant_id: null,
+        variant_name: "",
+        sku: "",
+        stock: null,
+        mrp: null,
+        specialPrice: null,
+      });
     }
 
-    // Paginate (client can refine with q)
-    const total = rows.length;
-    const start = (page - 1) * pageSize;
-    const end = start + pageSize;
-    const paged = rows.slice(start, end);
+    // 4) Variant-level rows (one per variant)
+    for (const v of variants) {
+      const p = pIndex.get(String(v.product));
+      if (!p) continue;
+
+      rows.push({
+        type: "variant",
+        product_id: p._id,
+        product_name: p.name || "Unnamed Product",
+        product_slug: p.slug || "",
+        model_number: v.modelNumber || p.modelNumber || "",
+        warranty_months: p.warrantyMonths ?? null,
+        variant_id: v._id,
+        variant_name: v.variantName || "Variant",
+        sku: v.sku || "",
+        stock: v.stock ?? null,
+        mrp: v.mrp ?? null,
+        specialPrice: v.specialPrice ?? null,
+      });
+    }
+
+    // 5) Optional search across the combined list
+    let filtered = rows;
+    if (q) {
+      filtered = rows.filter((r) => {
+        return (
+          (r.product_name || "").toLowerCase().includes(q) ||
+          (r.variant_name || "").toLowerCase().includes(q) ||
+          (r.sku || "").toLowerCase().includes(q) ||
+          (r.model_number || "").toLowerCase().includes(q) ||
+          (r.product_slug || "").toLowerCase().includes(q)
+        );
+      });
+    }
+
+    // 6) Return EVERYTHING (no pagination slice)
+    const total = filtered.length;
 
     return NextResponse.json({
-      items: paged,
-      paging: { page, pageSize, total }
+      items: filtered,
+      paging: {
+        page: 1,
+        pageSize: total,
+        total,
+      },
     });
   } catch (err) {
-    return NextResponse.json({ error: err?.message || "Catalog variants fetch failed" }, { status: 500 });
+    console.error("Catalog variants fetch failed:", err);
+    return NextResponse.json(
+      { error: err?.message || "Catalog variants fetch failed" },
+      { status: 500 }
+    );
   }
 }

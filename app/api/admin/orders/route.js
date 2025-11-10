@@ -45,14 +45,10 @@ async function requireRole(allowed = ["admin", "sales"]) {
     );
   }
 
-  return null; // ok
+  return null;
 }
 
-/**
- * Find userIds by free-text (name/phone). Returns:
- *  - userObjectIds: [ObjectId,...]
- *  - userIdStrings: ["<id>", ...] (stringified ObjectIds)
- */
+/* ---------- helper: search users by name/phone ---------- */
 async function findUsersByNameOrPhone(q) {
   const full = String(q || "").trim();
   if (!full) return { userObjectIds: [], userIdStrings: [] };
@@ -67,7 +63,6 @@ async function findUsersByNameOrPhone(q) {
     ors.push({ phone: r });
   }
 
-  // digits-only phone contains (≥5 digits)
   const digits = full.replace(/\D+/g, "");
   if (digits.length >= 5) {
     const rxDigits = new RegExp(digits);
@@ -76,18 +71,17 @@ async function findUsersByNameOrPhone(q) {
 
   const users = await User.find({ $or: ors })
     .select({ _id: 1 })
-    .limit(500) // guardrail
+    .limit(500)
     .lean();
 
   const userObjectIds = users.map((u) => u._id).filter(Boolean);
-  const userIdStrings = userObjectIds.map((oid) => String(oid));
+  const userIdStrings = userObjectIds.map((id) => String(id));
 
   return { userObjectIds, userIdStrings };
 }
 
-/* ---------- GET /admin/orders ---------- */
+/* ---------- GET /api/admin/orders ---------- */
 export async function GET(req) {
-  // role check
   const guard = await requireRole(["admin", "sales"]);
   if (guard) return guard;
 
@@ -95,7 +89,8 @@ export async function GET(req) {
     await connectDB();
 
     const { searchParams } = new URL(req.url);
-    const q = searchParams.get("q")?.trim() || "";
+
+    const q = (searchParams.get("q") || "").trim();
     const page = Math.max(1, Number(searchParams.get("page") || 1));
     const limit = Math.min(
       200,
@@ -103,18 +98,19 @@ export async function GET(req) {
     );
     const sortRaw = searchParams.get("sort") || "createdAt:desc";
 
-    // optional filters
-    const status = searchParams.get("status");
-    const statuses = searchParams.getAll("statuses").filter(Boolean);
+    // optional filters (all truly optional)
+    const status = searchParams.get("status"); // single
+    const statuses = searchParams.getAll("statuses").filter(Boolean); // array
+
     const paymentMethod = searchParams.get("paymentMethod");
     const paymentMethods = searchParams
       .getAll("paymentMethods")
       .filter(Boolean);
 
-    // 1) Base query from free-text (multi-token, OR across fields, AND across tokens)
+    // 1) Base query from text
     const baseQuery = buildOrderSearchQuery(q);
 
-    // 2) If query present, also user-based matches via userRef/userId
+    // 2) Extend with user matches if q present
     let userOr = {};
     if (q) {
       const { userObjectIds, userIdStrings } = await findUsersByNameOrPhone(q);
@@ -132,18 +128,28 @@ export async function GET(req) {
       }
     }
 
-    // 3) Combine filters
+    // 3) Status filter (prefer array if provided)
+    const statusFilter = {};
+    if (statuses.length) {
+      statusFilter.status = { $in: statuses };
+    } else if (status && status !== "__ALL__") {
+      statusFilter.status = status;
+    }
+
+    // 4) Payment method filter (prefer array if provided)
+    const paymentFilter = {};
+    if (paymentMethods.length) {
+      paymentFilter.paymentMethod = { $in: paymentMethods };
+    } else if (paymentMethod && paymentMethod !== "__ALL__") {
+      paymentFilter.paymentMethod = paymentMethod;
+    }
+
+    // 5) Final query (only includes what’s actually set)
     const query = {
       ...(Object.keys(baseQuery).length ? baseQuery : {}),
       ...(Object.keys(userOr).length ? userOr : {}),
-      ...(status && status !== "__ALL__" ? { status } : {}),
-      ...(statuses.length ? { status: { $in: statuses } } : {}),
-      ...(paymentMethod && paymentMethod !== "__ALL__"
-        ? { paymentMethod }
-        : {}),
-      ...(paymentMethods.length
-        ? { paymentMethod: { $in: paymentMethods } }
-        : {}),
+      ...statusFilter,
+      ...paymentFilter,
     };
 
     const sort = parseSort(sortRaw);
@@ -161,13 +167,12 @@ export async function GET(req) {
           display_order_seq: 1,
           createdAt: 1,
 
-          // both shapes for customer snapshot
-          customer: 1, // { fullName, phone, ... }
-          customerName: 1, // alt flat
-          customerPhone: 1, // alt flat
+          customer: 1,
+          customerName: 1,
+          customerPhone: 1,
 
           address: 1,
-          items: { $slice: 1 }, // tiny sample to reduce payload
+          items: { $slice: 1 }, // sample line-items, keep admin table light
           amounts: 1,
           paymentMethod: 1,
           status: 1,
@@ -183,7 +188,10 @@ export async function GET(req) {
   } catch (e) {
     console.error("GET /api/admin/orders error:", e);
     return NextResponse.json(
-      { success: false, message: e?.message || "Failed to fetch orders" },
+      {
+        success: false,
+        message: e?.message || "Failed to fetch orders",
+      },
       { status: 500 }
     );
   }

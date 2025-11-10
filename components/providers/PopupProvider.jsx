@@ -56,7 +56,7 @@ function readShows(p) {
 export default function PopupProvider({ currentPath }) {
   const [popup, setPopup] = useState(null);
   const [open, setOpen] = useState(false);
-  const [box, setBox] = useState({ w: 440, h: 440 });
+  const [box, setBox] = useState({ w: 440, h: 440 }); // used for centered layout
   const [isMobile, setIsMobile] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -103,18 +103,14 @@ export default function PopupProvider({ currentPath }) {
       const nw = img.naturalWidth || 1000;
       const nh = img.naturalHeight || 1000;
       const ratio = nh / nw;
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
-      const maxW = Math.floor(vw * 0.92);
-      const maxH = Math.floor(vh * 0.85);
-      let w = Math.min(nw, maxW);
+
+      // Generic max; real clamping done via CSS using maxWidth/maxHeight
+      let w = Math.min(nw, 720);
       let h = Math.round(w * ratio);
-      if (h > maxH) {
-        h = maxH;
-        w = Math.round(h / ratio);
-      }
-      w = Math.max(280, w);
+
+      w = Math.max(260, w);
       h = Math.max(200, h);
+
       setBox({ w, h });
     } catch {}
   }, []);
@@ -141,44 +137,59 @@ export default function PopupProvider({ currentPath }) {
   /* ---------- Layout ---------- */
   const forcedLayout = popup.ui?.layout; // 'sheet' | 'centered' | 'edge'
   const layout = forcedLayout || (isMobile ? "sheet" : "centered");
+  const isCentered = layout === "centered";
+  const isSheet = layout === "sheet";
+  const isEdge = layout === "edge";
+
   const isDiscount = popup.type === "discount";
   const isImageLink = popup.type === "image-link";
   const img = popup.image;
 
-  /* ---------- Panel & container classes tuned for mobile ---------- */
-  const panelBase =
-    "relative overflow-hidden bg-white dark:bg-neutral-900 shadow-2xl";
-  const panelRadii = layout === "sheet" ? "rounded-t-2xl" : "rounded-2xl";
-  const panelClass =
-    layout === "sheet"
-      ? // full width bottom sheet on mobile, with max width on larger screens
-        "w-full max-w-[720px]"
-      : // centered/edge: responsive width; height capped by svh (safe viewport)
-        "w-[min(92vw,720px)] max-h-[85svh]";
+  /* ---------- Panel & container classes ---------- */
+
+  // Centered: no bg, pure image
+  // Sheet / Edge: card-like with bg
+  const panelBase = isCentered
+    ? "relative overflow-visible bg-transparent shadow-none"
+    : "relative overflow-hidden bg-white dark:bg-neutral-900 shadow-2xl";
+
+  const panelRadii = isSheet ? "rounded-t-2xl" : isEdge ? "rounded-2xl" : ""; // centered = no visible card
+
+  const panelClass = isSheet
+    ? "w-full max-w-[720px]"
+    : isEdge
+    ? "w-[min(92vw,720px)] max-h-[85vh]"
+    : "flex items-center justify-center"; // centered: wrapper flex, image decides size
+
   const panelStyle =
-    layout === "sheet"
-      ? undefined
-      : {
-          width: Math.min(box.w, Math.floor(window.innerWidth * 0.92)),
-        };
+    !isCentered && !isSheet ? { width: Math.min(box.w, 720) } : undefined;
 
-  const containerAlign =
-    layout === "sheet"
-      ? "items-end"
-      : layout === "edge"
-      ? "items-end justify-end pr-4 pb-4"
-      : "items-center justify-center";
+  const containerAlign = isSheet
+    ? "items-end"
+    : isEdge
+    ? "items-end justify-end pr-4 pb-4"
+    : "items-center justify-center";
 
-  // image area gets a predictable height on mobile to avoid jumpiness
-  const imageAreaClass =
-    layout === "sheet"
-      ? "relative w-full h-[clamp(240px,65svh,560px)]"
-      : "relative w-full h-[min(65svh,560px)]";
+  // Image area:
+  // - Sheet (mobile/any): stable tall area so image always visible
+  // - Edge: fixed-ish height
+  // - Centered: handled by box wrapper
+  const imageAreaClass = isSheet
+    ? "relative w-full h-[min(70vh,520px)]"
+    : isEdge
+    ? "relative w-full h-[min(65vh,520px)]"
+    : "";
 
-  const footerClass =
-    layout === "sheet"
-      ? "px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))]"
-      : "px-3 py-3";
+  const footerClass = isSheet
+    ? "px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))]"
+    : "px-3 py-3";
+
+  // Close button
+  const closeBtnBase =
+    "absolute z-10 h-8 w-8 sm:h-9 sm:w-9 rounded-full flex items-center justify-center text-xs sm:text-sm font-semibold transition";
+  const closeBtnClass = isCentered
+    ? `${closeBtnBase} -top-4 -right-4 bg-black/85 text-white shadow-lg backdrop-blur hover:bg-black`
+    : `${closeBtnBase} top-2 right-2 bg-white/95 dark:bg-neutral-800/95 text-black dark:text-white shadow hover:opacity-95`;
 
   return (
     <Transition appear show={open} as="div" className="relative z-[9999]">
@@ -204,106 +215,139 @@ export default function PopupProvider({ currentPath }) {
             as="div"
             enter="transform transition ease-out duration-300"
             enterFrom={
-              layout === "sheet"
-                ? "translate-y-full"
-                : "opacity-0 scale-95 translate-y-3"
+              isSheet ? "translate-y-full" : "opacity-0 scale-95 translate-y-3"
             }
             enterTo={
-              layout === "sheet"
-                ? "translate-y-0"
-                : "opacity-100 scale-100 translate-y-0"
+              isSheet ? "translate-y-0" : "opacity-100 scale-100 translate-y-0"
             }
             leave="transform transition ease-in duration-200"
             leaveFrom={
-              layout === "sheet"
-                ? "translate-y-0"
-                : "opacity-100 scale-100 translate-y-0"
+              isSheet ? "translate-y-0" : "opacity-100 scale-100 translate-y-0"
             }
             leaveTo={
-              layout === "sheet"
-                ? "translate-y-full"
-                : "opacity-0 scale-95 translate-y-3"
+              isSheet ? "translate-y-full" : "opacity-0 scale-95 translate-y-3"
             }
             className={`${panelBase} ${panelRadii} ${panelClass}`}
             style={panelStyle}
-            onTouchStart={layout === "sheet" ? onTouchStart : undefined}
-            onTouchMove={layout === "sheet" ? onTouchMove : undefined}
-            onTouchEnd={layout === "sheet" ? onTouchEnd : undefined}
+            onTouchStart={isSheet ? onTouchStart : undefined}
+            onTouchMove={isSheet ? onTouchMove : undefined}
+            onTouchEnd={isSheet ? onTouchEnd : undefined}
           >
-            {/* Grabber for sheet */}
-            {layout === "sheet" && (
-              <div className="absolute top-2 left-1/2 -translate-x-1/2 h-1.5 w-10 rounded-full bg-neutral-300 dark:bg-neutral-700" />
-            )}
-
             {/* Close button */}
             <button
               onClick={close}
-              className="absolute top-2 right-2 h-10 w-10 rounded-full bg-white/95 dark:bg-neutral-800/95 text-black dark:text-white shadow flex items-center justify-center hover:opacity-95 transition"
+              className={closeBtnClass}
               aria-label="Close"
             >
-              <span className="text-lg leading-none">✕</span>
+              ✕
             </button>
 
             {/* Content */}
             <div className="flex flex-col">
-              {/* Image */}
-              <div className={imageAreaClass}>
-                {isImageLink && popup.linkHref ? (
-                  <Link
-                    href={popup.linkHref}
-                    onClick={close}
-                    className="block w-full h-full"
-                    aria-label="Open link"
-                  >
+              {/* CENTERED: pure image using measured box */}
+              {isCentered && (
+                <div
+                  className="relative mx-auto"
+                  style={{
+                    width: `${box.w}px`,
+                    height: `${box.h}px`,
+                    maxWidth: "92vw",
+                    maxHeight: "85vh",
+                  }}
+                >
+                  {isImageLink && popup.linkHref ? (
+                    <Link
+                      href={popup.linkHref}
+                      onClick={close}
+                      className="block w-full h-full"
+                      aria-label="Open link"
+                    >
+                      <Image
+                        src={img?.path}
+                        alt={img?.alt || "popup"}
+                        fill
+                        className="object-contain"
+                        sizes="(max-width: 768px) 92vw, 720px"
+                        priority
+                        onLoadingComplete={onImageLoaded}
+                      />
+                    </Link>
+                  ) : (
                     <Image
                       src={img?.path}
                       alt={img?.alt || "popup"}
                       fill
                       className="object-contain"
-                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 680px, 720px"
+                      sizes="(max-width: 768px) 92vw, 720px"
                       priority
                       onLoadingComplete={onImageLoaded}
                     />
-                  </Link>
-                ) : (
-                  <Image
-                    src={img?.path}
-                    alt={img?.alt || "popup"}
-                    fill
-                    className="object-contain"
-                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 680px, 720px"
-                    priority
-                    onLoadingComplete={onImageLoaded}
-                  />
-                )}
-              </div>
-
-              {/* Discount footer */}
-              {isDiscount && (
-                <div
-                  className={`flex items-center gap-2 border-t bg-white/95 dark:bg-neutral-900/95 ${footerClass}`}
-                >
-                  <span className="text-[11px] sm:text-xs font-medium text-neutral-500">
-                    Coupon
-                  </span>
-                  <span className="px-2 py-1 rounded-md font-mono text-sm bg-neutral-100 dark:bg-neutral-800">
-                    {popup.couponCode || "—"}
-                  </span>
-                  <button
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard.writeText(
-                          popup.couponCode || ""
-                        );
-                      } catch {}
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 900);
-                    }}
-                    className="ml-auto px-3 py-2 rounded-md bg-black text-white text-xs sm:text-sm font-semibold hover:opacity-90 active:scale-[0.99] transition"
-                  >
-                    {copied ? "Copied!" : "Copy"}
-                  </button>
+                  )}
                 </div>
+              )}
+
+              {/* SHEET / EDGE: card-ish with fixed height area */}
+              {!isCentered && (
+                <>
+                  <div className={imageAreaClass}>
+                    {isImageLink && popup.linkHref ? (
+                      <Link
+                        href={popup.linkHref}
+                        onClick={close}
+                        className="block w-full h-full"
+                        aria-label="Open link"
+                      >
+                        <Image
+                          src={img?.path}
+                          alt={img?.alt || "popup"}
+                          fill
+                          className="object-contain"
+                          sizes="100vw"
+                          priority
+                          onLoadingComplete={onImageLoaded}
+                        />
+                      </Link>
+                    ) : (
+                      <Image
+                        src={img?.path}
+                        alt={img?.alt || "popup"}
+                        fill
+                        className="object-contain"
+                        sizes="100vw"
+                        priority
+                        onLoadingComplete={onImageLoaded}
+                      />
+                    )}
+                  </div>
+
+                  {/* Discount footer (only for non-centered) */}
+                  {isDiscount && (
+                    <div
+                      className={`flex items-center gap-2 border-t bg-white/95 dark:bg-neutral-900/95 ${footerClass}`}
+                    >
+                      <span className="text-[11px] sm:text-xs font-medium text-neutral-500">
+                        Coupon
+                      </span>
+                      <span className="px-2 py-1 rounded-md font-mono text-sm bg-neutral-100 dark:bg-neutral-800">
+                        {popup.couponCode || "—"}
+                      </span>
+                      <button
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(
+                              popup.couponCode || ""
+                            );
+                          } catch {}
+                          setCopied(true);
+                          setTimeout(() => setCopied(false), 900);
+                        }}
+                        className="ml-auto px-3 py-2 rounded-md bg-black text-white text-xs sm:text-sm font-semibold hover:opacity-90 active:scale-[0.99] transition"
+                      >
+                        {copied ? "Copied!" : "Copy"}
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </Transition.Child>

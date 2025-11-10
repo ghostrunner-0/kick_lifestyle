@@ -1,4 +1,7 @@
+// models/Orders.model.js
+
 import mongoose from "mongoose";
+import { ORDER_STATUSES } from "@/lib/constants/orderStatus";
 
 const ItemSchema = new mongoose.Schema(
   {
@@ -63,7 +66,7 @@ const KhaltiMetaSchema = new mongoose.Schema(
     status: String,
     transaction_id: String,
     total_amount: Number,
-    khalti_id: String, // ✅ NEW: payer's Khalti ID (mobile or wallet ID)
+    khalti_id: String, // payer's Khalti ID (mobile or wallet ID)
     verifiedAt: Date,
     payment_url: String,
     expires_at: Date,
@@ -77,7 +80,7 @@ const PaymentSchema = new mongoose.Schema(
     status: { type: String, enum: ["paid", "unpaid"], default: "unpaid" },
     provider: String, // e.g., "khalti"
     providerRef: String, // txn/ref id
-    khalti: KhaltiMetaSchema, // ✅ nested Khalti details
+    khalti: KhaltiMetaSchema,
   },
   { _id: false }
 );
@@ -92,43 +95,44 @@ const OrderSchema = new mongoose.Schema(
       email: { type: String, index: true },
     },
 
+    // Customer snapshot
     customer: {
       fullName: String,
       phone: String,
     },
 
+    // Shipping address
     address: AddressSchema,
+
+    // Line items
     items: { type: [ItemSchema], required: true },
+
+    // Amounts
     amounts: AmountsSchema,
 
+    // Payment method + meta
     paymentMethod: {
       type: String,
       enum: ["cod", "khalti", "qr"],
       required: true,
     },
 
-    payment: PaymentSchema, // ✅ now includes full Khalti meta
+    payment: PaymentSchema,
 
+    // Shipping meta
     shipping: {
       carrier: { type: String, default: "pathao" },
       trackingId: String,
       pricePlanPayload: mongoose.Schema.Types.Mixed,
     },
 
+    // Coupon snapshot
     coupon: CouponSchema,
 
+    // Status (shared with UI)
     status: {
       type: String,
-      enum: [
-        "processing",
-        "pending payment",
-        "payment Not Verified",
-        "Invalid Payment",
-        "cancelled",
-        "completed",
-        "ready to pack",
-        "ready to ship",
-      ],
+      enum: ORDER_STATUSES,
       default: "processing",
       index: true,
     },
@@ -136,6 +140,7 @@ const OrderSchema = new mongoose.Schema(
     notes: String,
     orderNumber: { type: String, index: true },
 
+    // Display ID & sequence
     display_order_id: {
       type: String,
       required: true,
@@ -149,7 +154,9 @@ const OrderSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Optional performance optimization
+// Useful index for payment lookup
 OrderSchema.index({ "payment.khalti.pidx": 1 }, { sparse: true });
 
-export default mongoose.models.Order || mongoose.model("Order", OrderSchema);
+const Order = mongoose.models.Order || mongoose.model("Order", OrderSchema);
+
+export default Order;

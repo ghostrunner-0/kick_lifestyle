@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -46,69 +46,125 @@ import {
 } from "lucide-react";
 import { showToast } from "@/lib/ShowToast";
 
+/* ---------- utils ---------- */
 const cn = (...a) => a.filter(Boolean).join(" ");
 const toNum = (v, d = 0) => {
   const n = typeof v === "string" ? parseFloat(v) : Number(v);
   return Number.isFinite(n) ? n : d;
 };
 
-/* ---------- Print helpers (same compact card) ---------- */
+/* ---------- PRINTING: same style as website (Kick rapid), robust inputs ---------- */
 function printRow(rowData) {
   const today = new Date().toISOString().split("T")[0];
-  let customerName = "",
-    phoneNumber = "";
-  const match = rowData.customer.match(/^\d+\s*\|\s*(.+)\s+\((\d+)\)$/);
-  if (match) {
-    customerName = match[1];
-    phoneNumber = match[2];
-  } else {
-    customerName = rowData.customer;
-    phoneNumber = "";
-  }
-  const warranty_class = rowData.warranty_period == 365 ? "111px" : "-60px";
 
-  const productWithColor = `${rowData.product}${
+  let customerName = rowData.customerName || "";
+  let phoneNumber = rowData.phone || "";
+
+  // Back-compat / safety: if only `customer` string is provided, try to parse
+  if (!customerName && rowData.customer) {
+    const v = String(rowData.customer).trim();
+
+    // Format 1: "SEQ | Name (9800000000)"
+    let m =
+      v.match(/^\d+\s*\|\s*(.+)\s+\((\d+)\)$/) ||
+      // Format 2: "Name (9800000000)"
+      v.match(/^(.*?)\s*\((\d+)\)$/);
+
+    if (m) {
+      customerName = m[1];
+      phoneNumber = m[2];
+    } else {
+      customerName = v;
+    }
+  }
+
+  const warranty_class =
+    Number(rowData.warranty_period) === 365 ? "111px" : "-60px";
+
+  const productWithColor = `${rowData.product || ""}${
     rowData.color ? ` (${rowData.color})` : ""
   }`;
+
   const len = productWithColor.length;
   const fontSize = len <= 32 ? 8 : len <= 44 ? 7 : len <= 56 ? 6 : 5;
 
+  const shopLine = rowData.shopName || "Kick Lifestyle";
+
   const w = window.open("", "", "width=800,height=1000");
+
   w.document.write(`
 <html>
 <head>
   <title>Print Warranty</title>
   <style>
-    @media print { @page { size: letter; margin: 0; } html, body { margin:0; padding:0; height:100%; width:100%; overflow:hidden; } }
-    html, body { margin:0; padding:0; height:100%; width:100%; font-family: Arial, sans-serif; }
-    .centered-container { width:3.5in; height:5in; position:absolute; top:17.8%; left:50%; transform:translate(-50%, -50%);
-      display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; font-size:10px; line-height:1.6; }
-    .text-line { margin-bottom:5px; }
-    .warranty { margin-left:${warranty_class}; }
-    .product-line { margin-left:90px; font-size:${fontSize}px; max-width:260px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+    @media print {
+      @page { size: letter; margin: 0; }
+      html, body { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      width: 100%;
+      font-family: Arial, sans-serif;
+    }
+    .centered-container {
+      width: 3.5in;
+      height: 5in;
+      position: absolute;
+      top: 17.8%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      font-size: 10px;
+      line-height: 1.6;
+    }
+    .text-line { margin-bottom: 5px; }
+    .warranty { margin-left: ${warranty_class}; }
+    .product-line {
+      margin-left: 90px;
+      font-size: ${fontSize}px;
+      max-width: 260px;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
   </style>
 </head>
 <body>
   <div class="centered-container">
     <div class="text-line">${customerName}</div>
-    <div class="text-line">${phoneNumber}</div>
+    <div class="text-line">${phoneNumber || ""}</div>
     <div class="text-line">${today}</div>
     <div class="text-line product-line">${productWithColor}</div>
-<div class="text-line">${rowData.shopName || "Kick Lifestyle"}</div>
-    <div class="text-line" style="margin-left:14px;margin-bottom:7px;">${
-      rowData.serial
-    }</div>
+    <div class="text-line">${shopLine}</div>
+    <div class="text-line" style="margin-left:14px;margin-bottom:7px;">
+      ${rowData.serial || ""}
+    </div>
     <div class="warranty">✔️</div>
   </div>
-  <script> window.onload = function(){ window.print(); window.onafterprint = function(){ window.close(); }; } </script>
+  <script>
+    window.onload = function () {
+      window.print();
+      window.onafterprint = function () { window.close(); };
+    };
+  </script>
 </body>
-</html>`);
+</html>
+  `);
+
   w.document.close();
   w.focus();
 }
 
+/* ---------- summarize products (unchanged) ---------- */
 const summarizeProductsForPrint = (rowsArr) => {
   if (!rowsArr?.length) return { product: "", color: "" };
+
   const groups = new Map();
   rowsArr.forEach((r) => {
     const key = `${r.productName}||${r.variantName || ""}`;
@@ -120,20 +176,29 @@ const summarizeProductsForPrint = (rowsArr) => {
     g.qty += 1;
     groups.set(key, g);
   });
+
   const list = [...groups.values()].sort((a, b) => b.qty - a.qty);
   const totalQty = rowsArr.length;
-  if (list.length === 1)
-    return { product: `${list[0].name} *${list[0].qty}`, color: list[0].color };
-  const first = list[0],
-    second = list[1];
+
+  if (list.length === 1) {
+    const only = list[0];
+    return {
+      product: `${only.name} *${only.qty}`,
+      color: only.color || "",
+    };
+  }
+
+  const first = list[0];
+  const second = list[1];
   const shown = first.qty + (second ? second.qty : 0);
   let product = `${first.name} *${first.qty}`;
   if (second) product += ` | ${second.name} *${second.qty}`;
   if (totalQty - shown > 0) product += ` +${totalQty - shown} more`;
+
   return { product, color: "" };
 };
 
-/* ---------- Variant Picker (search website variants) ---------- */
+/* ---------- Variant Picker ---------- */
 function VariantPicker({ value, onChange, onWarrantyResolved }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -150,16 +215,15 @@ function VariantPicker({ value, onChange, onWarrantyResolved }) {
       });
       const items = Array.isArray(data?.items) ? data.items : [];
       const mapped = items.map((r) => ({
-        value: r.variant_id,
+        value: r.variant_id ?? r.product_id, // support products without variant
         label: `${r.product_name} — ${r.variant_name || "No variant"} — ${
           r.sku
         }`,
         productId: r.product_id,
         productName: r.product_name,
-        variantId: r.variant_id,
+        variantId: r.variant_id ?? null,
         variantName: r.variant_name || "",
         sku: r.sku,
-        // may or may not be present; we'll still re-verify below
         warrantyFromList: toNum(r.warranty_months, NaN),
       }));
       setOpts(mapped);
@@ -175,18 +239,19 @@ function VariantPicker({ value, onChange, onWarrantyResolved }) {
   }, []);
 
   useEffect(() => {
-    if (!value) setSelected(null);
-    else if (opts.length) {
+    if (!value) {
+      setSelected(null);
+    } else if (opts.length) {
       const s = opts.find((o) => String(o.value) === String(value));
       if (s) setSelected(s);
     }
   }, [value, opts]);
 
-  // when user picks a variant, re-fetch Product to guarantee warrantyMonths from Products
   const handlePick = async (opt) => {
     let warranty = Number.isFinite(opt.warrantyFromList)
       ? opt.warrantyFromList
       : NaN;
+
     if (!Number.isFinite(warranty) && opt.productId) {
       try {
         const { data } = await axios.get(`/api/product/get/${opt.productId}`, {
@@ -200,10 +265,12 @@ function VariantPicker({ value, onChange, onWarrantyResolved }) {
         warranty = 12;
       }
     }
+
     const enriched = {
       ...opt,
       warrantyMonths: Number.isFinite(warranty) ? warranty : 12,
     };
+
     onChange(enriched);
     onWarrantyResolved?.(enriched.warrantyMonths);
     setSelected(enriched);
@@ -279,26 +346,26 @@ function VariantPicker({ value, onChange, onWarrantyResolved }) {
 
 /* ---------- Main Page ---------- */
 export default function ManualWarrantyPage() {
-  // Header
   const [channel, setChannel] = useState("kick");
-  const [shopName, setShopName] = useState(""); // used only when offline
+  const [shopName, setShopName] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // Items rows (warrantyMonths now read-only & auto from product)
   const emptyRow = () => ({
     _key: crypto.randomUUID(),
     variant: null,
     serial: "",
     warrantyMonths: 12,
   });
+
   const [rows, setRows] = useState([emptyRow()]);
 
   const addRow = () => setRows((prev) => [...prev, emptyRow()]);
   const removeRow = (key) =>
     setRows((prev) => prev.filter((r) => r._key !== key));
+
   const setRowVariant = (key, v) =>
     setRows((prev) =>
       prev.map((r) =>
@@ -307,21 +374,25 @@ export default function ManualWarrantyPage() {
           : r
       )
     );
+
   const setRowSerial = (key, serial) =>
     setRows((prev) => prev.map((r) => (r._key === key ? { ...r, serial } : r)));
 
   const computedShopName = useMemo(() => {
-    if (channel === "offline") return shopName.trim();
+    if (channel === "offline") return shopName.trim() || "Kick Lifestyle";
     if (channel === "khalti") return "Khalti";
-    return "Kick";
+    if (channel === "daraz") return "Daraz";
+    return "Kick Lifestyle";
   }, [channel, shopName]);
 
+  // allow no-variant: need productId & serial only
   const canSubmit = useMemo(() => {
     if (!name.trim() || !phone.trim()) return false;
     if (channel === "offline" && !shopName.trim()) return false;
     if (!rows.length) return false;
+
     for (const r of rows) {
-      if (!r.variant?.productId || !r.variant?.variantId) return false;
+      if (!r.variant?.productId) return false;
       if (!(r.serial || "").trim()) return false;
     }
     return true;
@@ -341,20 +412,23 @@ export default function ManualWarrantyPage() {
       showToast("error", "Fill all required fields");
       return;
     }
+
     const payload = {
       channel,
       shopName: computedShopName,
       customer: { name: name.trim(), phone: phone.trim() },
       notes: notes.trim(),
-      items: rows.map((r) => ({
-        productId: r.variant.productId,
-        variantId: r.variant.variantId,
-        productName: r.variant.productName,
-        variantName: r.variant.variantName,
-        serial: r.serial.trim(),
-        // server will ignore this and pull from Product, but we still pass for clarity
-        warrantyMonths: Number(r.warrantyMonths || 12),
-      })),
+      items: rows.map((r) => {
+        const v = r.variant || {};
+        return {
+          productId: v.productId,
+          variantId: v.variantId || null,
+          productName: v.productName,
+          variantName: v.variantName || "",
+          serial: r.serial.trim(),
+          warrantyMonths: Number(r.warrantyMonths || 12),
+        };
+      }),
     };
 
     try {
@@ -362,32 +436,38 @@ export default function ManualWarrantyPage() {
       const { data } = await axios.post("/api/warranty/manual", payload, {
         withCredentials: true,
       });
+
       if (data?.success) {
         showToast("success", "Warranty registered");
+
         if (andPrint) {
-          // Build summary + print one card per serial
           const summary = summarizeProductsForPrint(
             rows.map((r) => ({
-              productName: r.variant.productName,
-              variantName: r.variant.variantName,
+              productName: r.variant?.productName || "",
+              variantName: r.variant?.variantName || "",
             }))
           );
-          const customerStr = `${name}${phone ? ` (${phone})` : ""}`;
+
           rows.forEach((r, i) => {
             const months = Number(r.warrantyMonths || 12);
             const warranty_period = months >= 12 ? 365 : months * 30;
-            const payloadForPrint = {
-              customer: customerStr,
-              product: summary.product,
-              color: summary.color,
-              serial: r.serial.trim(),
-              warranty_period,
-              shopName: computedShopName,
-            };
-            setTimeout(() => printRow(payloadForPrint), i * 120);
+
+            setTimeout(
+              () =>
+                printRow({
+                  customerName: name.trim(),
+                  phone: phone.trim(),
+                  product: summary.product,
+                  color: summary.color,
+                  serial: r.serial.trim(),
+                  warranty_period,
+                  shopName: computedShopName,
+                }),
+              i * 120
+            );
           });
         }
-        // ✅ fully reset after submit (and optional print)
+
         resetForm();
       } else {
         showToast("error", data?.error || "Failed");
@@ -409,7 +489,7 @@ export default function ManualWarrantyPage() {
     <div className="p-3 sm:p-6 space-y-6">
       <div className="flex items-center gap-2">
         <h1 className="text-xl font-semibold">Manual Warranty Entry</h1>
-        <Badge variant="secondary">Walk-in / POS</Badge>
+        <Badge variant="secondary">Walk-in / Daraz / Khalti / POS</Badge>
       </div>
 
       {/* Header */}
@@ -426,6 +506,7 @@ export default function ManualWarrantyPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="kick">Kick</SelectItem>
+                <SelectItem value="daraz">Daraz</SelectItem>
                 <SelectItem value="khalti">Khalti</SelectItem>
                 <SelectItem value="offline">Offline</SelectItem>
               </SelectContent>
@@ -499,7 +580,9 @@ export default function ManualWarrantyPage() {
 
                     <TableCell className="max-w-[520px]">
                       <VariantPicker
-                        value={r.variant?.variantId || ""}
+                        value={
+                          r.variant?.variantId ?? r.variant?.productId ?? ""
+                        }
                         onChange={(v) => setRowVariant(r._key, v)}
                         onWarrantyResolved={(wm) =>
                           setRows((prev) =>
@@ -555,44 +638,50 @@ export default function ManualWarrantyPage() {
             <Button variant="outline" onClick={addRow}>
               <Plus className="h-4 w-4 mr-2" /> Add Item
             </Button>
+
             <div className="flex gap-2">
+              {/* Print without saving */}
               <Button
                 variant="outline"
+                disabled={!rows.length || !name.trim() || !phone.trim()}
                 onClick={() => {
-                  // local print preview without saving (optional)
                   const summary = summarizeProductsForPrint(
                     rows.map((r) => ({
                       productName: r.variant?.productName || "",
                       variantName: r.variant?.variantName || "",
                     }))
                   );
-                  const customerStr = `${name}${phone ? ` (${phone})` : ""}`;
+
                   rows.forEach((r, i) => {
                     const months = Number(r.warrantyMonths || 12);
                     const warranty_period = months >= 12 ? 365 : months * 30;
+
                     setTimeout(
                       () =>
                         printRow({
-                          customer: customerStr,
+                          customerName: name.trim(),
+                          phone: phone.trim(),
                           product: summary.product,
                           color: summary.color,
                           serial: r.serial.trim(),
                           warranty_period,
+                          shopName: computedShopName,
                         }),
                       i * 120
                     );
                   });
                 }}
               >
-                <Printer className="h-4 w-4 mr-2" /> Print Now
+                <Printer className="h-4 w-4 mr-2" />
+                Print Now
               </Button>
+
+              {/* Save & Print */}
               <Button
                 onClick={() => onSubmit({ andPrint: true })}
                 disabled={!canSubmit || saving}
               >
-                {saving ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : null}
+                {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
                 Save & Print
               </Button>
             </div>

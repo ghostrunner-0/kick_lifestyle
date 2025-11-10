@@ -1,3 +1,4 @@
+// app/(admin)/orders/page.jsx
 "use client";
 
 import axios from "axios";
@@ -9,13 +10,14 @@ import {
   Search,
   SlidersHorizontal,
   FileDown,
-  FileSpreadsheet,
   Truck,
   Pencil,
 } from "lucide-react";
+
 import BreadCrumb from "@/components/application/admin/BreadCrumb";
 import { ADMIN_DASHBOARD, ADMIN_ORDERS_EDIT } from "@/routes/AdminRoutes";
 import { showToast } from "@/lib/ShowToast";
+import { ORDER_STATUSES } from "@/lib/constants/orderStatus";
 
 /* shadcn ui */
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -61,17 +63,6 @@ import {
 const BreadCrumbData = [
   { href: ADMIN_DASHBOARD, label: "Home" },
   { href: "#", label: "Orders" },
-];
-
-const ORDER_STATUSES = [
-  "processing",
-  "pending payment",
-  "payment Not Verified",
-  "Invalid Payment",
-  "cancelled",
-  "completed",
-  "ready to pack",
-  "ready to ship",
 ];
 
 const PAYMENT_METHODS = [
@@ -120,55 +111,11 @@ const StatusPill = ({ s }) => {
   );
 };
 
+/* ====================================================================== */
+/*                             AdminOrdersPage                            */
+/* ====================================================================== */
+
 export default function AdminOrdersPage() {
-  // --- Export CSV (selected rows only) ---
-  const exportCSV = () => {
-    const rowsToExport = rows.filter((r) =>
-      selectedIds.includes(String(r._id))
-    );
-    if (rowsToExport.length === 0) {
-      showToast("info", "Select at least one row");
-      return;
-    }
-
-    const cols = [
-      "display_order_id",
-      "order_id",
-      "customer_name",
-      "customer_phone",
-      "amount_total",
-      "paymentMethod",
-      "status",
-      "createdAt",
-    ];
-
-    const csv = [
-      cols.join(","),
-      ...rowsToExport.map((r) =>
-        [
-          safeCSV(r.display_order_id),
-          safeCSV(r._id),
-          safeCSV(r?.customer?.fullName || r?.customerName || ""),
-          safeCSV(r?.customer?.phone || r?.customerPhone || ""),
-          Number(r?.amounts?.total || 0),
-          safeCSV(r?.paymentMethod || ""),
-          safeCSV(r?.status || ""),
-          r?.createdAt ? new Date(r.createdAt).toISOString() : "",
-        ].join(",")
-      ),
-    ].join("\n");
-
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `orders-export-${Date.now()}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  };
-
   /* filters & search */
   const [globalFilter, setGlobalFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("processing"); // default
@@ -200,10 +147,63 @@ export default function AdminOrdersPage() {
   });
   const [density, setDensity] = useState("comfortable");
 
-  /* bulk status inline (no dialog) */
+  /* bulk status inline */
   const [bulkStatus, setBulkStatus] = useState(ORDER_STATUSES[0]);
 
-  /* ------- server fetch ------- */
+  /* ---------- Export CSV (selected rows only) ---------- */
+  const exportCSV = () => {
+    const selectedIds = table
+      .getSelectedRowModel()
+      .rows.map((r) => String(r.original?._id));
+    const rowsToExport = rows.filter((r) =>
+      selectedIds.includes(String(r._id))
+    );
+    if (!rowsToExport.length) {
+      showToast("info", "Select at least one row");
+      return;
+    }
+
+    const cols = [
+      "display_order_id",
+      "order_id",
+      "customer_name",
+      "customer_phone",
+      "amount_total",
+      "paymentMethod",
+      "status",
+      "createdAt",
+    ];
+
+    const csv = [
+      cols.join(","),
+      ...rowsToExport.map((r) =>
+        [
+          safeCSV(r.display_order_id),
+          safeCSV(r._id),
+          safeCSV(r?.customer?.fullName || r?.customerName || ""),
+          safeCSV(r?.customer?.phone || r?.customerPhone || ""),
+          Number(r?.amounts?.total || 0),
+          safeCSV(r?.paymentMethod || ""),
+          safeCSV(r?.status || ""),
+          r?.createdAt ? new Date(r.createdAt).toISOString() : "",
+        ].join(",")
+      ),
+    ].join("\n");
+
+    const blob = new Blob([csv], {
+      type: "text/csv;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `orders-export-${Date.now()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  /* ---------- server fetch ---------- */
   const fetchList = useCallback(async () => {
     setLoading(true);
     try {
@@ -218,6 +218,7 @@ export default function AdminOrdersPage() {
         sort,
       };
 
+      // optional filters
       if (statusFilter && statusFilter !== "__ALL__") {
         params.status = statusFilter;
         params.statuses = [statusFilter];
@@ -254,7 +255,7 @@ export default function AdminOrdersPage() {
     fetchList();
   }, [fetchList]);
 
-  /* -------- columns (tanstack) -------- */
+  /* ---------- columns (tanstack) ---------- */
   const columns = useMemo(
     () =>
       [
@@ -262,7 +263,10 @@ export default function AdminOrdersPage() {
           id: "select",
           header: ({ table }) => (
             <Checkbox
-              checked={table.getIsAllPageRowsSelected()}
+              checked={
+                table.getIsAllPageRowsSelected() ||
+                (table.getIsSomePageRowsSelected() && "indeterminate")
+              }
               onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)}
               aria-label="Select all"
             />
@@ -342,7 +346,11 @@ export default function AdminOrdersPage() {
   const table = useReactTable({
     data: rows,
     columns,
-    state: { sorting, rowSelection, globalFilter },
+    state: {
+      sorting,
+      rowSelection,
+      globalFilter,
+    },
     onSortingChange: setSorting,
     onRowSelectionChange: setRowSelection,
     getCoreRowModel: getCoreRowModel(),
@@ -353,15 +361,15 @@ export default function AdminOrdersPage() {
     pageCount: Math.max(1, Math.ceil(rowCount / pageSize)),
   });
 
-  /* -------- bulk actions -------- */
   const selectedIds = table
     .getSelectedRowModel()
     .rows.map((r) => String(r.original?._id));
   const anySelected = selectedIds.length > 0;
 
-  // inside AdminOrdersPage
+  /* ---------- bulk actions ---------- */
+
   const bulkGenerateInvoices = () => {
-    if (selectedIds.length === 0) {
+    if (!selectedIds.length) {
       showToast("info", "Select at least one row");
       return;
     }
@@ -372,40 +380,36 @@ export default function AdminOrdersPage() {
     window.open(url, "_blank", "noopener");
   };
 
-  // helper (near other bulk handlers)
   const bulkPackingListPreview = () => {
-    const ids = table
-      .getSelectedRowModel()
-      .rows.map((r) => String(r.original?._id));
-    if (!ids.length) return showToast("info", "Select at least one order");
-    const url = `/api/admin/orders/packing-list/preview?ids=${ids.join(
+    if (!selectedIds.length) {
+      return showToast("info", "Select at least one order");
+    }
+    const url = `/api/admin/orders/packing-list/preview?ids=${selectedIds.join(
       "&ids="
     )}`;
     window.open(url, "_blank");
   };
 
   const bulkBookPathao = async () => {
-    const ids = table
-      .getSelectedRowModel()
-      .rows.map((r) => String(r.original?._id));
-    if (!ids.length) return showToast("info", "Select at least one row");
+    if (!selectedIds.length) {
+      return showToast("info", "Select at least one row");
+    }
     try {
       const { data } = await axios.post(
         "/api/admin/orders/pathao/book",
-        { ids },
+        { ids: selectedIds },
         { withCredentials: true }
       );
       if (data?.success) {
         showToast(
           "success",
-          data.message || `Booked ${ids.length} shipment(s)`
+          data.message || `Booked ${selectedIds.length} shipment(s)`
         );
       } else {
         showToast("error", data?.message || "Booking failed");
-        // optionally inspect data.data.failed / data.data.skipped for reasons
         console.log("PATHAO FAIL:", data?.data);
       }
-      fetchList(); // refresh your table
+      fetchList();
     } catch (e) {
       showToast(
         "error",
@@ -415,7 +419,7 @@ export default function AdminOrdersPage() {
   };
 
   const doBulkStatus = async () => {
-    if (!bulkStatus || selectedIds.length === 0) return;
+    if (!bulkStatus || !selectedIds.length) return;
     try {
       const { data } = await axios.post(
         "/api/admin/orders/bulk-status",
@@ -439,8 +443,10 @@ export default function AdminOrdersPage() {
     }
   };
 
-  /* -------- header controls -------- */
+  /* ---------- pagination helpers ---------- */
   const totalPages = Math.max(1, Math.ceil(rowCount / pageSize));
+
+  /* ============================ RENDER ============================ */
 
   return (
     <div>
@@ -450,7 +456,7 @@ export default function AdminOrdersPage() {
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <h4 className="text-xl font-semibold mr-3">Orders</h4>
 
-        {/* Global search (server) */}
+        {/* Global search */}
         <div className="relative">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -484,7 +490,7 @@ export default function AdminOrdersPage() {
           </SelectContent>
         </Select>
 
-        {/* Order Status (default processing) */}
+        {/* Order Status */}
         <Select
           value={statusFilter}
           onValueChange={(v) => {
@@ -496,7 +502,6 @@ export default function AdminOrdersPage() {
             <SelectValue placeholder="Order status" />
           </SelectTrigger>
           <SelectContent>
-            {/* processing shown only once */}
             <SelectItem value="processing" className="capitalize">
               processing
             </SelectItem>
@@ -509,7 +514,7 @@ export default function AdminOrdersPage() {
           </SelectContent>
         </Select>
 
-        {/* Sort + View */}
+        {/* Sort / View */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline">
@@ -522,14 +527,37 @@ export default function AdminOrdersPage() {
             <DropdownMenuLabel>Sort by</DropdownMenuLabel>
             <DropdownMenuSeparator />
             {[
-              { label: "Created (new → old)", id: "createdAt", desc: true },
-              { label: "Created (old → new)", id: "createdAt", desc: false },
-              { label: "Total (high → low)", id: "amounts.total", desc: true },
-              { label: "Total (low → high)", id: "amounts.total", desc: false },
+              {
+                label: "Created (new → old)",
+                id: "createdAt",
+                desc: true,
+              },
+              {
+                label: "Created (old → new)",
+                id: "createdAt",
+                desc: false,
+              },
+              {
+                label: "Total (high → low)",
+                id: "amounts.total",
+                desc: true,
+              },
+              {
+                label: "Total (low → high)",
+                id: "amounts.total",
+                desc: false,
+              },
             ].map((opt) => (
               <DropdownMenuItem
                 key={`${opt.id}:${String(opt.desc)}`}
-                onClick={() => setSorting([{ id: opt.id, desc: opt.desc }])}
+                onClick={() =>
+                  setSorting([
+                    {
+                      id: opt.id,
+                      desc: opt.desc,
+                    },
+                  ])
+                }
               >
                 {opt.label}
               </DropdownMenuItem>
@@ -569,7 +597,10 @@ export default function AdminOrdersPage() {
                   className="mr-2"
                   checked={!!visibleCols[col.key]}
                   onCheckedChange={(c) =>
-                    setVisibleCols((prev) => ({ ...prev, [col.key]: !!c }))
+                    setVisibleCols((prev) => ({
+                      ...prev,
+                      [col.key]: !!c,
+                    }))
                   }
                 />
                 {col.label}
@@ -578,7 +609,7 @@ export default function AdminOrdersPage() {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* Right side */}
+        {/* Right side controls */}
         <div className="ml-auto flex items-center gap-2">
           <Select
             value={String(pageSize)}
@@ -602,15 +633,15 @@ export default function AdminOrdersPage() {
             <Download className="mr-2 h-4 w-4" />
             Export CSV
           </Button>
-          <Button variant="outline" onClick={() => fetchList()}>
+          <Button variant="outline" onClick={fetchList}>
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
           </Button>
         </div>
       </div>
 
-      {/* Selected actions — individual buttons + status dropdown */}
-      {anySelected ? (
+      {/* Bulk actions bar */}
+      {anySelected && (
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-md border p-3 bg-muted/30">
           <div className="text-sm">
             <span className="font-medium">{selectedIds.length}</span> selected
@@ -623,12 +654,10 @@ export default function AdminOrdersPage() {
             <Button variant="outline" onClick={bulkPackingListPreview}>
               Get Packing List
             </Button>
-
             <Button variant="outline" onClick={bulkBookPathao}>
               <Truck className="mr-2 h-4 w-4" />
               Book Pathao
             </Button>
-
             <div className="flex items-center gap-2">
               <Select value={bulkStatus} onValueChange={setBulkStatus}>
                 <SelectTrigger className="w-[200px]">
@@ -646,7 +675,7 @@ export default function AdminOrdersPage() {
             </div>
           </div>
         </div>
-      ) : null}
+      )}
 
       {/* Table */}
       <Card className="py-0 rounded shadow-sm">
@@ -668,7 +697,10 @@ export default function AdminOrdersPage() {
                       <TableHead
                         key={header.id}
                         className={
-                          header.id === "amounts.total" ? "text-right" : ""
+                          header.id === "amounts.total" ||
+                          header.id === "actions"
+                            ? "text-right"
+                            : ""
                         }
                       >
                         {header.isPlaceholder ? null : (
@@ -684,9 +716,10 @@ export default function AdminOrdersPage() {
                               header.column.columnDef.header,
                               header.getContext()
                             )}
-                            {{ asc: " ▲", desc: " ▼" }[
-                              header.column.getIsSorted()
-                            ] || null}
+                            {{
+                              asc: " ▲",
+                              desc: " ▼",
+                            }[header.column.getIsSorted()] || null}
                           </div>
                         )}
                       </TableHead>
@@ -748,10 +781,8 @@ export default function AdminOrdersPage() {
           <div className="mt-3 flex items-center justify-between gap-3">
             <div className="text-sm text-muted-foreground">
               Page <span className="font-medium">{pageIndex + 1}</span> of{" "}
-              <span className="font-medium">
-                {Math.max(1, Math.ceil(rowCount / pageSize))}
-              </span>{" "}
-              • <span className="font-medium">{rowCount}</span> total
+              <span className="font-medium">{totalPages}</span> •{" "}
+              <span className="font-medium">{rowCount}</span> total
             </div>
             <div className="flex items-center gap-2">
               <Button
@@ -763,10 +794,7 @@ export default function AdminOrdersPage() {
               </Button>
               <Button
                 variant="outline"
-                disabled={
-                  pageIndex + 1 >=
-                    Math.max(1, Math.ceil(rowCount / pageSize)) || loading
-                }
+                disabled={pageIndex + 1 >= totalPages || loading}
                 onClick={() => setPageIndex((p) => p + 1)}
               >
                 Next
@@ -779,8 +807,10 @@ export default function AdminOrdersPage() {
   );
 }
 
-/* ------------ Per-row Actions: only EDIT icon ------------ */
+/* ------------ Per-row Actions ------------ */
+
 function RowActions({ id }) {
+  if (!id) return null;
   return (
     <Button variant="ghost" size="sm" asChild aria-label="Edit order">
       <a href={ADMIN_ORDERS_EDIT(id)}>

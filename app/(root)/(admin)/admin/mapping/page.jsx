@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useMemo } from "react";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,6 +36,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+
 import {
   Loader2,
   Link as LinkIcon,
@@ -55,8 +57,21 @@ function useDebounced(value, delay = 350) {
   return v;
 }
 
-/* ------------------------ Daraz SKU Picker ------------------------ */
-
+/* -------------------------------------------------------------------------- */
+/*                               DarazSkuPicker                               */
+/* -------------------------------------------------------------------------- */
+/**
+ * Expects /api/daraz/skus to return:
+ * {
+ *   seller_sku,
+ *   daraz_sku_id,
+ *   daraz_item_id,
+ *   daraz_status,
+ *   daraz_product_name?,  // mapped from attributes.name
+ *   daraz_variant_name?,  // built from options OR sku label
+ *   ...
+ * }
+ */
 function DarazSkuPicker({ value, onChange, excludeSellerSkus }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -87,8 +102,10 @@ function DarazSkuPicker({ value, onChange, excludeSellerSkus }) {
       const res = await fetch(`/api/daraz/skus?${params.toString()}`);
       if (!res.ok) throw new Error(await res.text());
       const json = await res.json();
+
       let newItems = json.items || [];
 
+      // Exclude already-mapped SKUs
       if (excludeSellerSkus && excludeSellerSkus.size) {
         newItems = newItems.filter(
           (it) => !excludeSellerSkus.has(it.seller_sku)
@@ -122,12 +139,16 @@ function DarazSkuPicker({ value, onChange, excludeSellerSkus }) {
     }
   }
 
-  const buttonLabel = value
-    ? (value.daraz_name || value.seller_sku || "Selected Daraz Product").slice(
-        0,
-        64
-      )
-    : "Select Daraz Product";
+  const buttonLabel = useMemo(() => {
+    if (!value) return "Select Daraz Product";
+    const p =
+      value.daraz_product_name ||
+      value.productTitle ||
+      value.daraz_name ||
+      "Untitled Daraz Product";
+    const v = value.daraz_variant_name || "";
+    return `${p}${v ? " · " + v : ""}`.slice(0, 64);
+  }, [value]);
 
   return (
     <div className="space-y-2">
@@ -171,7 +192,7 @@ function DarazSkuPicker({ value, onChange, excludeSellerSkus }) {
           <Command>
             <div className="p-2">
               <CommandInput
-                placeholder="Search Daraz product / seller SKU"
+                placeholder="Search Daraz product / variant / seller SKU"
                 value={q}
                 onValueChange={setQ}
               />
@@ -186,16 +207,43 @@ function DarazSkuPicker({ value, onChange, excludeSellerSkus }) {
                   <CommandEmpty>No results.</CommandEmpty>
                   <CommandGroup heading="Results">
                     {items.map((it) => {
+                      const productTitle =
+                        it.daraz_product_name ||
+                        it.attributes?.name ||
+                        it.name ||
+                        it.product_name ||
+                        it.daraz_name ||
+                        "Untitled Daraz Product";
+
+                      const variantLabel =
+                        it.daraz_variant_name ||
+                        it.variant_name ||
+                        it.SkuName ||
+                        it.SkuTitle ||
+                        it.SellerSku ||
+                        it.seller_sku ||
+                        "";
+
                       const isSel =
                         value?.seller_sku === it.seller_sku &&
-                        value?.daraz_item_id === it.daraz_item_id;
+                        (value?.daraz_sku_id || "") ===
+                          (it.daraz_sku_id || it.SkuId || "");
+
                       return (
                         <CommandItem
-                          key={`${it.seller_sku}-${it.daraz_sku_id || ""}-${
-                            it.daraz_item_id || ""
-                          }`}
+                          key={`${it.seller_sku}-${
+                            it.daraz_sku_id || it.SkuId || ""
+                          }-${it.daraz_item_id || it.item_id || ""}`}
                           onSelect={() => {
-                            onChange(isSel ? null : it);
+                            onChange(
+                              isSel
+                                ? null
+                                : {
+                                    ...it,
+                                    daraz_product_name: productTitle,
+                                    daraz_variant_name: variantLabel,
+                                  }
+                            );
                             setOpen(false);
                           }}
                           className="flex items-center gap-2"
@@ -208,10 +256,15 @@ function DarazSkuPicker({ value, onChange, excludeSellerSkus }) {
                           />
                           <div className="min-w-0">
                             <div className="text-sm font-medium truncate">
-                              {it.daraz_name || "Untitled Daraz Product"}
+                              {productTitle}
                             </div>
-                            <div className="text-[11px] text-muted-foreground truncate">
-                              {it.seller_sku || "—"}
+                            {variantLabel && (
+                              <div className="text-[11px] text-muted-foreground truncate">
+                                {variantLabel}
+                              </div>
+                            )}
+                            <div className="text-[10px] text-muted-foreground truncate">
+                              {it.seller_sku || ""}
                             </div>
                             <div className="flex flex-wrap gap-1 mt-1">
                               {it.daraz_status && (
@@ -219,14 +272,14 @@ function DarazSkuPicker({ value, onChange, excludeSellerSkus }) {
                                   {it.daraz_status}
                                 </Badge>
                               )}
-                              {it.daraz_item_id && (
+                              {(it.daraz_item_id || it.item_id) && (
                                 <Badge variant="outline">
-                                  ItemId: {it.daraz_item_id}
+                                  ItemId: {it.daraz_item_id || it.item_id}
                                 </Badge>
                               )}
-                              {it.daraz_sku_id && (
+                              {(it.daraz_sku_id || it.SkuId) && (
                                 <Badge variant="outline">
-                                  SkuId: {it.daraz_sku_id}
+                                  SkuId: {it.daraz_sku_id || it.SkuId}
                                 </Badge>
                               )}
                             </div>
@@ -265,18 +318,42 @@ function DarazSkuPicker({ value, onChange, excludeSellerSkus }) {
           <div>
             Daraz:{" "}
             <span className="font-medium">
-              {value.daraz_name || "Untitled Daraz Product"}
+              {value.daraz_product_name ||
+                value.productTitle ||
+                "Untitled Daraz Product"}
             </span>
           </div>
-          {value.seller_sku && <div>Seller SKU: {value.seller_sku}</div>}
+          {value.daraz_variant_name && (
+            <div>Variant: {value.daraz_variant_name}</div>
+          )}
+          {value.seller_sku && (
+            <div className="text-[10px]">Seller SKU: {value.seller_sku}</div>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-/* ----------------------------- Website Target Picker (product or variant) ----------------------------- */
-
+/* -------------------------------------------------------------------------- */
+/*                           WebsiteTargetPicker                              */
+/* -------------------------------------------------------------------------- */
+/**
+ * Expects /api/catalog/variants to return:
+ * {
+ *   items: [
+ *     {
+ *       product_id,
+ *       product_name,
+ *       variant_id,
+ *       variant_name,
+ *       sku,
+ *       model_number,
+ *       stock,
+ *     }
+ *   ]
+ * }
+ */
 function WebsiteTargetPicker({ value, onChange, excludeVariantIds }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -339,43 +416,44 @@ function WebsiteTargetPicker({ value, onChange, excludeVariantIds }) {
 
   const hasMore = items.length < total;
 
-  // Build combined options:
-  // - Product-level: one entry per product_id
-  // - Variant-level: one entry per variant
   const options = useMemo(() => {
     const productMap = new Map();
 
     items.forEach((it) => {
-      if (!productMap.has(it.product_id)) {
+      if (it.product_id && !productMap.has(it.product_id)) {
         productMap.set(it.product_id, {
           type: "product",
           product_id: it.product_id,
-          product_name: it.product_name,
+          product_name: it.product_name || "Unnamed Product",
         });
       }
     });
 
     const productOptions = Array.from(productMap.values());
 
-    const variantOptions = items.map((it) => ({
-      type: "variant",
-      product_id: it.product_id,
-      product_name: it.product_name,
-      variant_id: it.variant_id,
-      variant_name: it.variant_name,
-      sku: it.sku,
-      model_number: it.model_number,
-      stock: it.stock,
-    }));
+    const variantOptions = items
+      .filter((it) => it.variant_id)
+      .map((it) => ({
+        type: "variant",
+        product_id: it.product_id,
+        product_name: it.product_name || "Unnamed Product",
+        variant_id: it.variant_id,
+        variant_name: it.variant_name || "Variant",
+        sku: it.sku,
+        model_number: it.model_number,
+        stock: it.stock,
+      }));
 
     return [...productOptions, ...variantOptions];
   }, [items]);
 
-  const buttonLabel = value
-    ? value.type === "product"
-      ? `${value.product_name}`.slice(0, 64)
-      : `${value.product_name} · ${value.variant_name}`.slice(0, 64)
-    : "Select website product / variant";
+  const buttonLabel = useMemo(() => {
+    if (!value) return "Select website product / variant";
+    if (value.type === "product") {
+      return `${value.product_name}`.slice(0, 64);
+    }
+    return `${value.product_name} · ${value.variant_name}`.slice(0, 64);
+  }, [value]);
 
   return (
     <div className="space-y-2">
@@ -408,7 +486,8 @@ function WebsiteTargetPicker({ value, onChange, excludeVariantIds }) {
               ) : (
                 <>
                   <CommandEmpty>No results.</CommandEmpty>
-                  <CommandGroup heading="Products (no variant)">
+
+                  <CommandGroup heading="Products (no specific variant)">
                     {options
                       .filter((o) => o.type === "product")
                       .map((o) => {
@@ -434,13 +513,14 @@ function WebsiteTargetPicker({ value, onChange, excludeVariantIds }) {
                                 {o.product_name}
                               </span>
                               <span className="text-[10px] text-muted-foreground">
-                                Map to product (all / generic)
+                                Product-level mapping
                               </span>
                             </div>
                           </CommandItem>
                         );
                       })}
                   </CommandGroup>
+
                   <CommandGroup heading="Variants">
                     {options
                       .filter((o) => o.type === "variant")
@@ -468,8 +548,9 @@ function WebsiteTargetPicker({ value, onChange, excludeVariantIds }) {
                                 {o.product_name}
                               </div>
                               <div className="text-xs text-muted-foreground truncate">
-                                {o.variant_name} · {o.sku}{" "}
-                                {o.model_number ? `· ${o.model_number}` : ""}
+                                {o.variant_name}
+                                {o.sku ? ` · ${o.sku}` : ""}
+                                {o.model_number ? ` · ${o.model_number}` : ""}
                               </div>
                             </div>
                             <div className="ml-auto">
@@ -511,7 +592,8 @@ function WebsiteTargetPicker({ value, onChange, excludeVariantIds }) {
             <span className="font-medium">{value.product_name}</span>
           ) : (
             <>
-              <span className="font-medium">{value.product_name}</span> ·{" "}
+              <span className="font-medium">{value.product_name}</span>
+              {" · "}
               {value.variant_name}
             </>
           )}
@@ -521,7 +603,9 @@ function WebsiteTargetPicker({ value, onChange, excludeVariantIds }) {
   );
 }
 
-/* ----------------------------- Mapping Summary ----------------------------- */
+/* -------------------------------------------------------------------------- */
+/*                              MappingSummary                                */
+/* -------------------------------------------------------------------------- */
 
 function MappingSummary({ daraz, target, saving, onSave, onClear, msg }) {
   return (
@@ -534,6 +618,7 @@ function MappingSummary({ daraz, target, saving, onSave, onClear, msg }) {
       <Separator />
       <CardContent className="space-y-4 pt-4">
         <div className="grid gap-3">
+          {/* Daraz */}
           <div className="text-sm">
             <div className="text-xs uppercase text-muted-foreground mb-1">
               Daraz
@@ -541,22 +626,31 @@ function MappingSummary({ daraz, target, saving, onSave, onClear, msg }) {
             {daraz ? (
               <>
                 <div className="font-medium break-words whitespace-normal">
-                  {daraz.daraz_name || "Untitled Daraz Product"}
+                  {daraz.daraz_product_name ||
+                    daraz.productTitle ||
+                    "Untitled Daraz Product"}
                 </div>
-                <div className="text-[11px] text-muted-foreground break-words whitespace-normal">
+                {daraz.daraz_variant_name && (
+                  <div className="text-xs text-muted-foreground break-words whitespace-normal">
+                    {daraz.daraz_variant_name}
+                  </div>
+                )}
+                <div className="text-[10px] text-muted-foreground">
                   {daraz.seller_sku || "—"}
                 </div>
                 <div className="flex flex-wrap gap-2 mt-1">
                   {daraz.daraz_status && (
                     <Badge variant="secondary">{daraz.daraz_status}</Badge>
                   )}
-                  {daraz.daraz_item_id && (
+                  {(daraz.daraz_item_id || daraz.item_id) && (
                     <Badge variant="outline">
-                      ItemId: {daraz.daraz_item_id}
+                      ItemId: {daraz.daraz_item_id || daraz.item_id}
                     </Badge>
                   )}
-                  {daraz.daraz_sku_id && (
-                    <Badge variant="outline">SkuId: {daraz.daraz_sku_id}</Badge>
+                  {(daraz.daraz_sku_id || daraz.SkuId) && (
+                    <Badge variant="outline">
+                      SkuId: {daraz.daraz_sku_id || daraz.SkuId}
+                    </Badge>
                   )}
                 </div>
               </>
@@ -565,6 +659,7 @@ function MappingSummary({ daraz, target, saving, onSave, onClear, msg }) {
             )}
           </div>
 
+          {/* Website */}
           <div className="text-sm">
             <div className="text-xs uppercase text-muted-foreground mb-1">
               Website
@@ -576,7 +671,7 @@ function MappingSummary({ daraz, target, saving, onSave, onClear, msg }) {
                 </div>
                 {target.type === "variant" && (
                   <div className="text-xs text-muted-foreground break-words whitespace-normal">
-                    {target.variant_name} {target.sku ? `· ${target.sku}` : ""}
+                    {target.variant_name}
                   </div>
                 )}
                 {target.type === "product" && (
@@ -621,7 +716,9 @@ function MappingSummary({ daraz, target, saving, onSave, onClear, msg }) {
   );
 }
 
-/* ----------------------------- Mappings List ----------------------------- */
+/* -------------------------------------------------------------------------- */
+/*                               MappingsList                                 */
+/* -------------------------------------------------------------------------- */
 
 function MappingsList({ onChanged }) {
   const [items, setItems] = useState([]);
@@ -643,6 +740,7 @@ function MappingsList({ onChanged }) {
       const res = await fetch(`/api/daraz/map?${params.toString()}`);
       if (!res.ok) throw new Error(await res.text());
       const json = await res.json();
+
       setItems(json.items || []);
       setTotal(json?.paging?.total || 0);
     } catch (e) {
@@ -676,6 +774,7 @@ function MappingsList({ onChanged }) {
       alert("Failed to delete");
       return;
     }
+
     await load(1, dq);
     setPage(1);
     onChanged?.();
@@ -692,7 +791,7 @@ function MappingsList({ onChanged }) {
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 opacity-60" />
             <Input
               className="pl-8"
-              placeholder="Search Daraz name / SKU / product / variant"
+              placeholder="Search Daraz / website (names, variants, SKUs)"
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
@@ -705,19 +804,26 @@ function MappingsList({ onChanged }) {
           <Table className="text-sm">
             <TableHeader>
               <TableRow>
-                <TableHead>Daraz Product</TableHead>
+                <TableHead>Daraz</TableHead>
                 <TableHead>Website</TableHead>
                 <TableHead className="w-[70px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {items.map((m) => (
-                <TableRow key={m._id || `${m.seller_sku}-${m.daraz_item_id}`}>
+                <TableRow
+                  key={m._id || `${m.seller_sku}-${m.daraz_item_id || ""}`}
+                >
                   <TableCell>
                     <div className="font-medium truncate max-w-[260px]">
-                      {m.daraz_name || "Untitled Daraz Product"}
+                      {m.daraz_product_name || "Untitled Daraz Product"}
                     </div>
-                    <div className="text-[11px] text-muted-foreground truncate max-w-[260px]">
+                    {m.daraz_variant_name && (
+                      <div className="text-[11px] text-muted-foreground truncate max-w-[260px]">
+                        {m.daraz_variant_name}
+                      </div>
+                    )}
+                    <div className="text-[10px] text-muted-foreground truncate max-w-[260px]">
                       {m.seller_sku || "—"}
                     </div>
                     <div className="flex flex-wrap gap-1 mt-1 text-[9px] text-muted-foreground">
@@ -734,16 +840,18 @@ function MappingsList({ onChanged }) {
                       )}
                     </div>
                   </TableCell>
+
                   <TableCell>
                     <div className="font-medium truncate max-w-[260px]">
                       {m.product_name || m.product_id || "—"}
                     </div>
                     <div className="text-[11px] text-muted-foreground truncate max-w-[260px]">
-                      {m.variant_id && (m.variant_name || m.variant_id)
-                        ? m.variant_name || m.variant_id
+                      {m.variant_id
+                        ? m.variant_name || "Variant"
                         : "Product-level mapping"}
                     </div>
                   </TableCell>
+
                   <TableCell className="text-right">
                     <Button
                       variant="destructive"
@@ -755,6 +863,7 @@ function MappingsList({ onChanged }) {
                   </TableCell>
                 </TableRow>
               ))}
+
               {!items.length && !loading && (
                 <TableRow>
                   <TableCell
@@ -768,6 +877,7 @@ function MappingsList({ onChanged }) {
             </TableBody>
           </Table>
         </div>
+
         <div className="flex items-center justify-between gap-2 p-3 border-t">
           <div className="text-xs text-muted-foreground">
             Page {page} / {maxPage}
@@ -795,7 +905,9 @@ function MappingsList({ onChanged }) {
   );
 }
 
-/* ----------------------------- Page ----------------------------- */
+/* -------------------------------------------------------------------------- */
+/*                                   Page                                     */
+/* -------------------------------------------------------------------------- */
 
 export default function ProductMappingCompactWithList() {
   const [daraz, setDaraz] = useState(null);
@@ -830,23 +942,31 @@ export default function ProductMappingCompactWithList() {
 
   async function handleSave() {
     if (!daraz || !target) return;
+
     try {
       setSaving(true);
       setMsg({ type: "idle", text: "" });
 
       const payload = {
         seller_sku: daraz.seller_sku,
-        daraz_sku_id: daraz.daraz_sku_id,
-        daraz_item_id: daraz.daraz_item_id,
-        daraz_status: daraz.daraz_status,
-        daraz_name: daraz.daraz_name,
+        daraz_sku_id: daraz.daraz_sku_id || daraz.SkuId,
+        daraz_item_id: daraz.daraz_item_id || daraz.item_id,
+        daraz_status: daraz.daraz_status || daraz.Status,
+        daraz_product_name:
+          daraz.daraz_product_name ||
+          daraz.productTitle ||
+          daraz.attributes?.name ||
+          daraz.name,
+        daraz_variant_name:
+          daraz.daraz_variant_name ||
+          daraz.variant_name ||
+          daraz.SellerSku ||
+          daraz.seller_sku,
 
         product_id: target.product_id,
         product_name: target.product_name,
         variant_id: target.type === "variant" ? target.variant_id : null,
         variant_name: target.type === "variant" ? target.variant_name : "",
-
-        notes: "",
       };
 
       const res = await fetch("/api/daraz/map", {
@@ -883,7 +1003,7 @@ export default function ProductMappingCompactWithList() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">
-            Map Daraz Product to Website
+            Map Daraz Product & Variant to Website
           </CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">

@@ -8,22 +8,30 @@ const normSku = (s) => norm(s).toUpperCase();
 const DarazProductMapSchema = new Schema(
   {
     /* ------------ Daraz side ------------ */
+
+    // Core keys
     seller_sku: { type: String, default: "" },
     seller_sku_norm: { type: String, default: "", index: true },
 
     shop_sku: { type: String, default: "" },
     shop_sku_norm: { type: String, default: "", index: true },
 
-    daraz_sku_id: { type: String, default: "", index: true },
-    daraz_item_id: { type: String, default: "", index: true },
-    sku_id: { type: String, default: "", index: true },
+    // IDs from /products/get → skus[]
+    daraz_sku_id: { type: String, default: "", index: true }, // SkuId
+    daraz_item_id: { type: String, default: "", index: true }, // item_id
+    sku_id: { type: String, default: "", index: true }, // kept if you already used it
 
-    // Store Daraz product title + status so mapping list is self-contained
-    daraz_name: { type: String, default: "" },
+    // Human labels
+    // attributes.name from Daraz = product title
+    daraz_product_name: { type: String, default: "" },
+    // Built from sku attributes / options (e.g. "Black / 128GB") in your /api/daraz/skus layer
+    daraz_variant_name: { type: String, default: "" },
+
     daraz_status: { type: String, default: "" },
 
     /* ------------ Website side ------------ */
-    // Always map to at least a Product
+
+    // Always mapped to at least a Product
     product_id: {
       type: Types.ObjectId,
       ref: "Product",
@@ -31,7 +39,7 @@ const DarazProductMapSchema = new Schema(
       index: true,
     },
 
-    // Optional: specific variant. Null = product-level mapping (all variants / generic).
+    // Optional variant: null = product-level mapping
     variant_id: {
       type: Types.ObjectId,
       ref: "ProductVariant",
@@ -39,11 +47,11 @@ const DarazProductMapSchema = new Schema(
       index: true,
     },
 
-    // Cached labels so UI doesn't need extra populate
+    // Cached for fast UI (no need to populate every time)
     product_name: { type: String, default: "" },
     variant_name: { type: String, default: "" },
 
-    /* ------------ Extra ------------ */
+    /* ------------ Extras ------------ */
     warranty_months: { type: Number, default: null },
     notes: { type: String, default: "" },
 
@@ -80,7 +88,7 @@ DarazProductMapSchema.pre("findOneAndUpdate", function (next) {
 });
 
 /* ------------ Indexes ------------ */
-// flexible but safe
+
 DarazProductMapSchema.index({ seller_sku_norm: 1 });
 DarazProductMapSchema.index({ shop_sku_norm: 1 });
 DarazProductMapSchema.index({ product_id: 1, variant_id: 1 });

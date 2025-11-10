@@ -22,15 +22,16 @@ export async function POST(req) {
       daraz_sku_id,
       daraz_item_id,
       daraz_status,
-      daraz_name,
+      daraz_product_name,
+      daraz_variant_name,
 
       // Website side
       product_id,
-      variant_id, // optional
       product_name,
+      variant_id,
       variant_name,
 
-      // optional meta
+      // Extras
       warranty_months,
       notes,
     } = body || {};
@@ -47,14 +48,17 @@ export async function POST(req) {
       {
         $set: {
           seller_sku,
+
           daraz_sku_id: daraz_sku_id || "",
           daraz_item_id: daraz_item_id || "",
           daraz_status: daraz_status || "",
-          daraz_name: daraz_name || "",
+
+          daraz_product_name: daraz_product_name || "",
+          daraz_variant_name: daraz_variant_name || "",
 
           product_id,
-          variant_id: variant_id || null,
           product_name: product_name || "",
+          variant_id: variant_id || null,
           variant_name: variant_name || "",
 
           warranty_months: warranty_months ?? null,
@@ -100,7 +104,8 @@ export async function GET(req) {
       const regex = new RegExp(q, "i");
       filter.$or = [
         { seller_sku: regex },
-        { daraz_name: regex },
+        { daraz_product_name: regex },
+        { daraz_variant_name: regex },
         { product_name: regex },
         { variant_name: regex },
       ];
